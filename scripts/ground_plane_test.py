@@ -39,9 +39,15 @@ def main() -> int:
     margins = (
         [float(x) for x in sys.argv[1].split(",")] if len(sys.argv) > 1 else [0.25, 0.50, 1.00]
     )
+    # Review item D/13.3: with the default setting the domain grows with the ground
+    # plane, so a ground sweep also changes the domain and the mesh.  Passing a
+    # large fixed air margin removes that confound: the absorber stays far away
+    # while only the copper footprint changes.
+    air_margin = float(sys.argv[2]) if len(sys.argv) > 2 else 0.20
+    air_top = float(sys.argv[3]) if len(sys.argv) > 3 else 0.30
     design = synthesize_patch(F0, ER, H)
-    print(f"patch {design.width_m*1e3:.3f} x {design.length_m*1e3:.3f} mm | margins {margins}",
-          flush=True)
+    print(f"patch {design.width_m*1e3:.3f} x {design.length_m*1e3:.3f} mm | margins {margins} "
+          f"| air margin {air_margin}/{air_top} (fixed)", flush=True)
 
     results = []
     for margin in margins:
@@ -61,7 +67,12 @@ def main() -> int:
             array=ArrayConfig(nx=1, ny=1),
             sweep=FrequencySweep(start_hz=2.0e9, stop_hz=3.0e9, points=101),
         )
-        solver = OpenEMSSolver(ground_margin_lambda=margin, loss_model="kappa")
+        solver = OpenEMSSolver(
+            ground_margin_lambda=margin,
+            loss_model="kappa",
+            air_margin_lambda=air_margin,
+            air_top_lambda=air_top,
+        )
         solver.prepare(project, rundir)
 
         env = dict(os.environ)

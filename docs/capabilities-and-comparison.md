@@ -1,12 +1,12 @@
-# Capabilities, and how this compares
+﻿# Capabilities, and how this compares
 
 This document states what OpenAntenna Studio can actually do today, what it
 cannot, and how it relates to other open-source tools and to the published
 literature. Capability claims are labelled:
 
-* **implemented** — the code exists and is exercised by the test suite;
-* **executed** — it has been run against real hardware/software at least once;
-* **calibrated** — its numerical output has been checked against an independent
+* **implemented** â€” the code exists and is exercised by the test suite;
+* **executed** â€” it has been run against real hardware/software at least once;
+* **calibrated** â€” its numerical output has been checked against an independent
   reference. *Nothing in this project is calibrated yet.*
 
 ## 1. Capability matrix
@@ -22,19 +22,19 @@ literature. Capability claims are labelled:
 | Composite loss bounds + field-concentration caveat | implemented | `estimate_effective_tan_delta`, notes returned |
 | Rectangular patch synthesis (transmission-line model) | implemented | `geometry/patch.py`, dimension tests |
 | Inset-feed depth estimate | implemented | crude closed form, documented as approximate |
-| Array layout (N×M, spacing in lambda0, aperture size) | implemented | `geometry/array.py`, tests |
-| Array factor + principal-plane cuts + steering | implemented | pattern tests incl. 30° steering peak |
+| Array layout (NÃ—M, spacing in lambda0, aperture size) | implemented | `geometry/array.py`, tests |
+| Array factor + principal-plane cuts + steering | implemented | pattern tests incl. 30Â° steering peak |
 | openEMS model generation (substrate, ground, patch/array, lumped port, PML, sweep, S11 output) | executed | 4 real runs, 101/101 finite S11 points |
 | Solver availability probe that refuses to fabricate results | implemented | `SolverUnavailableError` test |
-| S11 metrics: return loss, VSWR, impedance, −10 dB bandwidth, Touchstone I/O | implemented | `postproc/sparams.py`, tests |
+| S11 metrics: return loss, VSWR, impedance, âˆ’10 dB bandwidth, Touchstone I/O | implemented | `postproc/sparams.py`, tests |
 | Far-field helpers: element pattern, pattern multiplication, directivity integral, efficiency budget | implemented | `postproc/patterns.py`, tests |
 | Parameter sweep enumeration + dry-run manifest | implemented | `sweep/engine.py`, CLI test counts 6 jobs |
-| Result store (sqlite3) | implemented | `store/results.py`; **not yet wired into a run path** |
+| Result store (sqlite3) | implemented | `store/results.py`, wired into `sweep run` |
 | CLI (10 subcommands) | implemented | CLI tests |
-| **Electromagnetic accuracy** | **not calibrated** | simulated 2.26 GHz vs 2.45 GHz target (−7.8 %) |
-| **Dielectric loss in the solver model** | **not implemented** | generator writes `kappa = 0` |
+| **Electromagnetic accuracy** | partially calibrated | construction A/B cut the offset from 4.31 % to 2.26 % against an independent reference (see docs/verification.md) |
+| **Dielectric loss in the solver model** | implemented, not validated | `--loss-model kappa` (equivalent conductivity, exact at the sweep centre) |
 | Array simulation, mutual coupling, unit-cell/periodic mode | **not implemented** | geometry + array factor only |
-| GUI | **not implemented** | Phase 3 |
+| GUI | preview | PySide6 shell, four tabs, offscreen smoke test |
 
 ## 2. What this tool is, in one sentence
 
@@ -66,7 +66,7 @@ are done carefully (ResearchGate discussion on openEMS vs PCB trace antenna
 measurements).
 
 **Conclusion of the comparison:** the individual engines are strong and mature.
-What is missing across the ecosystem is exactly what this project targets — a
+What is missing across the ecosystem is exactly what this project targets â€” a
 modern, reproducible front-end with material-level design exploration and
 documented validity limits. That is a workflow contribution, not a physics
 contribution, and it should be described that way.
@@ -81,9 +81,9 @@ transmission-line model is known to be biased:
   frequency that is **lower** than measured and cannot account for the
   dependence of resonance on the patch aspect ratio (NASA ADS record).
 * The widely used rule of thumb is that a patch designed for 100 MHz actually
-  resonates near 96 MHz (antenna-theory.com) — a ~4 % downward shift.
+  resonates near 96 MHz (antenna-theory.com) â€” a ~4 % downward shift.
 * A practitioner report on a probe-fed patch designed for 900 MHz obtained
-  869 MHz in a commercial full-wave tool — also ≈ 3–4 % low (ResearchGate).
+  869 MHz in a commercial full-wave tool â€” also â‰ˆ 3â€“4 % low (ResearchGate).
 
 So a few percent of downward shift is normal when moving from closed-form
 synthesis to a full-wave model, and our 7.8 % is at the high end of that range.
@@ -102,8 +102,8 @@ literature frames it the same way this toolkit does:
   with the ideal substrate described as needing low dielectric loss, an
   *optimum* (not maximum) permittivity, and good thermal and mechanical
   properties (Subodh et al., 2009).
-* Epoxy-type hosts are common but lossy by comparison — a recently published
-  figure cites tan delta ≥ 0.02 for epoxy dielectrics, which is why
+* Epoxy-type hosts are common but lossy by comparison â€” a recently published
+  figure cites tan delta â‰¥ 0.02 for epoxy dielectrics, which is why
   filler engineering is needed (Calisir et al., 2025).
 * Porous/ceramic-polymer routes are used to push permittivity and loss in
   opposite directions, at the cost of mechanical strength and process control
@@ -119,7 +119,7 @@ you add a high-permittivity phase, and that phase brings loss and dispersion.
 
 ## 6. Honest gaps
 
-1. No independent calibration yet — no measured data, no cross-solver
+1. No independent calibration yet â€” no measured data, no cross-solver
    comparison, no reference-case regression. Until then, treat every simulated
    number as a model output under test.
 2. Loss is absent from the solver model, so no efficiency or gain result from
@@ -131,18 +131,18 @@ you add a high-permittivity phase, and that phase brings loss and dispersion.
 
 ## Sources (searched 2026-09-21)
 
-* openEMS documentation, `Simple_Patch_Antenna` tutorial — https://docs.openems.de/python/openEMS/Tutorials/Simple_Patch_Antenna.html
-* openEMS project (GPL-3.0) and Windows build — https://github.com/thliebig/openEMS-Project
-* Fedeli, A. et al. (2019), *Open-Source Software for Electromagnetic Scattering*, MDPI — https://www.mdpi.com/
-* epsilonforge (2025), *Open-Source Electromagnetic Simulation: FDTD, FEM, MoM* — https://www.epsilonforge.com/
-* ResearchGate discussion, openEMS results vs measurement for a PCB trace antenna — https://www.researchgate.net/post/How_can_we_explain_the_fact_that_OpenEMS_simulation_results_differ_from_the_experimental_results_for_a_PCB_trace_antenna_test
-* Sengupta, D. (1983), *The transmission line model for rectangular patch antennas* — https://ui.adsabs.harvard.edu/
-* antenna-theory.com, *Microstrip (Patch) Antennas* (100 MHz design resonating near 96 MHz) — https://www.antenna-theory.com/
-* ResearchGate, probe-fed patch designed 900 MHz resonating 869 MHz in a full-wave tool — https://www.researchgate.net/
-* Subodh, G. et al. (2009), *Dielectric response of high permittivity polymer ceramic* — https://pubs.aip.org/
-* Calisir, I. et al. (2025), *Designing a filler material to reduce dielectric loss in epoxy* — https://pubs.rsc.org/
-* Zhang, K. et al. (2025), *Ultra-lightweight porous ceramic–polymer composites* — https://www.sciencedirect.com/
-* MWRF, *Ceramic Substrate Shrinks Patch Antenna* — https://www.mwrf.com/
+* openEMS documentation, `Simple_Patch_Antenna` tutorial â€” https://docs.openems.de/python/openEMS/Tutorials/Simple_Patch_Antenna.html
+* openEMS project (GPL-3.0) and Windows build â€” https://github.com/thliebig/openEMS-Project
+* Fedeli, A. et al. (2019), *Open-Source Software for Electromagnetic Scattering*, MDPI â€” https://www.mdpi.com/
+* epsilonforge (2025), *Open-Source Electromagnetic Simulation: FDTD, FEM, MoM* â€” https://www.epsilonforge.com/
+* ResearchGate discussion, openEMS results vs measurement for a PCB trace antenna â€” https://www.researchgate.net/post/How_can_we_explain_the_fact_that_OpenEMS_simulation_results_differ_from_the_experimental_results_for_a_PCB_trace_antenna_test
+* Sengupta, D. (1983), *The transmission line model for rectangular patch antennas* â€” https://ui.adsabs.harvard.edu/
+* antenna-theory.com, *Microstrip (Patch) Antennas* (100 MHz design resonating near 96 MHz) â€” https://www.antenna-theory.com/
+* ResearchGate, probe-fed patch designed 900 MHz resonating 869 MHz in a full-wave tool â€” https://www.researchgate.net/
+* Subodh, G. et al. (2009), *Dielectric response of high permittivity polymer ceramic* â€” https://pubs.aip.org/
+* Calisir, I. et al. (2025), *Designing a filler material to reduce dielectric loss in epoxy* â€” https://pubs.rsc.org/
+* Zhang, K. et al. (2025), *Ultra-lightweight porous ceramicâ€“polymer composites* â€” https://www.sciencedirect.com/
+* MWRF, *Ceramic Substrate Shrinks Patch Antenna* â€” https://www.mwrf.com/
 
 Page-level sources were retrieved through the AutoGLM search/open-link stack;
 URLs are given as returned by the search provider. Where a claim rests on a

@@ -1,9 +1,9 @@
-# Roadmap
+﻿# Roadmap
 
-## Phase 1 — headless core (current)
+## Phase 1 â€” headless core (current)
 
 Goal: a scriptable, dependency-free core that can design a patch, lay out an
-array, explore composite materials, and drive a real solver — with honest
+array, explore composite materials, and drive a real solver â€” with honest
 reporting of what is and is not verified.
 
 | Item | State |
@@ -17,9 +17,9 @@ reporting of what is and is not verified.
 | openEMS generator (prepare / render / run / parse) | done, end-to-end run achieved |
 | S11 metrics, Touchstone I/O, pattern/efficiency helpers | done |
 | Sweep engine (dry-run enumeration) | done |
-| sqlite result store | done (not yet wired to the CLI run path) |
+| sqlite result store | done (wired into `sweep run`) |
 | CLI | done |
-| Test suite | 82 tests, all passing |
+| Test suite | 128 tests, all passing |
 | Documentation | this set |
 | **Accuracy calibration of the generated model** | **open** |
 | **Dielectric loss in the generated solver model** | **open** |
@@ -41,7 +41,7 @@ reporting of what is and is not verified.
    hard-coded constants, and a run that hits the step cap is not flagged in the
    results (only in the solver log).
 
-## Phase 2 — physics coverage
+## Phase 2 â€” physics coverage
 
 * Dielectric-loss modelling (dispersive material from measured data / fitted
   Debye parameters) and a loss-verification case.
@@ -56,7 +56,7 @@ reporting of what is and is not verified.
 * Convergence reporting: flag runs that hit the timestep cap or miss the end
   criteria.
 
-## Phase 3 — desktop GUI (started)
+## Phase 3 â€” desktop GUI (started)
 
 * PySide6 shell: project tree, material/stackup editor, geometry editor, 3-D
   viewport (PyVista), result plots (matplotlib), run queue with progress.
@@ -67,7 +67,7 @@ Done so far: four-tab window (material/composite, design, simulate, results), a
 worker thread so simulations do not block the event loop, and an offscreen smoke
 test. Not done: 3-D viewer, live solver log, batch UI, packaging.
 
-## Phase 4 — depth and packaging
+## Phase 4 â€” depth and packaging
 
 * Optimisation (differential evolution / CMA-ES over the sweep engine) and
   surrogate models.

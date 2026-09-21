@@ -1,12 +1,12 @@
-# Verification log
+﻿# Verification log
 
 What has actually been executed, and what the outcome was. Status words follow a
 strict scale:
 
-* **observed** — directly present in a log, a run, or the source;
-* **candidate** — could explain the symptom but was not reproduced;
-* **reproduced** — the same material symptom was produced again;
-* **confirmed** — reproduced *and* removing the cause removes the symptom.
+* **observed** â€” directly present in a log, a run, or the source;
+* **candidate** â€” could explain the symptom but was not reproduced;
+* **reproduced** â€” the same material symptom was produced again;
+* **confirmed** â€” reproduced *and* removing the cause removes the symptom.
 
 ## Environment
 
@@ -30,7 +30,7 @@ ImportError: DLL load failed while importing CSXCAD: The specified module could 
 `CSXCAD` and `openEMS` import cleanly. Fix is in the adapter and in every
 generated script (`OPENEMS_ROOT`).
 
-## Issue 1 — every S11 value was NaN (confirmed)
+## Issue 1 â€” every S11 value was NaN (confirmed)
 
 **Symptom.** The first generated model ran to completion (200,000 timesteps,
 146 s) and wrote a `s11.csv` in which all 101 rows were `nan`.
@@ -58,7 +58,7 @@ mesh lines covering it, place structure edges on the mesh, and pass
 values. Both guards are now regression tests
 (`test_port_is_snapped_to_the_grid`, `test_meshing_covers_an_air_region`).
 
-## Issue 2 — timestep collapse from thin metal (confirmed)
+## Issue 2 â€” timestep collapse from thin metal (confirmed)
 
 **Observed evidence.**
 
@@ -73,10 +73,10 @@ openEMS::SetupFDTD: Warning, the timestep seems to be very small --> long simula
 2.27 GHz minimum with |S11| = -12.6 dB, versus a 2.45 GHz design target).
 
 **Fix.** Model metal as an infinitely thin sheet (a degenerate box whose start
-and stop coincide) — the standard openEMS idiom. Regression test:
+and stop coincide) â€” the standard openEMS idiom. Regression test:
 `test_metal_is_a_thin_sheet`.
 
-## Issue 3 — `estimate_effective_tan_delta()` crashed (confirmed)
+## Issue 3 â€” `estimate_effective_tan_delta()` crashed (confirmed)
 
 **Observed evidence.** `NameError: name 'em' is not defined`, raised by
 `materials/mixing.py`. The same defect surfaced as a non-zero exit code from
@@ -88,11 +88,11 @@ and stop coincide) — the standard openEMS idiom. Regression test:
 
 **Fix.** Reference the actual locals. The CLI `mix` command now runs.
 
-## Issue 4 — Debye fit reported meaningless residuals (confirmed)
+## Issue 4 â€” Debye fit reported meaningless residuals (confirmed)
 
 **Observed evidence.** Fitting synthetic data generated from a *known* Debye
 model (eps_inf 2.1, delta_eps 0.4, tau 1e-8) recovered the parameters correctly
-but reported `rmse_total = 0.129` — far too large for exact-model data.
+but reported `rmse_total = 0.129` â€” far too large for exact-model data.
 
 **Cause.** Sign convention mismatch. Callers supply `eps''` as a positive loss
 term (that is what `_lsq_for_tau` fits and what `apparent_tan_delta()` returns),
@@ -105,15 +105,15 @@ subtracted `model.imag` directly, inflating every imaginary residual by about
 
 ## Calibration progress
 
-### Mesh convergence — first data point (2026-09-21)
+### Mesh convergence â€” first data point (2026-09-21)
 
 | Run | Mesh | Cells | Resonance | \|S11\| | VSWR | Fractional BW |
 |---|---|---|---|---|---|
-| v4 | 15 cells/lambda, 8 substrate cells | 15,876 | 2.260 GHz | −13.32 dB | 1.550 | 0.995 % |
-| v5 | 25 cells/lambda, 12 substrate cells | 124,620 | 2.280 GHz | −15.12 dB | 1.425 | 1.188 % |
+| v4 | 15 cells/lambda, 8 substrate cells | 15,876 | 2.260 GHz | âˆ’13.32 dB | 1.550 | 0.995 % |
+| v5 | 25 cells/lambda, 12 substrate cells | 124,620 | 2.280 GHz | âˆ’15.12 dB | 1.425 | 1.188 % |
 
 Refining the mesh by roughly 8x in cell count moved the resonance by **+0.9 %**
-(2.260 → 2.280 GHz) and improved the match. A mesh-induced numerical-dispersion
+(2.260 â†’ 2.280 GHz) and improved the match. A mesh-induced numerical-dispersion
 offset of this size cannot account for the 7.8 % gap to the 2.45 GHz synthesis
 target, so **mesh dispersion is eliminated as the dominant candidate** for this
 geometry. Remaining candidates: feed loading (inset/probe) and bias in the
@@ -131,10 +131,10 @@ Differential run, identical geometry and mesh (lossless v4 vs lossy):
 
 | Run | Loss | Resonance | \|S11\| | Fractional BW |
 |---|---|---|---|---|
-| v4 | none | 2.260 GHz | −13.32 dB | 0.995 % |
-| calib_loss_kappa | kappa = 1.168e-4 S/m | 2.270 GHz | −14.44 dB | 1.157 % |
+| v4 | none | 2.260 GHz | âˆ’13.32 dB | 0.995 % |
+| calib_loss_kappa | kappa = 1.168e-4 S/m | 2.270 GHz | âˆ’14.44 dB | 1.157 % |
 
-The loss term measurably changes the result and widens the band — the expected
+The loss term measurably changes the result and widens the band â€” the expected
 direction for a partially mismatched antenna, where added loss improves the
 match and lowers Q. This demonstrates that the loss path is **active**; it does
 **not** validate the absolute loss value (that needs a reference with a known Q
@@ -254,7 +254,7 @@ patch), the feed realisation, and mesh-line placement details.
 
 ```
 python -m unittest discover -s tests
-Ran 82 tests in 2.8s
+Ran 128 tests in 3.6s
 OK
 ```
 
@@ -264,19 +264,20 @@ deliberately do **not** claim to have executed it.
 
 ## Open, unverified items
 
-* The generated openEMS model has **not** been calibrated against an independent
-  reference. A ~7 % resonance shift and a weak match were observed on the first
-  converged-looking case; mesh refinement was ruled out as the dominant cause,
-  and a feed study plus an external tutorial anchor are the next measurements.
+* The generated openEMS model is **not** calibrated to better than about 2 %: the
+  separating experiment and the construction A/B narrowed the offset against an
+  independent implementation from -4.31 % to -2.26 %. The residual is attributed
+  to structural differences (ground footprint, feed realisation, mesh-line
+  placement), not to solver settings, which were eliminated as a class.
 * Dielectric loss is represented as an equivalent conductivity, but has never
   been validated against a reference with a known Q or against measurement; use
   it for relative comparisons only.
 * Array behaviour (mutual coupling, unit-cell/periodic mode) has never been
   simulated.
-* `store/results.py` has unit-level coverage only; it is not yet wired into a
-  CLI run path.
+* `store/results.py` is wired into `sweep run` and covered by the sweep-runner
+  tests; there is no separate CLI `run` command yet.
 
-## Issue 5 — the 7.8 % resonance offset: candidate elimination (2026-09-21)
+## Issue 5 â€” the 7.8 % resonance offset: candidate elimination (2026-09-21)
 
 Four measurements were run. The reference is the lossless 2.45 GHz PTFE patch
 (W = 49.143 mm, L = 41.379 mm, eps_eff = 2.0164, dL = 0.854 mm, inset = 14.658 mm).
