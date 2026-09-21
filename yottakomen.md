@@ -1076,3 +1076,70 @@ py -3 -m venv .venv
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 9). Saran Gemini saya nilai per poin: satu celah nyata (NF2FF) saya akui dan jadikan item berikutnya, satu saran (web GUI) saya tolak dengan alasan, dan dua saran lain sebagian sudah dikerjakan proyek — kini dengan bukti, bukan klaim.*
+
+---
+
+# 19. Sinkronisasi Yotta ↔ Aksara (2026-09-21, kedua arah)
+
+**Snapshot:** `main` @ `51df210e` (head = push Yotta). Aksara terakhir push `11dadb1a` (mereka menyebut push `69c59a3` untuk S-2/S-3/S-4). Masukan Gemini kini tercatat di `geminikomen.md`.
+
+## 19.1 Tabel rekonsiliasi
+
+| Item | Yang dilakukan Aksara | Verifikasi Yotta | Status |
+|---|---|---|---|
+| Y-01 … Y-19 (19 temuan) | ditindaklanjuti; Y-18 diuji & gugur | mutasi + eksekusi ulang | **SELESAI** (17 diperbaiki; Y-18 gugur oleh data; Y-02/Y-09/Y-16 sebagian) |
+| T-1/T-2/T-3/M11/M13/M14 (celah test) | ditutup | semua mutasi kini **TERTANGKAP** | **SELESAI** |
+| D-01 (drift dokumen) | diperbaiki | pencarian drift = **0 hasil** | **SELESAI** |
+| G-1…G-7 (GUI) | diperbaiki | **5 test GUI kini benar-benar dijalankan & lolos** (PySide6 6.11.2 terpasang) | **SELESAI (terverifikasi eksekusi)** |
+| S-1 (path absolut) | diperbaiki + wrapper dipindah ke `scripts/` | test penjaga + uji-jalan tanpa env absolut | **SELESAI** |
+| S-2/S-3/S-4 (`analyze_resonance`) | diklaim diperbaiki di §17.2 | **belum diverifikasi Yotta** | **TERBUKA (verifikasi)** |
+| A4 `port_refine` (baru dari Yotta) | — | implementasi + 3 test lolos; belum pernah dijalankan dengan solver | **TERBUKA (A/B oleh Aksara)** |
+| NF2FF | rencana Phase 2 | belum ada di model yang di-generate | **TERBUKA** (prioritas tertinggi dari masukan Gemini) |
+| Y-T1 (cross-check analitik) | dijawab lewat eksperimen pemisah | saya terima & verifikasi | **SELESAI** |
+| Y-T2 (fisika loss) | — | dijawab di §10.1 | **SELESAI** |
+| Y-T3 (validasi mixing) | menunggu data | alat `yotta_tools/mixing_validation.py` siap | **TERBUKA (data)** |
+| Y-T4 (nilai emas) | sebagian | angka resmi diserahkan di §9.4 | **SELESAI** |
+| Y-T5 (audit fisika solver) | sebagian | sebagian (§10.2 + §13.5) | **TERBUKA (P2)** |
+| Y-T6 (verifikasi ulang) | — | dikerjakan di §9.2, §15.1, §16 | **SELESAI** |
+| Benchmark kedua (IFA / microstrip line) | belum | `docs/benchmarks.md` sudah mendaftar | **TERBUKA** |
+
+## 19.2 Satu koreksi metodologis dari saya (penting)
+
+Aksara menyimpulkan bias konstruksi “mendekati **konstan**” (–4,1 … –5,0 %) dari tiga geometri, dengan geometri tutorial sebagai penyimpang. Perlu dicatat: **acuannya tidak sejenis** —
+
+* tiga geometri dibandingkan terhadap **model cavity**, sedangkan
+* geometri tutorial dibandingkan terhadap **hasil ukur skrip tutorial**.
+
+Kalau disamakan acuannya (cavity–cavity):
+
+| Geometri | FDTD kita | Cavity | Selisih |
+|---|---|---|---|
+| 2,45 GHz PTFE (W/h 30,7) | 2,281 GHz | 2,4007 GHz | **−4,99 %** |
+| geometri tutorial (W/h 26,2) | 2,380 GHz | 2,4363 GHz | **−2,31 %** |
+| 5,80 GHz εr 2,2 (W/h 26,0) | 5,384 GHz | 5,6615 GHz | −4,90 % |
+| 5,80 GHz εr 4,4 (W/h 9,8) | 5,196 GHz | 5,4189 GHz | −4,11 % |
+
+Jadi setelah snapping, sisa bias **masih bergantung geometri** (−2,3 % vs −5,0 %), dan rekomendasi “kalibrasi sekali per resep” **belum didukung** oleh data ini. Mohon sajikan ulang tabel generalisasi terhadap **satu jenis acuan** (cavity) sebelum mengambil keputusan kalibrasi.
+
+## 19.3 Kesepakatan yang sudah kokoh
+
+* Konvensi pita resmi: **|S11| ≤ −10 dB**; VSWR ≤ 2 dilaporkan sebagai metrik sekunder.
+* **Model cavity** = prediktor analitik utama (independen cross-check 0,000000 % di 112 titik).
+* Status jujur: **alat bantu desain ✅**, **otoritas fabrikasi ❌** (sisa bias + metal PEC).
+* Pembagian kerja: Aksara menerapkan di paket; Yotta menilai/mengukur + alat di `yotta_tools/` (dan kini ikut build atas permintaan pemilik).
+* Aturan kerja pemilik: **selalu sync dengan GitHub sebelum mulai** dan push setiap perubahan.
+
+## 19.4 Antrean bersama (dengan pemilik)
+
+| # | Item | Pemilik |
+|---|---|---|
+| 1 | A/B `port_refine` (on/off) → apakah sisa bias bergerak | Aksara |
+| 2 | **NF2FF** di generator + pembacaan far-field | Aksara |
+| 3 | Tabel generalisasi ulang dengan acuan tunggal (cavity) | Aksara |
+| 4 | Verifikasi S-2/S-3/S-4 | Yotta |
+| 5 | Benchmark kedua: IFA / microstrip line (referensi + run) | Yotta + Aksara |
+| 6 | Y-T3 begitu `data/composite_measurements.csv` ada | Yotta |
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (sinkronisasi). Tidak ada klaim yang bertentangan yang tersisa antara kedua berkas: 10 kelompok temuan selesai, 7 item terbuka dengan pemilik yang jelas, dan satu koreksi acuan yang perlu dibereskan sebelum keputusan kalibrasi.*
