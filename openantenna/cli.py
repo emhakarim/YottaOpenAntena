@@ -270,6 +270,11 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
         substrate_cells=args.substrate_cells,
         loss_model=args.loss_model,
         ground_margin_lambda=args.ground_margin_lambda,
+        boundary=args.boundary,
+        pml_cells=args.pml_cells,
+        mesh_smoothing_ratio=args.smoothing,
+        max_timesteps=args.max_timesteps,
+        end_criteria=args.end_criteria,
     )
     rundir = Path(args.out)
     prepared = solver.prepare(project, rundir)
@@ -283,6 +288,11 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
     )
     print(f"dielectric loss  : {solver.loss_model} (kappa = {solver.last_kappa:.6g} S/m)")
     print(f"ground margin    : {solver.ground_margin_lambda:g} lambda0 per side")
+    print(
+        f"boundary         : {solver.boundary}"
+        + (f" ({solver.pml_cells} cells)" if solver.boundary == "PML" else "")
+        + f", smoothing {solver.mesh_smoothing_ratio:g}"
+    )
     print(f"run directory    : {prepared}")
     print(f"generated        : {solver.script_name}, {solver.project_name}, run_manifest.json")
     print(f"solver available : {status.available} ({status.detail})")
@@ -449,6 +459,28 @@ def build_parser() -> argparse.ArgumentParser:
             "is part of the radiating structure and this margin has never been "
             "swept - review item N-01"
         ),
+    )
+    p.add_argument(
+        "--boundary",
+        choices=("PML", "MUR"),
+        default="PML",
+        help="absorbing boundary: PML (default) or MUR as used by the openEMS tutorial",
+    )
+    p.add_argument("--pml-cells", type=int, default=8, metavar="N")
+    p.add_argument(
+        "--smoothing",
+        type=float,
+        default=1.4,
+        metavar="R",
+        help="SmoothMeshLines growth ratio (default 1.4)",
+    )
+    p.add_argument("--max-timesteps", type=int, default=400000, metavar="N")
+    p.add_argument(
+        "--end-criteria",
+        type=float,
+        default=1e-4,
+        metavar="E",
+        help="stop when the residual energy falls below this level (default 1e-4)",
     )
     p.add_argument("--out", required=True, help="run directory to write into")
     p.set_defaults(handler=cmd_gen_openems)

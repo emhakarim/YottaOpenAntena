@@ -8,6 +8,7 @@ tests must stay meaningful on a machine without one.
 from __future__ import annotations
 
 import ast
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -88,6 +89,50 @@ class TestScriptGeneration(unittest.TestCase):
         wider = OpenEMSSolver(ground_margin_lambda=0.75)
         rendered = wider.render_script(make_project())
         self.assertIn("GROUND_MARGIN_LAMBDA = 0.75", rendered)
+
+    def test_construction_settings_are_configurable(self):
+        """Phase-1 completion: boundary, PML cells, smoothing and convergence are knobs."""
+        solver = OpenEMSSolver(
+            boundary="MUR",
+            pml_cells=6,
+            mesh_smoothing_ratio=1.2,
+            max_timesteps=50000,
+            end_criteria=1e-5,
+        )
+        script = solver.render_script(make_project())
+        self.assertIn('FDTD.SetBoundaryCond(["MUR"] * 6)', script)
+        self.assertIn("BOUNDARY: MUR", script)
+        self.assertIn("MESH_SMOOTHING = 1.2", script)
+        self.assertIn("MAX_TS = 50000", script)
+        self.assertIn("END_CRITERIA = 1e-05", script)
+
+        pml = OpenEMSSolver(boundary="PML", pml_cells=6).render_script(make_project())
+        self.assertIn('FDTD.SetBoundaryCond(["PML_6"] * 6)', pml)
+
+    def test_settings_are_recorded_in_the_manifest(self):
+        solver = OpenEMSSolver(boundary="MUR", pml_cells=6, max_timesteps=12345)
+        with tempfile.TemporaryDirectory() as tmp:
+            rundir = solver.prepare(make_project(), tmp)
+            manifest = json.loads((rundir / "run_manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["boundary"], "MUR")
+        self.assertEqual(manifest["pml_cells"], 6)
+        self.assertEqual(manifest["max_timesteps"], 12345)
+        self.assertEqual(manifest["mesh"]["pml_cells"], 6)
+        self.assertIn("ground_margin_lambda", manifest)
+
+    def test_invalid_settings_are_rejected(self):
+        with self.assertRaises(ValueError):
+            OpenEMSSolver(boundary="ABC")
+        with self.assertRaises(ValueError):
+            OpenEMSSolver(pml_cells=1)
+        with self.assertRaises(ValueError):
+            OpenEMSSolver(mesh_smoothing_ratio=1.0)
+        with self.assertRaises(ValueError):
+            OpenEMSSolver(max_timesteps=10)
+        with self.assertRaises(ValueError):
+            OpenEMSSolver(end_criteria=0.0)
+        with self.assertRaises(ValueError):
+            OpenEMSSolver(ground_margin_lambda=0.0)
 
     def test_unknown_material_is_rejected(self):
         project = make_project(material="unobtainium")

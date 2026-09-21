@@ -128,7 +128,9 @@ FEED_Z0 = $FEED_Z0         # port reference impedance [ohm]
 
 MESH_MAX_RES = C0 / F_MAX / $MESH_CELLS_PER_WAVELENGTH
 MESH_SUBSTRATE_CELLS = $MESH_SUBSTRATE_CELLS
+MESH_SMOOTHING = $MESH_SMOOTHING
 PML_CELLS = $PML_CELLS
+BOUNDARY_MODE = "$BOUNDARY_MODE"
 AIRBOX_LAMBDA = $AIRBOX_LAMBDA      # air margin around the structure, per side
 AIR_TOP_LAMBDA = $AIR_TOP_LAMBDA    # air margin above the patch
 MAX_TS = $MAX_TS
@@ -139,7 +141,14 @@ END_CRITERIA = $END_CRITERIA
 # the Gaussian half-width (the convention used by the openEMS tutorials).
 FDTD = openEMS(NrTS=MAX_TS, EndCriteria=END_CRITERIA)
 FDTD.SetGaussExcite(F0, 0.5 * F0)
-FDTD.SetBoundaryCond(["PML_%d" % PML_CELLS] * 6)
+if BOUNDARY_MODE == "MUR":
+    # MUR (first-order absorbing) is what the openEMS patch tutorial uses; PML is
+    # the better general choice but needs enough cells.  Which one shifts the
+    # resonance, and by how much, is an open question from review (N-01/N-04).
+    FDTD.SetBoundaryCond(["MUR"] * 6)
+else:
+    FDTD.SetBoundaryCond(["PML_%d" % PML_CELLS] * 6)
+print("BOUNDARY: %s" % ("MUR" if BOUNDARY_MODE == "MUR" else "PML_%d" % PML_CELLS))
 
 CSX = ContinuousStructure()
 FDTD.SetCSX(CSX)
@@ -257,7 +266,7 @@ mesh.AddLine("z", np.linspace(-H_TOTAL, 0.0, MESH_SUBSTRATE_CELLS + 1))
 mesh.AddLine("z", [DOM_Z_BOT, -H_TOTAL, 0.0, DOM_Z_TOP])
 mesh.AddLine("z", np.linspace(0.0, DOM_Z_TOP, 9))
 mesh.AddLine("z", np.linspace(DOM_Z_BOT, -H_TOTAL, 5))
-mesh.SmoothMeshLines("all", MESH_MAX_RES, 1.4)
+mesh.SmoothMeshLines("all", MESH_MAX_RES, MESH_SMOOTHING)
 
 print(
     "DOMAIN: x=[%.1f, %.1f] y=[%.1f, %.1f] z=[%.1f, %.1f] mm"
@@ -322,6 +331,11 @@ class OpenEMSSolver(SolverAdapter):
         air_top_lambda: float = 0.30,
         loss_model: str = "kappa",
         ground_margin_lambda: float = 0.25,
+        boundary: str = "PML",
+        pml_cells: int = 8,
+        mesh_smoothing_ratio: float = 1.4,
+        max_timesteps: int = 400000,
+        end_criteria: float = 1e-4,
     ) -> None:
         """Create an adapter with explicit mesh-resolution controls.
 
@@ -339,6 +353,21 @@ class OpenEMSSolver(SolverAdapter):
             raise ValueError("loss_model must be 'kappa' or 'none'")
         if ground_margin_lambda <= 0:
             raise ValueError("ground_margin_lambda must be > 0")
+        if boundary not in ("PML", "MUR"):
+            raise ValueError("boundary must be 'PML' or 'MUR'")
+        if pml_cells < 2:
+            raise ValueError("pml_cells must be >= 2")
+        if mesh_smoothing_ratio <= 1.0:
+            raise ValueError("mesh_smoothing_ratio must be > 1")
+        if max_timesteps < 100:
+            raise ValueError("max_timesteps must be >= 100")
+        if end_criteria <= 0:
+            raise ValueError("end_criteria must be > 0")
+        self.boundary = boundary
+        self.pml_cells = int(pml_cells)
+        self.mesh_smoothing_ratio = float(mesh_smoothing_ratio)
+        self.max_timesteps = int(max_timesteps)
+        self.end_criteria = float(end_criteria)
         self.ground_margin_lambda = float(ground_margin_lambda)
         self.loss_model = loss_model
         self.last_kappa = 0.0
@@ -510,11 +539,13 @@ class OpenEMSSolver(SolverAdapter):
             FEED_Z0=fmt(50.0),
             MESH_CELLS_PER_WAVELENGTH=self.mesh_cells_per_wavelength,
             MESH_SUBSTRATE_CELLS=self.substrate_cells,
-            PML_CELLS=8,
+            MESH_SMOOTHING=fmt(self.mesh_smoothing_ratio),
+            PML_CELLS=self.pml_cells,
+            BOUNDARY_MODE=self.boundary,
             AIRBOX_LAMBDA=fmt(self.air_margin_lambda),
             AIR_TOP_LAMBDA=fmt(self.air_top_lambda),
-            MAX_TS=400000,
-            END_CRITERIA=fmt(1e-4),
+            MAX_TS=self.max_timesteps,
+            END_CRITERIA=fmt(self.end_criteria),
             ELEMENTS_LITERAL=repr(
                 [[float(x), float(y)] for x, y in layout.positions_m]
             ),
@@ -535,6 +566,11 @@ class OpenEMSSolver(SolverAdapter):
             "verified": False,
             "conductor_model": "PEC (ideal; conductor loss is not modelled) - review item Y-03",
             "ground_margin_lambda": self.ground_margin_lambda,
+            "boundary": self.boundary,
+            "pml_cells": self.pml_cells,
+            "mesh_smoothing_ratio": self.mesh_smoothing_ratio,
+            "max_timesteps": self.max_timesteps,
+            "end_criteria": self.end_criteria,
             "mesh": {
                 "cells_per_wavelength": self.mesh_cells_per_wavelength,
                 "substrate_cells": self.substrate_cells,
@@ -542,8 +578,8 @@ class OpenEMSSolver(SolverAdapter):
                 "air_top_lambda": self.air_top_lambda,
                 "air_margin_m": self.air_margin_lambda * lambda_min,
                 "free_space_to_pml_m": self.air_margin_lambda * lambda_min,
-                "pml_cells": 8,
-                "pml_thickness_m": 8 * lambda_min / self.mesh_cells_per_wavelength,
+                "pml_cells": self.pml_cells,
+                "pml_thickness_m": self.pml_cells * lambda_min / self.mesh_cells_per_wavelength,
                 "converged": False,
                 "note": (
                     "free_space_to_pml_m is the nominal gap between the ground-plane "
