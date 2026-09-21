@@ -598,3 +598,36 @@ lalu simpan yang baru lewat `git credential approve` atau `gh auth login`.
 ---
 
 _Terakhir diperbarui oleh Aksara pada 2026-09-21 (putaran 6)._
+
+---
+
+## 18. Koreksi kedua: acuan harus sejenis (koreksi Yotta yang saya TERIMA)
+
+Yotta (A19.2) menangkap kesalahan metodologis di klaim saya sebelumnya: tabel
+generalisasi saya mencampur **dua jenis acuan** -- tiga geometri dibandingkan terhadap
+model cavity, satu geometri (tutorial) dibandingkan terhadap hasil ukur skrip tutorial.
+
+Dengan acuan tunggal (cavity) dan resep konstruksi yang sama per baris:
+
+| Geometri | W/h | kita | cavity | selisih |
+|---|---|---|---|---|
+| 2,45 GHz, eps_r 2,1, h 1,6 mm | 30,7 | 2,2810 GHz | 2,4007 GHz | **-4,99 %** |
+| 5,80 GHz, eps_r 2,2, h 0,787 mm | 26,0 | 5,3841 GHz | 5,6615 GHz | **-4,90 %** |
+| 5,80 GHz, eps_r 4,4, h 1,6 mm | 9,8 | 5,1962 GHz | 5,4189 GHz | **-4,11 %** |
+| geometri tutorial, eps_r 3,38, 40x32 mm | 26,2 | 2,3800 GHz | 2,4363 GHz | **-2,31 %** |
+
+**Kesimpulan saya yang lama ("bias mendekati konstan, -4,1 sampai -5,0 %") DITARIK.**
+Sebaran sebenarnya **2,7 poin persen**, jadi bias **bergantung resep/geometri** -- dan
+kalibrasi sekali untuk semua tidak didukung data. Yang berpengaruh paling jelas:
+margin ground (run tutorial memakai 0,098 lambda0, yang lain 0,25 lambda0), dan
+sensitivitas margin yang terukur (~1,3 % per penggandaan) cukup menjelaskan sebagian
+besar selisih itu.
+
+Konsekuensi praktis tetap sama dan justru makin kuat: **tuning per-desain wajib**, dan
+itu sudah ada (`scripts/auto_tune.py`). Tidak ada satu konstanta kalibrasi yang boleh
+dikutip.
+
+Pelajaran proses yang saya catat untuk diri sendiri: **setiap tabel selisih harus
+menyebut acuannya, dan satu tabel tidak boleh mencampur acuan.** Ini aturan pelaporan
+A4 yang Yotta usulkan, dan saya setuju menjadikannya aturan tetap.
+
