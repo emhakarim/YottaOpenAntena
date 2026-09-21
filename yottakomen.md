@@ -659,3 +659,75 @@ Begitu berkas itu ada (3–5 baris cukup), saya akan menjalankan keempat model +
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 4). Intinya: test suite-nya sudah menahan perbaikan yang benar, tetapi tiga angka penting (ΔL, koreksi narrow-line, tanda tan δ) masih bisa berubah tanpa suara. Tiga test kecil cukup untuk menutupnya.*
+
+---
+
+# 12. Scorecard — seberapa akurat, seberapa persen tercapai
+
+**Penulis:** Yotta · Basis: `main` @ `d9943fb`, angka dari eksekusi nyata yang tercatat di §9–§11 (dapat direproduksi lewat skrip di lampiran §8).
+
+## 12.1 Akurasi — dipisah per lapisan (ini pembedaan yang paling penting)
+
+### A. Lapisan numerik/pustaka — **akurat, boleh dipercaya**
+
+| Yang diukur | Hasil | Metode |
+|---|---|---|
+| Rumus sintesis patch vs buku (contoh Balanis 10 GHz) | W 11,850 (buku 11,86) mm · ε_eff 1,9715 (1,972) · L 9,053 (9,06) mm → **galat < 0,1 %** | dihitung sendiri |
+| Integrasi pola / directivity vs teori | D = **1,5000** (teori 1,5) dan **1,6409** (teori 1,641) → **≤ 0,1 %** | dijalankan sendiri |
+| S-parameter (VSWR, return loss, bandwidth, Touchstone, Z0) | benar per definisi; file `R 75` → Z = 91,67 Ω (benar) | test + probe |
+| Validasi input, cek tumpang-tindih, warning | berfungsi dan ditangkap audit mutasi | audit mutasi §11 |
+| **Kesimpulan** | **akurat pada level ≲0,1–1 %** — layak dipakai sebagai kalkulator desain orde-pertama | |
+
+### B. Lapisan fisik (full-wave) — **belum terkalibrasi**
+
+| Yang diukur | Hasil |
+|---|---|
+| Desain 2,45 GHz → hasil FDTD | 2,260 GHz (v4) = **−7,8 %** ; 2,280 GHz (v5) = −6,9 % |
+| **Capaian frekuensi** | **92,2 % (v4) … 93,1 % (v5)** dari target |
+| Batas fisis bawah geometri ini (cavity, karena ε_eff ≤ εr) | 2,4007 GHz → hasil FDTD **6,2 % di bawah batas yang sah** |
+| Selisih dua model analitik (TL vs cavity) | **2,0 %** (2,4500 vs 2,4007 GHz) |
+| **Plafon toolchain** — tutorial resmi openEMS pada desainnya sendiri | 2,435 GHz vs desain 2,4 GHz = **−1,5 %**, VSWR 1,09 |
+| **Kesimpulan** | toolchain mampu **±1,5 %**, tetapi **model kita menyimpang ~6 %** → akurasi fisik **belum bisa dipakai sebagai otoritas fabrikasi** |
+
+## 12.2 Ketercapaian proyek — dihitung dari daftar item `docs/roadmap.md`
+
+| Fase | Selesai | Persen |
+|---|---|---|
+| Phase 1 — headless core | 13 dari 16 item | **81 %** |
+| Phase 2 — physics coverage | 0 dari 7 | **0 %** |
+| Phase 3 — GUI (sudah mulai) | 4 tab + worker thread + smoke test; belum ada 3D viewer, log live, batch UI, packaging | **≈ 40 %** |
+| Phase 4 — depth & packaging | 0 dari 3 | **0 %** |
+| **Total proyek (rata-rata sederhana antar-fase)** | | **≈ 30 %** |
+
+Catatan penting: **3 item Phase 1 yang belum selesai justru yang paling menentukan akurasi** — kalibrasi model, validasi loss, dan plotting. Jadi "81 %" itu angka jumlah item, bukan 81 % dari nilai guna; secara kegunaan (bisa/tidak dipakai sebagai otoritas desain) angkanya lebih rendah.
+
+## 12.3 Ketercapaian atas telaah (review loop)
+
+| Metrik | Angka |
+|---|---|
+| Temuan putaran 1 | 19 |
+| Direspons Aksara | 19/19 = **100 %** |
+| Diperbaiki **dan terverifikasi ulang** | 17/19 = **89,5 %** |
+| Gugur karena data (Y-18) | 1 (hipotesis saya, ditolak oleh pengukuran) |
+| Perbaikan sebagian | 3 (Y-02, Y-09, Y-16) |
+| Test suite | **112/112 lolos** (5 skip) = 100 % |
+| Mutasi tertangkap (penjaga perbaikan) | 5/8 = **62,5 %** → 3 celah (T-1 ΔL, T-2 narrow-line, T-3 tanda tan δ) |
+
+## 12.4 Kesimpulan satu paragraf
+
+**Kalkulator desainnya akurat (≲0,1–1 %), tetapi mesin simulasinya belum terkalibrasi.** Capaian frekuensi pada contoh patch baru **92–93 %** dari target (galat ~6–8 %), sementara toolchain-nya sendiri terbukti mampu **±1,5 %** — artinya selisih itu ada di konstruksi model kita, bukan di batas solver. Proyeknya sendiri **≈ 30 % selesai** dari roadmap empat fase, dengan Phase 1 81 % (dan sisa 19 %-nya adalah bagian tersulit). Angka yang **boleh** dipakai sekarang: output sintesis analitik, metrik S-parameter, dan pola/directivity. Angka yang **belum boleh** dipakai: resonansi, efisiensi, dan gain dari hasil solver.
+
+## 12.5 D-01 (P2) — dokumen tertinggal dari kode (drift)
+
+| Berkas | Klaim yang sudah basi |
+|---|---|
+| `docs/capabilities-and-comparison.md:35` | "Dielectric loss in the solver model | **not implemented** | generator writes `kappa = 0`" — padahal generator sekarang default `LOSS_MODEL="kappa"` dengan `KAPPA_SUB = 1,1449e-4 S/m` |
+| `docs/capabilities-and-comparison.md:37` | "GUI | **not implemented**" — padahal kerangka GUI sudah ada dan roadmap sendiri menulis Phase 3 "started" |
+| `docs/roadmap.md:22, 25, 34-35` | "Test suite | 82 tests", "Dielectric loss ... **open**", "generator writes `kappa = 0`" |
+| `docs/verification.md:167` | "Ran 82 tests in 2.8s" (sekarang 112) |
+
+Saran: perbarui keempat berkas segera. Nilai terbesar proyek ini justru **kejujuran dokumennya**; drift seperti ini merusak aset terbaiknya sendiri — dan ironisnya bertentangan dengan semangat kejujuran yang sudah dibangun di `verification.md`.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (scorecard). Ringkas: numerik akurat, fisik belum terkalibrasi (92–93 % capaian), proyek ≈ 30 %, review loop 89,5 % tuntas, dan 4 berkas dokumen perlu disinkronkan ulang dengan kode.*
