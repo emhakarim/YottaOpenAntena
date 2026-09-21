@@ -897,3 +897,56 @@ R terukur ≈ 33–35 Ω pada resonansi, padahal rumus inset menjanjikan 50 Ω. 
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (bantuan putaran 5). Siap lanjut: begitu ada `data/composite_measurements.csv` atau hasil geometri kedua, saya proses di putaran berikutnya.*
+
+---
+
+# 15. Putaran 6 — verifikasi klaim + cross-check independen prediktor
+
+**Snapshot:** `main` @ **`79e18fe`** · `py -3 -m unittest discover -s tests` → **132 test OK (5 skipped)**.
+
+## 15.1 Hasil verifikasi klaim baru
+
+| Klaim Aksara | Verifikasi saya |
+|---|---|
+| metal-edge snapping memulihkan separuh bias (4,31 % → 2,26 %) | **SAHIH.** Tabel A/B-nya kuat: boundary PML→MUR, domain 149→200 mm, dan smoothing 1,01 **semuanya tetap −4,31 %**; hanya `AddEdges2Grid` yang mengubahnya → **2,380 GHz (−2,26 %)**. Ini sekaligus **menutup kandidat yang saya usulkan** (PML/domain/mesh) dengan cara yang lebih meyakinkan daripada alasan per-item saya — saya catat sebagai hasil yang lebih kuat, bukan sekadar perbaikan |
+| T-1/T-2/T-3 ditutup | **T-1 ✓** (2 test), **T-2 ✓** (`test_narrow_line_correction_changes_the_result`), **T-3 SEBAGIAN.** Test baru memakai asersi tanda pada jalur material, tetapi **`apparent_tan_delta` tidak dipanggil test mana pun** — saya buktikan dengan mutasi bahwa fungsinya masih bisa dibalik tanpa suara |
+| D-01 (drift dokumen) diperbaiki | **SEBAGIAN.** Hitungan test dan status loss di tabel sudah benar, tetapi `docs/roadmap.md` baris 34–35 masih menulis *"generator writes `kappa = 0`"* dan item terbuka #4 *"No convergence control exposed"* sudah tidak berlaku (knob `end_criteria`/`pml_cells` + pelaporan `converged` sudah ada) |
+| M11 (validasi `SweepAxis.values`) & M13 (default `end_criteria`) dari §14 | **MASIH TERBUKA** — di luar lingkup commit, saya ulang uji mutasinya dan keduanya masih lolos |
+
+**Sisa celah test: 3** — T-3 (helper), M11, M13. Masing-masing satu test kecil.
+
+## 15.2 Cross-check independen prediktor cavity (kontribusi saya)
+
+Karena model cavity kini jadi **prediktor utama** alur desain, saya implementasikan ulang dari nol (`yotta_tools/cavity_check.py`) dan mengujinya:
+
+| Uji | Hasil |
+|---|---|
+| Implementasi saya vs `resonant_frequency_cavity` pada **112 titik grid** (εr 1,1–12 ; h 0,1–3 mm ; f 1–10 GHz) | selisih maksimum **0,000000 %** → implementasi paket bersih |
+| Anchor geometri tutorial | cavity **2,4363 GHz** vs solver **2,435 GHz** (−0,05 %) ; TL **2,5134 GHz** (+3,2 %) |
+| Uji perilaku: monoton terhadap εr, panjang patch, tebal substrat ; limit εr→1 | **semua OK** |
+| Verdict alat | **PASS** |
+
+Artinya: pivot Aksara ke cavity sebagai prediktor utama **saya konfirmasi secara independen**. Catatan kecil: angka terukur PTFE 2,260 GHz di tabel anchor berasal dari **sebelum** perbaikan snapping, jadi galat +6,2 % di baris itu bukan galat model terkini.
+
+## 15.3 Eksperimen paling tajam untuk sisa −2,26 %
+
+Karena boundary/domain/mesh sudah dieliminasi, kandidatnya kini sempit. Cara paling efisien bukan menebak, tetapi **bisection "diff-and-swap"**: ambil `sim.py` kita pada geometri tutorial, lalu ganti **satu elemen konstruksi sekaligus** dengan versi tutorial dan catat resonansinya sampai mendekati 2,435 GHz:
+
+1. bentang ground/substrat (tutorial 60 × 60 mm) ;
+2. blok port (definisi, `edges2grid`, prioritas) ;
+3. baris mesh (res 5 mm, 4 sel substrat, tanpa `linspace` lateral) ;
+4. eksitasi / `nrTS` / `EndCriteria` ;
+5. prioritas material.
+
+Elemen yang menggerakkan resonansi = akar sisa bias. Ini menggantikan tebakan dengan eliminasi bertahap, dan hasilnya akan langsung memberi tahu apakah alur desain perlu faktor koreksi tetap atau per-geometri.
+
+## 15.4 Urutan berikutnya
+
+1. (Aksara) bisection §15.3 → target selisih ≤1 % terhadap anchor.
+2. Tiga test kecil: T-3 helper, M11, M13.
+3. Sinkronkan sisa roadmap (baris 34–35 dan item #4).
+4. (Yotta) Y-T3 menunggu `data/composite_measurements.csv`; uji generalisasi §14.2B belum dijalankan.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 6). Dua klaim terverifikasi, satu klaim sebagian (T-3), dua celah lama masih terbuka, dan prediktor baru sudah saya cross-check independen: implementasi bersih, anchor cocok, perilaku benar.*
