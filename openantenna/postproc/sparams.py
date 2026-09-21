@@ -161,6 +161,49 @@ class S11Trace:
         return out
 
     # ----------------------------------------------------------- bandwidth
+    def refine_resonance(self) -> tuple[float, float, float]:
+        """Sub-grid resonance estimate by parabolic interpolation of |S11| (dB).
+
+        The raw minimum of |S11| can only be located to one sweep step (0.4 % at
+        the default 101-point sweep), which is far too coarse to target 0.1 %.
+        Fitting a parabola through the minimum and its two neighbours locates the
+        vertex far below the grid step.
+
+        Returns ``(refined_hz, grid_step_hz, asymmetry_db)``.  The asymmetry is how
+        far the three samples are from a locally parabolic dip (0 for a perfect
+        parabola); a large value means the refined frequency should not be trusted.
+        NOTE: this is a *grid* refinement, not a physical uncertainty.
+        """
+        index = self.worst_match_index()
+        frequencies = self.frequencies_hz
+        if index == 0 or index == len(frequencies) - 1:
+            return frequencies[index], self._grid_step_hz(), float("nan")
+
+        f1, f2, f3 = frequencies[index - 1], frequencies[index], frequencies[index + 1]
+        db = self.db()
+        y1, y2, y3 = db[index - 1], db[index], db[index + 1]
+
+        curvature = y1 - 2.0 * y2 + y3
+        if curvature == 0.0:
+            return f2, self._grid_step_hz(), float("nan")
+        # vertex offset in units of the half-step, for equally spaced points
+        delta = 0.5 * (y1 - y3) / curvature
+        half_step = 0.5 * (f3 - f1)
+        refined = f2 + delta * half_step
+        # Asymmetry of the three samples: exactly 0 for a locally parabolic dip,
+        # large when the curve is not parabolic and the vertex is unreliable.
+        asymmetry_db = abs((y3 - y2) - (y2 - y1))
+        return refined, self._grid_step_hz(), asymmetry_db
+
+    def _grid_step_hz(self) -> float:
+        if len(self.frequencies_hz) < 2:
+            return 0.0
+        return self.frequencies_hz[1] - self.frequencies_hz[0]
+
+    def resonance_refined_hz(self) -> float:
+        """Convenience wrapper returning only the refined frequency."""
+        return self.refine_resonance()[0]
+
     def bandwidth_below(
         self, threshold_db: float = -10.0
     ) -> List[Tuple[float, float, float]]:

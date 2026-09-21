@@ -25,7 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]  # repository root (portable, no absolute paths)
+ROOT = Path(r"D:\OpenAntenna")
 sys.path.insert(0, str(ROOT))
 
 from openantenna.geometry.patch import (
@@ -51,8 +51,11 @@ GEOMETRIES = [
 
 
 def main() -> int:
+    wanted = sys.argv[1].split(",") if len(sys.argv) > 1 else None
     results = []
     for tag, f0, eps_r, height, tan_d in GEOMETRIES:
+        if wanted is not None and tag not in wanted:
+            continue
         material_name = f"gen-{tag}"
         BUILTIN_MATERIALS[material_name] = Material(
             name=material_name,
@@ -79,10 +82,7 @@ def main() -> int:
         solver.prepare(project, rundir)
 
         env = dict(os.environ)
-        if "OPENEMS_ROOT" not in env:
-            print("note: OPENEMS_ROOT is not set - simulations will fail unless the "
-                  "openEMS runtime is findable. Point it at the folder that holds "
-                  "openEMS.exe / CSXCAD.dll.")
+        env.setdefault("OPENEMS_ROOT", r"D:\OpenAntenna\tools\openEMS")
         proc = subprocess.run(
             [sys.executable, str(ROOT / "tools" / "run_with_openems.py"), str(rundir / "sim.py")],
             cwd=str(rundir),
@@ -126,10 +126,19 @@ def main() -> int:
         print("    " + json.dumps(record, default=str), flush=True)
 
     out = ROOT / "runs" / "generalisation_summary.json"
+    previous: dict = {}
+    if out.exists():
+        try:
+            previous = json.loads(out.read_text(encoding="utf-8"))
+        except ValueError:
+            previous = {}
+    merged = {row["tag"]: row for row in previous.get("results", [])}
+    for row in results:
+        merged[row["tag"]] = row
     out.write_text(
         json.dumps(
             {
-                "results": results,
+                "results": list(merged.values()),
                 "note": (
                     "delta_vs_cavity_percent is the key column: a roughly constant value "
                     "means the construction bias can be calibrated once; a varying value "

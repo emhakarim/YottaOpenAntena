@@ -37,6 +37,41 @@ class TestPhaseContract(unittest.TestCase):
         self.assertTrue(trace.bandwidth_below(-10.0))
 
 
+class TestResonanceRefinement(unittest.TestCase):
+    def test_parabolic_fit_recovers_an_off_grid_minimum(self):
+        """0.1 % targeting needs sub-grid resolution: with 10 MHz steps a raw
+        minimum is only located to about 0.4 %."""
+        start, step, depth, width = 2.400e9, 10.0e6, 30.0, 20.0e6
+        true_minimum = 2.4673e9
+        frequencies = [start + i * step for i in range(11)]
+        magnitudes_db = [-depth * ((f - true_minimum) / width) ** 2 for f in frequencies]
+        trace = S11Trace(
+            frequencies, [complex(10.0 ** (db / 20.0), 0.0) for db in magnitudes_db]
+        )
+        refined, grid_step, asymmetry = trace.refine_resonance()
+        # the raw grid minimum is 2.470 GHz (0.11 % away); the fit must do better
+        self.assertAlmostEqual(refined / 1e9, 2.4673, places=6)
+        self.assertLess(abs(refined - true_minimum) / true_minimum, 1e-6)
+        self.assertAlmostEqual(grid_step, step, places=3)
+        self.assertLess(asymmetry, 1e-9)  # a pure parabola is symmetric
+
+    def test_refinement_is_reported_in_parsed_results(self):
+        rows = ["freq_hz,s11_re,s11_im"]
+        for i in range(11):
+            frequency = 2.400e9 + i * 10.0e6
+            magnitude_db = -30.0 * ((frequency - 2.4673e9) / 20.0e6) ** 2
+            rows.append(f"{frequency:.6e},{10.0 ** (magnitude_db / 20.0):.9e},0.0")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "s11.csv"
+            path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+            from openantenna.solvers.openems import OpenEMSSolver
+
+            parsed = OpenEMSSolver().parse_results(tmp)
+        self.assertAlmostEqual(parsed["resonance_refined_hz"] / 1e9, 2.4673, places=6)
+        self.assertAlmostEqual(parsed["resonance_grid_step_hz"], 10.0e6, places=1)
+        self.assertIn("resonance_fit_asymmetry_db", parsed)
+
+
 class TestTouchstoneReferenceImpedance(unittest.TestCase):
     def test_reference_impedance_is_read_and_used(self):
         content = "# Hz S RI R 75\n2.4e9 0.1 0.0\n2.45e9 -0.2 0.1\n2.5e9 0.05 -0.05\n"

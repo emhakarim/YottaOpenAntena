@@ -45,19 +45,10 @@ class SimulateWorker(QThread):
     done = Signal(dict)
     failed = Signal(str)
 
-    def __init__(
-        self,
-        project: Project,
-        rundir: Path,
-        timeout_s: float | None = 3600.0,
-        **solver_kwargs: Any,
-    ) -> None:
+    def __init__(self, project: Project, rundir: Path, **solver_kwargs: Any) -> None:
         super().__init__()
         self.project = project
         self.rundir = Path(rundir)
-        # A hung external solver must not block the worker for ever: the thread
-        # cannot be cancelled, so the run itself carries a timeout (review G-3).
-        self.timeout_s = timeout_s
         self.solver_kwargs = solver_kwargs
 
     def run(self) -> None:  # noqa: D102 - Qt entry point
@@ -73,7 +64,7 @@ class SimulateWorker(QThread):
             self.progress.emit(f"model written to {prepared}")
 
             self.progress.emit("running the solver (this takes minutes; the window stays responsive) ...")
-            run = solver.run(prepared, timeout_s=self.timeout_s)
+            run = solver.run(prepared)
             self.progress.emit(f"solver exited with status {run.status} (code {run.returncode})")
             if run.status != "ok":
                 raise RuntimeError(f"solver run failed; log tail:\n{run.log[-2000:]}")
