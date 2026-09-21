@@ -52,6 +52,16 @@ CONFIGS = {
     "mur": dict(boundary="MUR", air_margin_lambda=0.20, air_top_lambda=0.30),
     "bigdomain": dict(boundary="PML", pml_cells=8, air_margin_lambda=0.80, air_top_lambda=0.80),
     "tutorial_like": dict(boundary="MUR", air_margin_lambda=0.80, air_top_lambda=0.80),
+    # The tutorial meshes with a uniform 5 mm grid and no smoothing; we grow the
+    # cells away from the structure with SmoothMeshLines(1.4).  Grading changes
+    # the local numerical dispersion, so test a quasi-uniform mesh explicitly.
+    "uniformmesh": dict(
+        boundary="PML", air_margin_lambda=0.20, air_top_lambda=0.30, mesh_smoothing_ratio=1.01
+    ),
+    # Metal-edge snapping OFF (we add AddEdges2Grid by default, like the tutorial).
+    "no_edge_snap": dict(
+        boundary="PML", air_margin_lambda=0.20, air_top_lambda=0.30, metal_edge_snapping=False
+    ),
 }
 
 
@@ -73,7 +83,9 @@ def main() -> int:
     )
 
     results = []
-    for label, kwargs in CONFIGS.items():
+    wanted = sys.argv[1].split(",") if len(sys.argv) > 1 else list(CONFIGS)
+    for label in wanted:
+        kwargs = CONFIGS[label]
         solver = OpenEMSSolver(
             mesh_cells_per_wavelength=20,
             substrate_cells=4,
@@ -119,12 +131,21 @@ def main() -> int:
         print("    " + json.dumps(record, default=str), flush=True)
 
     out = ROOT / "runs" / "construction_ab_summary.json"
+    previous: dict = {}
+    if out.exists():
+        try:
+            previous = json.loads(out.read_text(encoding="utf-8"))
+        except ValueError:
+            previous = {}
+    merged = {row["config"]: row for row in previous.get("results", [])}
+    for row in results:
+        merged[row["config"]] = row
     out.write_text(
         json.dumps(
             {
                 "tutorial_reference_hz": TUTORIAL_REFERENCE_HZ,
                 "cavity_prediction_hz": resonant_frequency_cavity(EPS_R, H_SUB, WIDTH_X, LENGTH_Y),
-                "results": results,
+                "results": list(merged.values()),
                 "note": (
                     "One construction setting varies per row. Whichever row closes the gap "
                     "to the tutorial reference identifies the bias source; if none does, the "

@@ -218,6 +218,38 @@ within one sweep step (R ~ 33-35 ohm), so the minimum **is** the patch resonance
 not a feed artefact.  Convergence state is now reported per run (`converged`,
 `timesteps`) instead of being invisible.
 
+## Construction A/B: the cause of the 4.31 % offset, found and half-fixed
+
+Five construction settings were varied one at a time on the tutorial geometry
+(40 x 32 mm, eps_r 3.38, h 1.524 mm; tutorial reference 2.435 GHz):
+
+| Configuration | Resonance | vs tutorial |
+|---|---|---|
+| ours (PML_8, margin 0.20/0.30) | 2.330 GHz | -4.31 % |
+| MUR boundary | 2.330 GHz | -4.31 % |
+| PML_8, margin 0.80/0.80 (domain ~200 mm) | 2.330 GHz | -4.31 % |
+| MUR + big domain | 2.330 GHz | -4.31 % |
+| quasi-uniform mesh (smoothing 1.01) | 2.330 GHz | -4.31 % |
+| **metal edges snapped (`AddEdges2Grid`, new default)** | **2.380 GHz** | **-2.26 %** |
+| metal edges NOT snapped (explicit control) | 2.330 GHz | -4.31 % |
+
+Two conclusions, both evidence-backed:
+
+1. **The entire numerical-settings class is eliminated.** Boundary type, PML depth,
+domain size and mesh grading leave the resonance pinned at exactly 2.330 GHz
+(within the 10 MHz sweep step). No amount of solver tuning explains the offset.
+2. **Metal-edge snapping accounts for about half of it.** A degenerate
+(zero-thickness) patch sheet can be snapped to the neighbouring cell, which
+changes the effective patch size. Calling `FDTD.AddEdges2Grid(...)` on the ground
+and on every patch - the practice used by the openEMS tutorial - moves the
+resonance from 2.330 to 2.380 GHz. This is now the generator default and is covered
+by a test.
+
+Residual gap: -2.26 % (2.380 vs 2.435 GHz). Still open, and no longer attributed
+to solver settings. Remaining structural candidates: the ground-plane footprint
+(the tutorial uses 60 x 60 mm; our single-margin knob produces 64 x 56 mm for this
+patch), the feed realisation, and mesh-line placement details.
+
 ## Test suite
 
 ```

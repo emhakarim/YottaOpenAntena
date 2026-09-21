@@ -448,12 +448,65 @@ Satu perbedaan yang memakan ~4 % akan langsung terlihat.
 ## 14. Status singkat untuk pemilik proyek
 
 - **Sudah bisa dipakai**: eksplorasi material/komposit, sintesis geometri, generasi
-  model solver, sweep material satu perintah, tuning resonansi otomatis (3 iterasi),
-  tuning match (VSWR 1,12).
-- **Belum boleh jadi otoritas fabrikasi**: angka absolut apa pun, sampai selisih
-  4,3 % konstruksi model dijelaskan.
-- Test: **125 lulus**. Semua sudah di-push dan tersinkron.
+  model solver (semua setelan bisa divariasikan), sweep material satu perintah,
+  tuning resonansi otomatis, tuning match (VSWR 1,11).
+- **Belum boleh jadi otoritas fabrikasi**: sisa selisih 2,26 % dan loss konduktor
+  (metal = PEC) belum diselesaikan.
+- Test: **128 lulus**. Semua sudah di-push dan tersinkron.
 
 ---
 
-_Terakhir diperbarui oleh Aksara pada 2026-09-21 (putaran 3)._
+## 15. Putaran 4 — penyebab 4,3% ditemukan sebagian, Fase 1 dituntaskan
+
+### 15.1 A/B konstruksi: dua kesimpulan berbukti
+
+Menjalankan geometri tutorial dengan variasi satu-setelan-sekali:
+
+| Konfigurasi | Resonansi | vs tutorial |
+|---|---|---|
+| ours (PML_8, margin 0,20/0,30) | 2,330 GHz | −4,31 % |
+| batas MUR | 2,330 GHz | −4,31 % |
+| PML_8, margin 0,80/0,80 (domain ~200 mm) | 2,330 GHz | −4,31 % |
+| MUR + domain besar | 2,330 GHz | −4,31 % |
+| mesh kuasi-seragam (smoothing 1,01) | 2,330 GHz | −4,31 % |
+| **tepi metal di-snap (`AddEdges2Grid`, default baru)** | **2,380 GHz** | **−2,26 %** |
+| tepi metal TIDAK di-snap (kontrol) | 2,330 GHz | −4,31 % |
+
+1. **Seluruh kelas setelan numerik tereliminasi** — batas, kedalaman PML, ukuran
+   domain, gradasi mesh: semuanya menahan resonansi di 2,330 GHz persis (dalam
+   langkah sweep 10 MHz). Tidak ada penyetelan solver yang menjelaskan selisihnya.
+2. **Snapping tepi metal menjelaskan sekitar separuh selisih.** Patch lembar-tipis
+   (kotak degenerate) bisa tersangkut ke sel tetangga sehingga ukuran efektif patch
+   berubah. Dengan `FDTD.AddEdges2Grid(...)` pada ground dan tiap patch — praktik
+   yang dipakai tutorial openEMS — resonansi bergerak 2,330 → **2,380 GHz**. Kini
+   menjadi **default generator** dan sudah ada testnya.
+
+Sisa −2,26 % masih terbuka dan **bukan** lagi soal setelan solver. Kandidat
+struktural tersisa: tapak ground plane (tutorial 60×60 mm; knob margin tunggal kita
+menghasilkan 64×56 mm untuk patch ini), realisasi feed, dan detail penempatan garis mesh.
+
+### 15.2 Status Fase 1: SELESAI secara fungsional
+
+| Item Fase 1 | Status |
+|---|---|
+| Model netral + JSON | selesai |
+| Library material + suku loss | selesai |
+| Mixing rules + peringatan validitas | selesai |
+| Dispersi + fitting Debye | selesai |
+| Sintesis patch + cross-check cavity | selesai |
+| Layout array + array factor | selesai |
+| Generator openEMS **sepenuhnya dapat dikonfigurasi** | selesai |
+| Jalankan + parse + pelaporan konvergensi | selesai |
+| Postproc S11/pola/efisiensi | selesai |
+| Sweep nyata + store sqlite | selesai |
+| GUI desktop (4 tab) | selesai (preview) |
+| Test suite | **128 lulus** |
+| Dokumentasi | selesai |
+| **Kalibrasi akurasi absolut** | **sebagian**: 4,31 % → 2,26 %, sisanya terdokumentasi |
+
+Batas jujur: tool **siap dipakai sebagai alat bantu desain dan eksplorasi material**,
+tetapi **belum** sebagai otoritas fabrikasi.
+
+---
+
+_Terakhir diperbarui oleh Aksara pada 2026-09-21 (putaran 4: Fase 1 selesai)._

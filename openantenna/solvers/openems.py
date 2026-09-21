@@ -129,6 +129,7 @@ FEED_Z0 = $FEED_Z0         # port reference impedance [ohm]
 MESH_MAX_RES = C0 / F_MAX / $MESH_CELLS_PER_WAVELENGTH
 MESH_SUBSTRATE_CELLS = $MESH_SUBSTRATE_CELLS
 MESH_SMOOTHING = $MESH_SMOOTHING
+METAL_EDGE_SNAPPING = $METAL_EDGE_SNAPPING
 PML_CELLS = $PML_CELLS
 BOUNDARY_MODE = "$BOUNDARY_MODE"
 AIRBOX_LAMBDA = $AIRBOX_LAMBDA      # air margin around the structure, per side
@@ -199,6 +200,7 @@ ground.AddBox(
 
 # Radiating elements, one thin sheet per array element.
 ELEMENTS = $ELEMENTS_LITERAL
+_patch_props = []
 for index, (x0, y0) in enumerate(ELEMENTS, start=1):
     patch = CSX.AddMetal("patch_%d" % index)
     patch.AddBox(
@@ -206,6 +208,17 @@ for index, (x0, y0) in enumerate(ELEMENTS, start=1):
         [x0 + W_PATCH / 2.0, y0 + L_PATCH / 2.0, 0.0],
         priority=3,
     )
+    _patch_props.append(patch)
+
+if METAL_EDGE_SNAPPING:
+    # Force mesh lines exactly on the metal edges, as the openEMS patch tutorial
+    # does with AddEdges2Grid.  Without it a degenerate (zero-thickness) sheet can
+    # be snapped to the neighbouring cell, which changes the *effective* patch
+    # size - a candidate for the 4.31 % offset observed against the tutorial.
+    FDTD.AddEdges2Grid(dirs="xy", properties=ground, metal_edge_res=MESH_MAX_RES / 2.0)
+    for _prop in _patch_props:
+        FDTD.AddEdges2Grid(dirs="xy", properties=_prop, metal_edge_res=MESH_MAX_RES / 2.0)
+    print("METAL EDGES: snapped to the grid (AddEdges2Grid, res %.3f mm)" % (MESH_MAX_RES / 2.0 * 1e3))
 
 # Feed realisation.  CAREFUL - what this actually models: a *vertical lumped
 # port* from the ground plane up through the substrate to the patch, i.e. a
@@ -334,6 +347,7 @@ class OpenEMSSolver(SolverAdapter):
         boundary: str = "PML",
         pml_cells: int = 8,
         mesh_smoothing_ratio: float = 1.4,
+        metal_edge_snapping: bool = True,
         max_timesteps: int = 400000,
         end_criteria: float = 1e-4,
     ) -> None:
@@ -366,6 +380,7 @@ class OpenEMSSolver(SolverAdapter):
         self.boundary = boundary
         self.pml_cells = int(pml_cells)
         self.mesh_smoothing_ratio = float(mesh_smoothing_ratio)
+        self.metal_edge_snapping = bool(metal_edge_snapping)
         self.max_timesteps = int(max_timesteps)
         self.end_criteria = float(end_criteria)
         self.ground_margin_lambda = float(ground_margin_lambda)
@@ -540,6 +555,7 @@ class OpenEMSSolver(SolverAdapter):
             MESH_CELLS_PER_WAVELENGTH=self.mesh_cells_per_wavelength,
             MESH_SUBSTRATE_CELLS=self.substrate_cells,
             MESH_SMOOTHING=fmt(self.mesh_smoothing_ratio),
+            METAL_EDGE_SNAPPING="True" if self.metal_edge_snapping else "False",
             PML_CELLS=self.pml_cells,
             BOUNDARY_MODE=self.boundary,
             AIRBOX_LAMBDA=fmt(self.air_margin_lambda),
@@ -569,6 +585,7 @@ class OpenEMSSolver(SolverAdapter):
             "boundary": self.boundary,
             "pml_cells": self.pml_cells,
             "mesh_smoothing_ratio": self.mesh_smoothing_ratio,
+            "metal_edge_snapping": self.metal_edge_snapping,
             "max_timesteps": self.max_timesteps,
             "end_criteria": self.end_criteria,
             "mesh": {
