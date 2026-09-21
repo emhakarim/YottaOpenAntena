@@ -1028,3 +1028,51 @@ T-3 / M11 / M13 (dan M14) **tertutup** — setiap mutasi kini tertangkap oleh te
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 8, pertama kali ikut build). 9 skrip kini reproducible dari repo, 7 perbaikan GUI (2 di antaranya P1), 4 test regresi baru, dan satu bukti bahwa verifikasi sendiri memang menangkap kesalahan. Sisa untuk Aksara: konfirmasi visual GUI + S-2/S-4 di `analyze_resonance.py` (geometri dari `project.json`, arsip JSON bukti).*
+
+---
+
+# 18. Putaran 9 — penilaian saran Gemini, environment terpasang, A4 diimplementasikan
+
+## 18.1 Penilaian saran Gemini (per poin, jujur)
+
+| Saran Gemini | Kondisi nyata di proyek | Penilaian saya |
+|---|---|---|
+| 1. Auto-meshing adaptif | **Sebagian besar sudah ada**: `cells/lambda`, sel substrat, smoothing ratio, margin udara, `pml_cells`, metal-edge snapping — dan kini semua tercatat di manifest. | Arah benar, tapi premisnya ("peneliti harus menyusun graded mesh manual") sudah tidak berlaku di tool ini. Yang benar-benar belum: **refinement otomatis di daerah kritis (port/feed)**. Itu yang saya kerjakan (A4). |
+| 2. Abstraksi geometri: Gerber/KiCad + port otomatis | Belum ada (model parametrik). Port ada, tapi masih **probe lumped** — bukan coax/microstrip coplanar. | Nilainya besar, tapi ini pekerjaan besar (parser Gerber, manajemen layer, net→geometri). **Jangan dikerjakan sebelum kalibrasi tuntas.** Catatan: `add_microstrip_port` sejalan dengan Y-19 (inset coplanar) → prioritas jauh lebih tinggi daripada Gerber. |
+| 3. Pasca-proses + NF2FF + Touchstone | Sebagian ada: S11/VSWR/Zin/bandwidth + Touchstone `.s1p` sudah jalan. **NF2FF belum ada.** | **Setuju — ini celah nyata.** Saya jadikan item build berikutnya dengan panggilan konkret (`FDTD.AddNF2FFBox(...)` + dump far-field + pembacaannya). |
+| GUI web (Plotly/WebGL) | Proyek memilih PySide6 desktop dengan alasan tertulis (solver lokal, offline, tanpa server). | **Tidak setuju untuk sekarang.** Alasan proyek masuk akal; GUI web bisa menyusul sebagai thin client di atas core yang sama. |
+| Staircasing → planar-first | Memang ruang lingkup proyek. | Setuju, dan ini sekaligus menjawab pertanyaan scope yang Gemini minta diputuskan: **planar/PCB dulu, bentuk bebas nanti.** |
+| Benchmark 5 topologi | Baru 1 anchor solver + nilai emas analitik. | **Setuju kuat — ini kelemahan terbesar.** Saya tulis `docs/benchmarks.md` yang memisahkan "terverifikasi analitik" dari "diekeskusi dengan solver" dan mendaftar yang belum ada (IFA, microstrip line, Wilkinson). |
+
+Ringkas: dua dari tiga saran teknis Gemini **sebagian sudah dikerjakan proyek ini** (dan lebih jujur statusnya), satu **memang celah** (NF2FF), dan saran platform (web GUI) tidak saya rekomendasikan.
+
+## 18.2 Yang saya bangun di putaran ini
+
+| Item | Isi | Bukti |
+|---|---|---|
+| **A4** refinement port | Mesh kini dihaluskan di sekitar feed (±2 sel substrat, 5 garis per sumbu) memakai ukuran sel substrat; parameter `port_refine=True` (bisa dimatikan untuk A/B) dan dicatat di `run_manifest.json → mesh.port_refine` | 3 test baru; blok `PORT REFINE` muncul di `sim.py` hasil generate |
+| **S-1 tuntas** | `scripts/run_with_openems.py`: lokasi openEMS dari env saja (tanpa default absolut) + guard argumen; **8 skrip riset kini menunjuk `scripts/run_with_openems.py`** — sebelumnya ke `tools/` yang **tidak ikut di-commit**, jadi skrip riset benar-benar rusak bagi kolaborator | test penjaga di `tests/test_repo_paths.py` |
+| **Environment terpasang** | venv + `pip install -e .` + **PySide6 6.11.2** + **matplotlib 3.11.2** | `openantenna --version` → `openantenna 0.1.0`; **5 test GUI kini benar-benar dijalankan dan lolos** (selama ini selalu di-skip) |
+| **Suite** | **143 test OK**, 0 skip | dijalankan dengan Python venv yang lengkap |
+| `docs/benchmarks.md` | tabel referensi analitik (B1–B10, semua lolos) vs referensi solver (S1–S9, dengan status + apa yang belum) | jawaban langsung untuk "komunitas peneliti skeptis" |
+
+Catatan lingkuangan: instalasi itu di mesin ini, di `.cluster/yotta-open-antena/run/…/.venv` — **bukan** di salinan kerja Aksara. Cara mengulang di mesin lain:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip install PySide6 matplotlib pytest
+.\.venv\Scripts\python.exe -m unittest discover -s tests    # 143 test, 0 skip
+```
+
+## 18.3 Urutan berikutnya (usulan saya)
+
+1. **Jalankan `port_refine` A/B** (satu run on, satu off) → apakah sisa −2,26 % bergerak? (Aksara)
+2. **NF2FF** di generator + pembacaan far-field → membuat `postproc/patterns.py` bisa dibandingkan dengan solver.
+3. **Benchmark kedua** (IFA atau microstrip line) supaya klaim akurasi tidak bergantung pada satu geometri.
+4. **S-2/S-4** di `analyze_resonance.py` (geometri dari `project.json`, arsip JSON bukti).
+5. Y-T3 siap begitu `data/composite_measurements.csv` ada.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 9). Saran Gemini saya nilai per poin: satu celah nyata (NF2FF) saya akui dan jadikan item berikutnya, satu saran (web GUI) saya tolak dengan alasan, dan dua saran lain sebagian sudah dikerjakan proyek — kini dengan bukti, bukan klaim.*
