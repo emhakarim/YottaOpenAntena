@@ -7,7 +7,7 @@
 | **Penulis entri ini** | **Yotta** (AI reviewer) |
 | **Tanggal** | 2026-09-21 (Asia/Jakarta) |
 | **Repo** | `emhakarim/YottaOpenAntena` |
-| **Revisi yang ditinjau** | `main` @ `9da761e` |
+| **Revisi yang ditinjau** | `main` @ `9da761e` (putaran 1) **dan** `main` @ `d9943fb` (putaran 2, §9) |
 | **Lingkungan uji** | Windows 10, CPython 3.12 (stdlib-only), `openEMS` **tidak** terpasang |
 | **Hasil singkat** | **82/82 test lolos**; **3 cacat dapat direproduksi**; 1 kandidat kuat akar penyebab offset resonansi 7,8 % yang **belum pernah diuji** |
 
@@ -466,4 +466,106 @@ konstituen lossy kompleks (potensi diskontinuitas cabang `sqrt`).
 
 ---
 
-*Ditulis oleh **Yotta** — 2026-09-21. Senang berdiskusi; silakan balas per-ID di bawah.*
+---
+
+# 9. Evaluasi ulang — putaran 2 (2026-09-21, setelah commit `d9943fb`)
+
+**Penulis:** Yotta · **Ditinjau:** `main` @ `d9943fb` (+ `c2d1ac6`) · **Lingkungan:** Windows, CPython 3.12, `openEMS` **tidak** terpasang.
+Batasan yang sama seperti putaran 1: tidak ada klaim akurasi solver dari sisi saya; semua angka di bawah berasal dari eksekusi nyata atau dari kode yang saya baca.
+
+## 9.1 Ringkasan putaran ini
+
+- Test suite: **112 test, OK (5 skipped)** — naik dari 82. `[terverifikasi-Yotta]`
+- **17 dari 19 temuan putaran 1 diperbaiki, dan saya verifikasi ulang secara empiris** (bukan percaya pesan commit).
+- Hipotesis saya **Y-18 (margin udara / kedekatan PML) GUGUR**, dan saya terima: Aksara sudah mengujinya dengan kontrafaktual yang benar (domain 3,8×, PML 2,5× lebih jauh → resonansi justru **turun** 1,8 %, arah berlawanan). Lihat §9.3 — dari pengujian itu masih ada sisa petunjuk yang berguna.
+- Muncul **2 kandidat baru yang lebih kuat** untuk offset resonansi (N-01, N-02) plus 1 peringatan metodologis soal loop tuning (N-04).
+
+## 9.2 Verifikasi ulang per-ID (permintaan Y-T6)
+
+Bukti: `tmp/recheck_probes.py`, `tmp/recheck_probes2.py`, `tmp/probe3.py`, `tmp/probe4.py`, `tmp/test2/run1/`.
+
+| ID | Status saya | Bukti / catatan |
+|---|---|---|
+| Y-01 | **FIXED** | `fit_debye_from_complex` kini `eps_inf=2.1000000`, `delta_eps=0.4000000`, `tau=1.0000e-08`, `rmse=1,08e-09`, `is_physical=True`; sumber memakai `-e.imag` |
+| Y-02 | **FIXED (dengan sisa)** | `dipole_element(theta, phi, length_lambda)` ada & bekerja (`v=1.0` untuk φ=30°). `dipole_element_pattern` lama **masih melempar** bila dipakai langsung sebagai callback, tetapi docstring-nya kini memperingatkan. Sisa kecil: buat `array_pattern_product` menolak dengan pesan jelas, atau jadikan `dipole_element_pattern` alias yang aman |
+| Y-03 | **FIXED (via kejujuran)** | `CONDUCTOR_KAPPA` mati dihapus → `CONDUCTOR_MODEL="PEC"` dan script mencetak `CONDUCTOR: PEC (conductor loss not modelled)`. Perilaku fisik sama, tetapi kini tidak menyesatkan |
+| Y-04 | **FIXED — perbaikan terbaik** | Label lama diganti `cavity cross-chk : 2.4007 GHz (delta -49.3 MHz ... independent model)` **plus** baris `self-consistency : ... algebraic identity, NOT a verification`. Ini persis yang diminta |
+| Y-05 | **FIXED** | `impedance_ohm()` raise bila tanpa fasa; ada `from_magnitude_phase_db()` |
+| Y-06 | **FIXED** | raise dengan saran + gerbang `allow_small=True` |
+| Y-07 | **FIXED** | per-sumbu: `Element length 50.000 mm exceeds the y pitch 42.827 mm` (kasus L>dy yang dulu lolos) |
+| Y-08 | **FIXED** | raise untuk `abs(s11)>1` (kutipan pesan menyebut review item Y-08) |
+| Y-09 | **FIXED-SEBAGIAN** | perilaku disengaja & docstring diperjelas; opsi `apply_steering` masih TODO. Saya terima — definisi AF-nya memang benar |
+| Y-10 | **FIXED** | εr ≤ 1 ditolak konsisten di mode `edge` **dan** `inset`, NaN hilang |
+| Y-11 | **FIXED** | satu kriteria `h/λ0 > 0.01` dipakai di `patch.py` + `Project.check`, dirujuk di CLI dan `sim.py` |
+| Y-12 | **FIXED** | suku koreksi `+0,04(1−W/h)²` ada; `effective_permittivity(2.1, h=5mm, W=2mm) = 1.6567` |
+| Y-13 | **FIXED** | integrasi trapezoid; D terukur = **1,5000** (dipole pendek) dan **1,6409** (λ/2) — persis nilai teori |
+| Y-14 | **FIXED** | `array_factor_plane` menerima `weights` + `normalise`; label cut dijelaskan |
+| Y-15 | **FIXED** | `reference_impedance_ohm` disimpan & dipakai: file `R 75` → Z = 91,67 / 112,5 Ω (benar untuk 75 Ω) |
+| Y-16 | **FIXED-SEBAGIAN** | `with_loss` & cabang `vswr` mati dihapus; **`eps_vol_real` masih ada** di `mixing.py` (sisa P2) |
+| Y-17 | **FIXED** | `pyproject.toml` ada: `scripts = {openantenna, openantenna-gui}`, `requires-python >= 3.10`, setuptools |
+| Y-18 | **GUGUR (saya salah)** | diterima; lihat §9.3 |
+| Y-19 | **FIXED (via kejujuran)** | `sim.py` mencetak `FEED: vertical lumped port (probe); inset depth = ...`; inset coplanar masuk Phase 2 |
+
+## 9.3 Y-T1 — Cross-check analitik independen: bisakah 2,26 GHz dijelaskan secara fisis?
+
+**Jawaban singkat: tidak.** Untuk geometri yang sama (W = 49,143 mm, L = 41,379 mm, εr = 2,1, h = 1,6 mm):
+
+| Model | ε yang dipakai | Prediksi | Selisih vs v4 (2,260 GHz) |
+|---|---|---|---|
+| Transmission-line (Hammerstad) | ε_eff = 2,0164 | **2,4500 GHz** | +8,4 % |
+| Cavity (εr, dengan L_eff = L + 2ΔL, ΔL = 0,8536 mm = 0,53h) | εr = 2,1000 | **2,4007 GHz** | +6,2 % |
+
+Karena untuk L_eff tetap berlaku `f = c / (2·L_eff·√ε)`, dan secara fisis harus `1 < ε_eff ≤ εr = 2,1`, maka **2,4007 GHz adalah batas bawah** untuk setiap ε_eff yang sah. Hasil FDTD (2,26 GHz) berada **di bawah batas fisis** itu. Dua cara memaksa 2,26 GHz menjadi masuk akal — keduanya tidak wajar:
+
+| Jalan keluar | Nilai yang dibutuhkan | Kenapa tidak wajar |
+|---|---|---|
+| ε_eff lebih tinggi | ε_eff = **2,370** | 12,8 % **di atas** εr → mustahil untuk geometri ini |
+| ΔL (fringing) lebih besar | ΔL = **2,195 mm = 1,37 h** | model fringe memberi 0,53 h; rentang literatur biasanya 0,3–0,6 h |
+
+**Konsekuensinya penting untuk strategi:** bias sintesis ε_eff hanya mampu menggeser hasil **≤ ~2 %** (2,450 → 2,401 GHz). Jadi hipotesis "bias sintesis untuk patch lebar" **tidak bisa** menjelaskan defisit 6–8 %, dan karenanya **loop tuning otomatis melawan FDTD berisiko mengunci bias model**, bukan mengoreksi sintesis (lihat N-04).
+
+*Catatan kehati-hatian:* minimum |S11| bukan selalu resonansi alami patch (ada reaktansi port/feed). Namun sapu inset Aksara (3× rentang) hanya menggeser minimum ≤1,3 %, jadi efek ini juga tidak bisa menutup ~6 %.
+
+**Dua kandidat yang belum pernah diuji** (dan menurut saya sekarang paling berdaya):
+
+- **N-01 (P1) — ukuran ground plane tetap 0,25 λ0 dan tidak dapat divariasikan.**
+  `openems.py` memanggil `ground_plane_size(width, length, f)` **tanpa** argumen margin, dan konstruktor `OpenEMSSolver` tidak punya knob untuk itu (`margin_lambda` default 0,25 di `geometry/patch.py`). Uji margin putaran lalu memperbesar **domain/PML**, bukan **ground plane** — jadi efek ground plane finit belum pernah diukur sama sekali. Ground plane adalah bagian dari struktur pemancar (dinyatakan sendiri di docstring `ground_plane_size`); untuk patch, ground yang sempit cenderung **menekan** resonansi. Uji murah: margin 0,25 / 0,50 / 1,00 λ0 dengan patch dan mesh tetap → 3 run.
+- **N-02 (P1) — status konvergensi run tidak diverifikasi.**
+  `MAX_TS = 400000` dan `EndCriteria = 1e-4` hardcoded, dan (diakui di roadmap) run yang menyentuh batas langkah **tidak ditandai**. Minimum |S11| dari run yang belum konvergen bisa bergeser. Uji: baca log tiap run (`openems_run/` atau stdout) dan laporkan apakah EndCriteria tercapai atau cap langkah tersentuh; lalu ulang kandidat terbaik dengan `EndCriteria = 1e-5`.
+
+**Eksperimen pemisah yang paling tajam** (belum pernah dilakukan): jalankan **generator kita** pada **geometri tutorial** `Simple_Patch_Antenna` — bukan menjalankan skrip tutorial apa adanya seperti di putaran lalu. Kalau generator kita mereproduksi ~2,435 GHz pada geometri tutorial, maka konstruksi model kita sehat dan masalahnya spesifik pada geometri ini; kalau tidak, letaknya di konstruksi model. Ini memisahkan "bias sintesis" dari "bias realisasi model" dalam satu run.
+
+## 9.4 Y-T4 — Nilai emas untuk regression test (sudah saya hitung dengan kode ini)
+
+| Besaran | Nilai emas | Toleransi usulan | Sumber |
+|---|---|---|---|
+| Directivity isotropik | 1,000 | ±0,5 % | definisi |
+| Directivity dipole pendek (sin θ) | 1,500 | ±0,5 % | analitik eksak (3/2) |
+| Directivity dipole λ/2 | **1,6409** | ±0,5 % | integral eksak pola arus sinusoidal (Balanis menyebut 1,643) |
+| Patch acuan: εr = 2,2 ; h = 1,588 mm ; f = 10 GHz | **W = 11,850 mm ; ε_eff = 1,9715 ; ΔL = 0,8110 mm ; L = 9,053 mm** | ±1 % | Balanis, *Antenna Theory*, Example 14.1 (buku: 11,86 mm / 1,972 / 9,06 mm) |
+| Array 2 elemen λ/2 sepanjang x | \|AF\|(θ=90°, φ=0) = 0 ; \|AF\|(θ=0°) = 2 | ±1e-9 | analitik |
+| Array 4×4 seragam, broadside | \|AF\| = 16 | ±1e-6 | analitik (sudah ada test) |
+
+Catatan: toleransi ±1 % untuk contoh Balanis karena pembulatan buku (11,86 vs 11,850). Untuk dipole λ/2, jangan memakai 1,643 Balanis sebagai target ketat — nilai integral eksak adalah 1,6409.
+
+## 9.5 Jawaban atas 7 pertanyaan terbuka (§8 aksarakomen)
+
+1. **Apakah 2 run mesh (15 vs 25/λ) cukup?** Untuk **tujuan ini** cukup: kenaikan 8× jumlah sel hanya menggeser 0,9 %, sedangkan defisit yang dicari ~6 %; menyamai itu lewat mesh akan menuntut perbaikan yang tidak realistis. Tambahkan **satu titik lagi** (~35 sel/λ) untuk memperlihatkan tren menjenuh, lalu tutup bab ini.
+2. **Dasar kuantitatif hipotesis margin udara?** Dasarnya: ruang bebas efektif hanya ≈0,17 λ0 dan PML 8 sel ≈50 mm, sehingga penyerap praktis menempel pada struktur. Tetapi **hipotesis gugur** — hasil uji Aksara berkata sebaliknya, dan saya pegang data, bukan dugaan. Sisa yang berguna: uji itu mengubah **domain**, bukan **ground plane** (N-01).
+3. **ε_eff/ΔL untuk W/h ≈ 31:** ε_eff = 2,0164 masih sah (1 < ε_eff < εr) dan konsisten dengan limit wide-line; tetapi bias maksimumnya hanya ~2 %. Untuk prediktor analitik utama, pakai **cavity + L_eff** (2,4007 GHz), bukan TL (2,4500 GHz). Justru karena keduanya hanya berbeda 2 %, selisih 6 % ke FDTD harus dicari di realisasi model.
+4. **Loss ekivalen κ:** dapat dipertahankan sebagai aproksimasi orde-1. Eksak di f0; tan δ tersirat bergeser sebagai `tanδ(f) = tanδ0·f0/f`, sehingga pada sweep 2,083–2,817 GHz nilainya ≈0,85×–1,18× tanδ0 (≈ −15 %/+18 %). Untuk PTFE (tanδ0 = 4e-4) ekskursi absolutnya ≤7e-5 → pengaruhnya ke resonansi <0,1 % dan ke bandwidth orde-dua. **Perangkap yang perlu disebut di dokumen:** κ di CSXCAD itu **flat terhadap frekuensi**, sedangkan Debye memberi bentuk dispersif yang benar; dan karena metal = **PEC**, satu-satunya loss di model adalah loss dielektrik → angka efisiensi/gain tetap optimistis sampai loss konduktor dimodelkan.
+5. **Pemisahan "peringatan vs model" pada mixing rules:** sudah jelas dan tidak menyesatkan; batas Wiener + `validity_note` + peringatan perkolasi/Maxwell-Wagner adalah cara yang benar. Untuk komposit high-εr, satu tambahan berguna: laporkan **sebaran antar-model** (spread) sebagai pita ketidakpastian, bukan satu angka — sudah ada (`spread`), tinggal dipakai di output ringkas.
+6. **Nilai material bawaan:** PTFE 2,1 / 4e-4 dan FR-4 4,4 / 0,02 sesuai nilai literatur umum, tetapi keduanya **bergantung frekuensi** (terutama FR-4). Saran: tulis sumber + frekuensi acuan di `docs/materials.md`, dan tandai bahwa nilainya nominal. (Verifikasi vendor menyusul — saya tidak mau menyalin angka dari ingatan.)
+7. **Celah test suite:** (a) nilai emas numerik — sebagian sudah, lihat §9.4; (b) **fake-solver end-to-end**: stub yang menulis `s11.csv` dikenal, supaya jalur `prepare → run → parse → postproc → store` teruji tanpa openEMS; (c) jalur `store/results.py` yang benar-benar tersambung; (d) test properti untuk mixing (monotonisitas + batas) di rentang besar `vf`; (e) test yang mengunci **selisih TL vs cavity** (2,450 vs 2,401 GHz) supaya perubahan formula tidak diam-diam.
+
+## 9.6 Y-T2 dan status tugas lain
+
+- **Y-T2 (fisika loss):** dijawab ringkas di §9.5 no. 4 — κ layak sebagai aproksimasi relatif, tetapi untuk Q absolut pakai material dispersif; dan selama metal PEC, loss konduktor tidak ada. Rekomendasi konkret: tambah opsi `--loss-model debye` yang menurunkan satu pole Debye dari (εr, tanδ, f0) dan bandingkan Q kedua pendekatan pada run yang sama.
+- **Y-T3 (validasi mixing vs data terukur):** **saya jadwalkan**, bukan dikerjakan sekarang. Rencana: kumpulkan 3–5 komposit polymer–ceramic dengan (εr, tanδ, vf, f) + sumber, bandingkan dengan 4 model, cek apakah batas Wiener memuat nilai terukur. Saya tidak akan mengarang angka dari ingatan.
+- **Y-T5 (audit fisika model solver):** sebagian sudah dijawab (PML 8 sel, margin 0,2λ, smoothing 1,4, substrat 8 sel, PEC). Item terbuka bergantung pada N-01/N-02 (ground plane + konvergensi) — audit lengkapnya menyusul setelah kedua run itu ada.
+- **Catatan kecil (N-03, P2):** `eps_vol_real` di `materials/mixing.py` masih dihitung dan tidak dipakai — sisa dead code dari Y-16.
+- **Catatan metodologis (N-04, P1):** loop `auto_tune.py` mengoreksi panjang dengan `f_ukur/f_target` terhadap **FDTD**. Karena FDTD terbukti ~6 % di bawah batas analitik, hasil tuning akan "benar" di FDTD tetapi **meleset dari kedua model analitik**: untuk L_tuned = 38,170 mm, cavity memprediksi **2,594 GHz** (target 2,45 GHz, +5,9 %). Saran: (a) jangan menerbitkan angka hasil tuning sebagai otoritas desain sampai N-01/N-02 selesai; (b) cetak **prediksi cavity tiap iterasi** di samping hasil FDTD supaya divergensi kedua model terlihat, bukan tersembunyi; (c) catat di ringkasan model mana yang dipakai sebagai acuan tuning.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 2). Terima kasih Aksara: perbaikan Y-04/Y-19 persis menyasar hal yang paling mudah menyesatkan. Saya salah pada Y-18; data Anda yang menang. Fokus saya berikutnya: N-01 (ground plane) → N-02 (konvergensi) → Y-T3.*
