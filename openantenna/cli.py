@@ -294,6 +294,43 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_sweep_run(args: argparse.Namespace) -> int:
+    """Execute a sweep for real: one solver run per job, recorded in the store."""
+    _resolve_sweep(args)
+    project = _base_project(args)
+    axes = [SweepAxis.parse(text) for text in args.axis]
+    if not axes:
+        print("error: sweep run needs at least one --axis", file=sys.stderr)
+        return EXIT_ERROR
+
+    from .sweep.runner import run_sweep
+
+    print(project.summary())
+    print()
+    summary = run_sweep(
+        project,
+        axes,
+        Path(args.out),
+        solver_kwargs={
+            "mesh_cells_per_wavelength": args.mesh_cells,
+            "substrate_cells": args.substrate_cells,
+            "loss_model": args.loss_model,
+        },
+        store_path=args.store or None,
+        stop_on_error=args.stop_on_error,
+    )
+    print(summary.table())
+    print(f"\nresults : {Path(args.out) / 'sweep_results.json'}")
+    print(f"csv     : {Path(args.out) / 'sweep_results.csv'}")
+    if summary.store_path:
+        print(f"store   : {summary.store_path}")
+    print(
+        "NOTE: every job is a full solver run; these are model outputs under test, "
+        "not measurements."
+    )
+    return EXIT_OK if summary.failed == 0 else EXIT_ERROR
+
+
 def cmd_sweep_dry_run(args: argparse.Namespace) -> int:
     _resolve_sweep(args)
     project = _base_project(args)
@@ -418,6 +455,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--out", required=True, help="output directory for the manifest")
     p.set_defaults(handler=cmd_sweep_dry_run)
+
+    p = sweep_sub.add_parser(
+        "run", help="execute a parameter sweep for real (one solver run per job)"
+    )
+    _add_design_arguments(p)
+    p.add_argument("--nx", type=int, default=1)
+    p.add_argument("--ny", type=int, default=1)
+    p.add_argument("--spacing-lambda", type=float, default=0.5)
+    p.add_argument(
+        "--axis",
+        action="append",
+        default=[],
+        metavar="PATH=V1,V2,...",
+        help=(
+            "swept value; numeric or a library name, e.g. "
+            "substrate.layers.0.material=PTFE,RO4003C,FR-4"
+        ),
+    )
+    p.add_argument("--out", required=True, help="output directory for the sweep")
+    p.add_argument("--store", default=None, help="sqlite file to record every run into")
+    p.add_argument("--mesh-cells", type=int, default=15, metavar="N")
+    p.add_argument("--substrate-cells", type=int, default=8, metavar="N")
+    p.add_argument("--loss-model", choices=("kappa", "none"), default="kappa")
+    p.add_argument(
+        "--stop-on-error", action="store_true", help="abort the sweep at the first failure"
+    )
+    p.set_defaults(handler=cmd_sweep_run)
 
     return parser
 

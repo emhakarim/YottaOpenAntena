@@ -39,7 +39,12 @@ class SweepAxis:
 
     @classmethod
     def parse(cls, text: str) -> "SweepAxis":
-        """Parse ``path=v1,v2,v3`` (as accepted on the command line)."""
+        """Parse ``path=v1,v2,v3`` (as accepted on the command line).
+
+        Values are read as int when possible, then float, then left as strings -
+        so a material sweep such as ``substrate.layers.0.material=PTFE,FR-4``
+        works with the same syntax as a numeric sweep.
+        """
         if "=" not in text:
             raise ValueError(f"axis {text!r} must look like path=v1,v2,v3")
         path, raw_values = text.split("=", 1)
@@ -50,8 +55,14 @@ class SweepAxis:
                 continue
             try:
                 values.append(int(token))
+                continue
             except ValueError:
+                pass
+            try:
                 values.append(float(token))
+                continue
+            except ValueError:
+                values.append(token)
         if not values:
             raise ValueError(f"axis {path!r} has no values")
         return cls(path=path.strip(), values=tuple(values))
