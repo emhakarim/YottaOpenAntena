@@ -1,4 +1,4 @@
-"""Synthesis-to-tuning loop for the rectangular patch.
+﻿"""Synthesis-to-tuning loop for the rectangular patch.
 
 Why this exists: the analytic synthesis (transmission-line model) lands several
 percent below the target frequency on this geometry, and the calibration batch
@@ -28,7 +28,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]  # repository root (portable, no absolute paths)
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from openantenna.geometry.patch import resonant_frequency_cavity, synthesize_patch
@@ -68,10 +68,7 @@ def run_once(solver: OpenEMSSolver, project: Project, rundir: Path) -> dict:
     rundir.mkdir(parents=True, exist_ok=True)
     solver.prepare(project, rundir)
     env = dict(os.environ)
-    if "OPENEMS_ROOT" not in env:
-        print("note: OPENEMS_ROOT is not set - simulations will fail unless the "
-              "openEMS runtime is findable. Point it at the folder that holds "
-              "openEMS.exe / CSXCAD.dll.")
+    env.setdefault("OPENEMS_ROOT", os.environ.get("OPENEMS_ROOT", ""))
     proc = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "run_with_openems.py"), str(rundir / "sim.py")],
         cwd=str(rundir),
@@ -89,13 +86,21 @@ def run_once(solver: OpenEMSSolver, project: Project, rundir: Path) -> dict:
 
 def main() -> int:
     f_target = (float(sys.argv[1]) if len(sys.argv) > 1 else 2.45) * 1e9
-    tolerance = (float(sys.argv[2]) if len(sys.argv) > 2 else 1.0) / 100.0
+    tolerance = (float(sys.argv[2]) if len(sys.argv) > 2 else 0.1) / 100.0
     max_iterations = int(sys.argv[3]) if len(sys.argv) > 3 else 4
+    # Optional starting point, so a loop can continue from an earlier converged
+    # geometry instead of restarting from the analytic synthesis.
+    start_length_m = (float(sys.argv[4]) / 1e3) if len(sys.argv) > 4 else None
+    inset_ratio_override = float(sys.argv[5]) if len(sys.argv) > 5 else None
 
     design = synthesize_patch(f_target, ER, H)
     width = design.width_m
-    length = design.length_m
-    inset_ratio = design.inset_depth_m / design.length_m
+    length = design.length_m if start_length_m is None else start_length_m
+    inset_ratio = (
+        design.inset_depth_m / design.length_m
+        if inset_ratio_override is None
+        else inset_ratio_override
+    )
     solver = OpenEMSSolver(loss_model="kappa")
 
     history: list[dict] = []
@@ -109,7 +114,9 @@ def main() -> int:
         print(f"--- iteration {iteration}: L = {length*1e3:.3f} mm, inset = {inset*1e3:.3f} mm",
               flush=True)
         parsed = run_once(solver, project, rundir)
-        measured = parsed["resonance_hz"]
+        # The refined (sub-grid) resonance is the quantity a 0.1 % target needs; the
+        # raw grid minimum is only good to one sweep step.
+        measured = parsed.get("resonance_refined_hz") or parsed["resonance_hz"]
         offset = (measured - f_target) / f_target
         # N-04: the tuning loop corrects against the FDTD result, which sits below
         # both analytic models.  Printing the cavity prediction each iteration makes
@@ -121,6 +128,9 @@ def main() -> int:
             "length_m": length,
             "inset_m": inset,
             "resonance_hz": measured,
+            "resonance_grid_min_hz": parsed["resonance_hz"],
+            "grid_step_hz": parsed.get("resonance_grid_step_hz"),
+            "fit_asymmetry_db": parsed.get("resonance_fit_asymmetry_db"),
             "worst_match_db": parsed["worst_match_db"],
             "vswr": parsed["vswr_at_resonance"],
             "offset_percent": offset * 100.0,

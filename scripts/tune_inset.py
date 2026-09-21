@@ -1,4 +1,4 @@
-"""Inset (feed) tuning at the length-converged geometry.
+﻿"""Inset (feed) tuning at the length-converged geometry.
 
 Why a second loop: ``auto_tune.py`` fixes the *resonance* by correcting the patch
 length, but the *match* is a separate question.  The analytic inset formula
@@ -23,7 +23,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]  # repository root (portable, no absolute paths)
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from openantenna.model.project import (
@@ -66,10 +66,7 @@ def run_point(solver: OpenEMSSolver, length: float, ratio: float, rundir: Path) 
     rundir.mkdir(parents=True, exist_ok=True)
     solver.prepare(project, rundir)
     env = dict(os.environ)
-    if "OPENEMS_ROOT" not in env:
-        print("note: OPENEMS_ROOT is not set - simulations will fail unless the "
-              "openEMS runtime is findable. Point it at the folder that holds "
-              "openEMS.exe / CSXCAD.dll.")
+    env.setdefault("OPENEMS_ROOT", os.environ.get("OPENEMS_ROOT", ""))
     proc = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "run_with_openems.py"), str(rundir / "sim.py")],
         cwd=str(rundir),

@@ -1,4 +1,4 @@
-"""A/B test of model-construction settings on the tutorial geometry.
+﻿"""A/B test of model-construction settings on the tutorial geometry.
 
 The separating experiment showed that our generator lands 4.3 % below the
 openEMS-shipped tutorial model on identical geometry, so the bias is in our model
@@ -24,7 +24,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]  # repository root (portable, no absolute paths)
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from openantenna.geometry.patch import resonant_frequency_cavity
@@ -98,10 +98,7 @@ def main() -> int:
         solver.prepare(project, rundir)
 
         env = dict(os.environ)
-        if "OPENEMS_ROOT" not in env:
-            print("note: OPENEMS_ROOT is not set - simulations will fail unless the "
-                  "openEMS runtime is findable. Point it at the folder that holds "
-                  "openEMS.exe / CSXCAD.dll.")
+        env.setdefault("OPENEMS_ROOT", os.environ.get("OPENEMS_ROOT", ""))
         proc = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "run_with_openems.py"), str(rundir / "sim.py")],
             cwd=str(rundir),

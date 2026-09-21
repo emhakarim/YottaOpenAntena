@@ -44,7 +44,11 @@ class TestResonanceRefinement(unittest.TestCase):
         start, step, depth, width = 2.400e9, 10.0e6, 30.0, 20.0e6
         true_minimum = 2.4673e9
         frequencies = [start + i * step for i in range(11)]
-        magnitudes_db = [-depth * ((f - true_minimum) / width) ** 2 for f in frequencies]
+        # A resonance dip: |S11| is most negative at the resonance and rises away
+        # from it, so the dB curve is concave UP with a vertex at true_minimum.
+        magnitudes_db = [
+            -depth + depth * ((f - true_minimum) / width) ** 2 for f in frequencies
+        ]
         trace = S11Trace(
             frequencies, [complex(10.0 ** (db / 20.0), 0.0) for db in magnitudes_db]
         )
@@ -59,7 +63,7 @@ class TestResonanceRefinement(unittest.TestCase):
         rows = ["freq_hz,s11_re,s11_im"]
         for i in range(11):
             frequency = 2.400e9 + i * 10.0e6
-            magnitude_db = -30.0 * ((frequency - 2.4673e9) / 20.0e6) ** 2
+            magnitude_db = -30.0 + 30.0 * ((frequency - 2.4673e9) / 20.0e6) ** 2
             rows.append(f"{frequency:.6e},{10.0 ** (magnitude_db / 20.0):.9e},0.0")
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "s11.csv"
