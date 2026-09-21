@@ -269,6 +269,7 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
         mesh_cells_per_wavelength=args.mesh_cells,
         substrate_cells=args.substrate_cells,
         loss_model=args.loss_model,
+        ground_margin_lambda=args.ground_margin_lambda,
     )
     rundir = Path(args.out)
     prepared = solver.prepare(project, rundir)
@@ -281,6 +282,7 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
         f"(min), {solver.substrate_cells} cells across the substrate"
     )
     print(f"dielectric loss  : {solver.loss_model} (kappa = {solver.last_kappa:.6g} S/m)")
+    print(f"ground margin    : {solver.ground_margin_lambda:g} lambda0 per side")
     print(f"run directory    : {prepared}")
     print(f"generated        : {solver.script_name}, {solver.project_name}, run_manifest.json")
     print(f"solver available : {status.available} ({status.detail})")
@@ -315,6 +317,7 @@ def cmd_sweep_run(args: argparse.Namespace) -> int:
             "mesh_cells_per_wavelength": args.mesh_cells,
             "substrate_cells": args.substrate_cells,
             "loss_model": args.loss_model,
+            "ground_margin_lambda": args.ground_margin_lambda,
         },
         store_path=args.store or None,
         stop_on_error=args.stop_on_error,
@@ -436,6 +439,17 @@ def build_parser() -> argparse.ArgumentParser:
             "as 1/f), 'none' builds a lossless substrate (default kappa)"
         ),
     )
+    p.add_argument(
+        "--ground-margin-lambda",
+        type=float,
+        default=0.25,
+        metavar="L",
+        help=(
+            "ground-plane margin per side in lambda0 (default 0.25). The ground plane "
+            "is part of the radiating structure and this margin has never been "
+            "swept - review item N-01"
+        ),
+    )
     p.add_argument("--out", required=True, help="run directory to write into")
     p.set_defaults(handler=cmd_gen_openems)
 
@@ -478,6 +492,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--mesh-cells", type=int, default=15, metavar="N")
     p.add_argument("--substrate-cells", type=int, default=8, metavar="N")
     p.add_argument("--loss-model", choices=("kappa", "none"), default="kappa")
+    p.add_argument(
+        "--ground-margin-lambda",
+        type=float,
+        default=0.25,
+        metavar="L",
+        help="ground-plane margin per side in lambda0 (review item N-01)",
+    )
     p.add_argument(
         "--stop-on-error", action="store_true", help="abort the sweep at the first failure"
     )

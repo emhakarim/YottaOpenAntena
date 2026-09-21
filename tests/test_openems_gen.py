@@ -79,6 +79,16 @@ class TestScriptGeneration(unittest.TestCase):
         self.assertEqual(len(elements), 16)
         self.assertEqual(len(elements[0]), 2)
 
+    def test_ground_margin_is_rendered_and_sweepable(self):
+        """N-01: the ground-plane margin must be a knob, not a hidden constant."""
+        self.assertIn("GROUND_MARGIN_LAMBDA", self.script)
+        self.assertIn("GROUND:", self.script)
+        from openantenna.solvers.openems import OpenEMSSolver
+
+        wider = OpenEMSSolver(ground_margin_lambda=0.75)
+        rendered = wider.render_script(make_project())
+        self.assertIn("GROUND_MARGIN_LAMBDA = 0.75", rendered)
+
     def test_unknown_material_is_rejected(self):
         project = make_project(material="unobtainium")
         with self.assertRaises(ValueError):
@@ -137,6 +147,43 @@ class TestResultParsing(unittest.TestCase):
         self.assertAlmostEqual(result["worst_match_db"], 20.0 * -0.69897, delta=0.01)
         self.assertAlmostEqual(result["resonance_hz"], 2.5e9, delta=1.0)
         self.assertFalse(result["verified"])
+        # no solver log in this fixture -> convergence must be reported as unknown,
+        # never silently assumed (review item N-02)
+        self.assertFalse(result["converged"])
+        self.assertIn("log not found", result["convergence_note"])
+
+    def test_parse_results_reports_convergence_state(self):
+        """N-02: a run that hit the timestep cap must not look converged."""
+        rows = ["freq_hz,s11_re,s11_im"]
+        for i in range(11):
+            rows.append(f"{2.0e9 + i * 50e6:.6e},0.5,0.0")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "s11.csv"
+            path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+            (Path(tmp) / "run.stdout.log").write_text(
+                "Time for 400000 iterations with 20000.00 cells : 500.00 sec\n"
+                "RunFDTD: Warning: Max. number of timesteps was reached before the "
+                "end-criteria of -50dB was reached...\n",
+                encoding="utf-8",
+            )
+            capped = OpenEMSSolver().parse_results(tmp)
+
+        self.assertFalse(capped["converged"])
+        self.assertIn("NOT converged", capped["convergence_note"])
+        self.assertEqual(capped["timesteps"], 400000)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "s11.csv"
+            path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+            (Path(tmp) / "run.stdout.log").write_text(
+                "Time for 120000 iterations with 20000.00 cells : 200.00 sec\n",
+                encoding="utf-8",
+            )
+            settled = OpenEMSSolver().parse_results(tmp)
+
+        self.assertTrue(settled["converged"])
+        self.assertEqual(settled["timesteps"], 120000)
 
     def test_missing_csv_raises(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -102,6 +102,34 @@ class TestSynthesis(unittest.TestCase):
         self.assertLess(narrow, 2.2)
         self.assertGreater(wide, 1.0)
 
+    def test_balanis_example_14_1_golden_values(self):
+        """Golden values from Balanis, Antenna Theory, Example 14.1.
+
+        eps_r = 2.2, h = 1.588 mm, f = 10 GHz.  Book: W = 11.86 mm, eps_eff = 1.972,
+        dL = 0.811 mm, L = 9.06 mm.  Tolerances cover the book's rounding.
+        """
+        design = patch.synthesize_patch(10.0e9, 2.2, 1.588e-3)
+        self.assertAlmostEqual(design.width_m * 1e3, 11.850, delta=0.06)
+        self.assertAlmostEqual(design.epsilon_eff, 1.9715, delta=0.005)
+        self.assertAlmostEqual(design.delta_l_m * 1e3, 0.8110, delta=0.02)
+        self.assertAlmostEqual(design.length_m * 1e3, 9.053, delta=0.09)
+
+    def test_transmission_line_and_cavity_predictions_are_locked(self):
+        """Lock the ~2 % gap between the two analytic models.
+
+        A silent change to either formula would move these numbers; the gap is the
+        quantity that shows the synthesis is model-dependent (review item Y-T4e).
+        """
+        design = patch.synthesize_patch(F0, ER, H)
+        self.assertAlmostEqual(design.achieved_frequency_hz / 1e9, 2.4500, delta=0.002)
+        self.assertAlmostEqual(design.frequency_cavity_hz / 1e9, 2.4007, delta=0.003)
+        gap_percent = (
+            (design.frequency_cavity_hz - design.achieved_frequency_hz)
+            / design.achieved_frequency_hz
+            * 100.0
+        )
+        self.assertAlmostEqual(gap_percent, -2.0, delta=0.3)
+
 
 class TestFeedHelpers(unittest.TestCase):
     def test_inset_depth_stays_inside_the_patch(self):

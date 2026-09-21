@@ -31,7 +31,7 @@ from pathlib import Path
 ROOT = Path(r"D:\OpenAntenna")
 sys.path.insert(0, str(ROOT))
 
-from openantenna.geometry.patch import synthesize_patch
+from openantenna.geometry.patch import resonant_frequency_cavity, synthesize_patch
 from openantenna.model.project import (
     ArrayConfig,
     FrequencySweep,
@@ -108,6 +108,11 @@ def main() -> int:
         parsed = run_once(solver, project, rundir)
         measured = parsed["resonance_hz"]
         offset = (measured - f_target) / f_target
+        # N-04: the tuning loop corrects against the FDTD result, which sits below
+        # both analytic models.  Printing the cavity prediction each iteration makes
+        # that divergence visible instead of hidden, and records which model the
+        # tuning used as its authority.
+        cavity = resonant_frequency_cavity(ER, H, width, length)
         record = {
             "iteration": iteration,
             "length_m": length,
@@ -116,6 +121,10 @@ def main() -> int:
             "worst_match_db": parsed["worst_match_db"],
             "vswr": parsed["vswr_at_resonance"],
             "offset_percent": offset * 100.0,
+            "converged": parsed.get("converged"),
+            "convergence_note": parsed.get("convergence_note"),
+            "cavity_prediction_hz": cavity,
+            "cavity_gap_percent": (measured - cavity) / cavity * 100.0,
         }
         history.append(record)
         print("    " + json.dumps(record, default=str), flush=True)
@@ -136,7 +145,11 @@ def main() -> int:
         "converged": bool(history and abs(history[-1]["offset_percent"]) / 100.0 <= tolerance),
         "note": (
             "Each iteration is a full FDTD run. The tuning loop corrects the synthesis "
-            "offset empirically; it does not validate the absolute accuracy of the model."
+            "offset empirically against the FDTD result; it does not validate the "
+            "absolute accuracy of the model, and it must not be published as design "
+            "authority until the ground-plane (N-01) and convergence (N-02) effects "
+            "are resolved. cavity_prediction_hz shows where the independent cavity "
+            "model lands, so the gap between models stays visible."
         ),
     }
     out = ROOT / "runs" / "auto_tune_summary.json"

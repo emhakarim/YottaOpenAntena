@@ -118,6 +118,7 @@ W_PATCH = $W_PATCH         # patch width along x [m]
 L_PATCH = $L_PATCH         # patch length along y [m]
 GROUND_X = $GROUND_X       # ground plane size along x [m]
 GROUND_Y = $GROUND_Y       # ground plane size along y [m]
+GROUND_MARGIN_LAMBDA = $GROUND_MARGIN_LAMBDA   # margin per side, in lambda0
 CONDUCTOR_MODEL = "$CONDUCTOR_MODEL"   # metals are ideal PEC: conductor loss is NOT modelled
 
 FEED_X = $FEED_X
@@ -211,6 +212,11 @@ for index, (x0, y0) in enumerate(ELEMENTS, start=1):
 # proper corporate-feed model).  Phase 1 models ONE port only.
 print("CONDUCTOR: %s (conductor loss not modelled)" % CONDUCTOR_MODEL)
 print("FEED: vertical lumped port (probe); inset depth = %.3f mm" % (FEED_INSET * 1e3))
+print(
+    "GROUND: %.3f x %.3f mm (margin %.3f lambda0 per side; the ground plane is part "
+    "of the radiating structure - review item N-01)"
+    % (GROUND_X * 1e3, GROUND_Y * 1e3, GROUND_MARGIN_LAMBDA)
+)
 port = FDTD.AddLumpedPort(
     1,
     FEED_Z0,
@@ -315,6 +321,7 @@ class OpenEMSSolver(SolverAdapter):
         air_margin_lambda: float = 0.20,
         air_top_lambda: float = 0.30,
         loss_model: str = "kappa",
+        ground_margin_lambda: float = 0.25,
     ) -> None:
         """Create an adapter with explicit mesh-resolution controls.
 
@@ -330,6 +337,9 @@ class OpenEMSSolver(SolverAdapter):
             raise ValueError("air margins must be > 0")
         if loss_model not in ("kappa", "none"):
             raise ValueError("loss_model must be 'kappa' or 'none'")
+        if ground_margin_lambda <= 0:
+            raise ValueError("ground_margin_lambda must be > 0")
+        self.ground_margin_lambda = float(ground_margin_lambda)
         self.loss_model = loss_model
         self.last_kappa = 0.0
         self.last_reference_frequency_hz = None
@@ -447,7 +457,12 @@ class OpenEMSSolver(SolverAdapter):
         )
         width = project.patch.width_m or design.width_m
         length = project.patch.length_m or design.length_m
-        ground_x, ground_y = ground_plane_size(width, length, project.sweep.center_hz)
+        ground_x, ground_y = ground_plane_size(
+            width,
+            length,
+            project.sweep.center_hz,
+            margin_lambda=self.ground_margin_lambda,
+        )
 
         layout = build_array_layout(project.array, project.sweep.center_hz, design)
 
@@ -487,6 +502,7 @@ class OpenEMSSolver(SolverAdapter):
             L_PATCH=fmt(length),
             GROUND_X=fmt(ground_x),
             GROUND_Y=fmt(ground_y),
+            GROUND_MARGIN_LAMBDA=fmt(self.ground_margin_lambda),
             CONDUCTOR_MODEL=conductor_model,
             FEED_X=fmt(feed_x),
             FEED_Y=fmt(feed_y),
@@ -518,6 +534,7 @@ class OpenEMSSolver(SolverAdapter):
             "project": project.name,
             "verified": False,
             "conductor_model": "PEC (ideal; conductor loss is not modelled) - review item Y-03",
+            "ground_margin_lambda": self.ground_margin_lambda,
             "mesh": {
                 "cells_per_wavelength": self.mesh_cells_per_wavelength,
                 "substrate_cells": self.substrate_cells,
@@ -575,7 +592,11 @@ class OpenEMSSolver(SolverAdapter):
         if root:
             env["OPENEMS_ROOT"] = root
             env["PATH"] = root + os.pathsep + env.get("PATH", "")
-        return self._execute([sys.executable, str(script)], run_path, timeout_s, env=env)
+        run = self._execute([sys.executable, str(script)], run_path, timeout_s, env=env)
+        # Persist the solver log next to the results: convergence can only be
+        # judged from it, and without it a run cannot be audited (review item N-02).
+        (run_path / "run.stdout.log").write_text(run.log or "", encoding="utf-8")
+        return run
 
     # --------------------------------------------------------------- results
     def parse_results(self, rundir: str | Path) -> Dict[str, Any]:
@@ -608,6 +629,32 @@ class OpenEMSSolver(SolverAdapter):
 
         trace = S11Trace(frequencies, [complex(r, i) for r, i in zip(reals, imags)])
         bands = trace.bandwidth_below(-10.0)
+
+        # Convergence: a run that hit the timestep cap has not settled, and the
+        # resonance minimum can still move (review item N-02).
+        log_text = ""
+        for name in ("run.stdout.log", "run.stderr.log"):
+            candidate = run_path / name
+            if candidate.exists():
+                log_text += candidate.read_text(encoding="utf-8", errors="replace")
+        cap_hit = "Max. number of timesteps was reached" in log_text
+        iterations = None
+        for line in log_text.splitlines():
+            if line.startswith("Time for") and "iterations" in line:
+                try:
+                    iterations = int(line.split()[2])
+                except (IndexError, ValueError):
+                    pass
+        converged = bool(log_text) and not cap_hit
+        convergence_note = (
+            "solver log not found: convergence unknown"
+            if not log_text
+            else (
+                "hit the max-timestep cap before the end criteria: NOT converged"
+                if cap_hit
+                else "end criteria reached before the timestep cap"
+            )
+        )
         return {
             "solver": self.name,
             "frequencies_hz": trace.frequencies_hz,
@@ -620,6 +667,9 @@ class OpenEMSSolver(SolverAdapter):
                 {"f_start_hz": a, "f_stop_hz": b, "bandwidth_hz": c} for a, b, c in bands
             ],
             "fractional_bandwidth": trace.fractional_bandwidth(-10.0),
+            "converged": converged,
+            "convergence_note": convergence_note,
+            "timesteps": iterations,
             "source": str(csv_path),
             "verified": False,
         }

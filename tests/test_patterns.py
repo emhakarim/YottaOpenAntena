@@ -36,6 +36,17 @@ class TestElementPatternContract(unittest.TestCase):
         with self.assertRaises(ValueError):
             patterns.dipole_element_pattern(math.pi / 2.0, 0.0)
 
+    def test_passing_the_raw_dipole_pattern_is_rejected_with_a_clear_message(self):
+        """Y-02 residual: the mistake must fail loudly, not return a wrong number."""
+        with self.assertRaisesRegex(ValueError, "dipole_element"):
+            patterns.array_pattern_product(
+                [(0.0, 0.0)],
+                2.45e9,
+                math.pi / 2.0,
+                0.0,
+                element_pattern=patterns.dipole_element_pattern,
+            )
+
 
 class TestDirectivityGoldenValues(unittest.TestCase):
     def _theta_grid(self, n=361):
@@ -54,11 +65,12 @@ class TestDirectivityGoldenValues(unittest.TestCase):
         self.assertAlmostEqual(d, 1.5, delta=0.02)
 
     def test_half_wave_dipole_directivity_is_1_641(self):
+        """Exact integral value 1.6409 (Balanis' 1.643 is rounded)."""
         thetas = self._theta_grid()
         d = patterns.directivity_from_pattern(
             thetas, self._phi_grid(), lambda theta, phi: patterns.dipole_element(theta, phi)
         )
-        self.assertAlmostEqual(d, 1.641, delta=0.04)
+        self.assertAlmostEqual(d, 1.6409, delta=0.005)
 
     def test_isotropic_source_is_1(self):
         d = patterns.directivity_from_pattern(

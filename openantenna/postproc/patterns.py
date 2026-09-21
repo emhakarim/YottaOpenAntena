@@ -61,8 +61,8 @@ def array_pattern_product(
 
     ``element_pattern`` must have the signature ``f(theta_rad, phi_rad)``.  For a
     dipole use :func:`dipole_element`; passing :func:`dipole_element_pattern`
-    directly would be interpreted as ``length_lambda=phi`` and is wrong
-    (review item Y-02).
+    directly is read as ``length_lambda=phi`` and is rejected with an explicit
+    message instead of silently returning a wrong number (review items Y-02).
 
     This is the standard approximation for an array of identical elements whose
     mutual coupling is neglected.  It is invalid near scan blindness and for
@@ -82,7 +82,17 @@ def array_pattern_product(
     )
     if element_pattern is None:
         return af
-    return af * element_pattern(theta_rad, phi_rad)
+    try:
+        value = element_pattern(theta_rad, phi_rad)
+    except (TypeError, ValueError) as exc:
+        if "length_lambda" in str(exc):
+            raise ValueError(
+                "element_pattern received a function whose second argument is not phi. "
+                "Did you pass dipole_element_pattern instead of dipole_element? "
+                "(review item Y-02)"
+            ) from exc
+        raise
+    return af * float(value)
 
 
 def directivity_from_pattern(
