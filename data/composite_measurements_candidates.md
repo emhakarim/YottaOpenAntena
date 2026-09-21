@@ -67,3 +67,23 @@ Three findings that are worth keeping:
 
 *Compiled by **Yotta** — 2026-09-21. All measured values above are quoted from search
 snippets with the source named; none are from memory.*
+
+---
+
+## 5. Cara mengambil sumbernya (daftar link & kata kunci)
+
+Yang saya butuhkan dari tiap berkas: **εr filler**, **εr matriks yang dipakai penulis**, **vf**, **εr & tan δ terukur**, dan **frekuensinya**. Bentuk berkas apa saja cukup: PDF, tangkapan layar tabelnya, atau angkanya diketik + sitasi.
+
+| # | Berkas yang dicari | Sumber yang terlihat | Kata kunci pencarian |
+|---|---|---|---|
+| C1 | Hu et al., *Microwave dielectric properties of PTFE/CaTiO₃* | sciencedirect.com | `PTFE CaTiO3 microwave dielectric properties Hu 2011 50 vol% permittivity 12 loss tangent` |
+| C2 | *Effects of CaTiO₃ loading on the properties of PTFE/TiO₂ composites* | researchgate.net | `Effects of CaTiO3 loading PTFE/TiO2 composite 46 vol% dielectric constant 7.42` |
+| C3 | Subodh, Deepu, Mohanan, Sebastian (2009), *Dielectric response of high permittivity polymer ceramic composite with low loss tangent*, Appl. Phys. Lett. **95**(6), 062903 | pubs.aip.org · ui.adsabs.harvard.edu · **ir.niist.res.in** (repositori institusi — biasanya gratis) | `Subodh 2009 Dielectric response high permittivity polymer ceramic composite 062903` |
+| C4 | Zhang et al. (2015), komposit **BNT–HDPE** | scientific.net | `BNT HDPE ceramic polymer composite 40 vol% permittivity 10 loss tangent 0.0007 7 GHz` |
+| C5 | Efek ukuran filler **MgTiO₃** pada komposit | researchgate.net | `MgTiO3 ceramic filler dimensional effect composite 50 vol% dielectric constant 3.2` |
+| C6 | *Obtaining greatly improved dielectric constant in BaTiO₃–epoxy* (2022) | pubs.acs.org | `Obtaining greatly improved dielectric constant BaTiO3 epoxy composite 466.8 volume fraction` |
+| C7 | **Bonus paling berharga:** NIST, *Broadband Dielectric Metrology for Polymer Composite Films* — di snippet disebut data terukur **mengikuti aturan pencampuran logaritmik**, jadi paper ini kemungkinan memuat data terukur + parameter fit sekaligus | tsapps.nist.gov (biasanya gratis) | `NIST Broadband Dielectric Metrology for Polymer Composite Films logarithmic mixing rule` |
+
+**Prioritas kalau hanya bisa mengambil 2–3 berkas:** **C3** (repositori institusi — kemungkinan besar bebas unduh), **C1**, dan **C7** (NIST). Tiga itu sudah cukup untuk menulis `data/composite_measurements.csv` yang sah dan menjalankan `yotta_tools/mixing_validation.py`.
+
+Format nama berkas bebas; cukup sebut nomor kandidatnya (mis. `C1_hu2011.pdf`). Kalau ada URL penuh, kirim saja — saya buka sendiri.
