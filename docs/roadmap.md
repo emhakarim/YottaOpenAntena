@@ -27,19 +27,26 @@ reporting of what is and is not verified.
 
 ### Known open items in Phase 1
 
-1. **Model accuracy.** A first PTFE patch run gave a resonance ~7 % below the
-   transmission-line prediction and a weak match (|S11| ~ -13 dB). Mesh density,
-   feed geometry and port placement all need calibration against a reference
-   case before synthesis numbers can be trusted as design authority.
-2. **Dielectric loss is not yet in the solver model.** The generator writes
-   `kappa = 0` and records the loss tangent only as a comment. For a composite
-   material study this is the important gap: openEMS needs either a dispersive
-   material definition or an equivalent conductivity to represent tan delta.
+1. **Model accuracy.** Against an independent implementation our model first sat
+   4.31 % low; adding metal-edge snapping (`AddEdges2Grid`, the practice the openEMS
+   tutorial uses) recovered about half of that, to 2.26 %. Solver settings
+   (boundary, PML depth, domain size, mesh grading) were eliminated as a class.
+   The residual is attributed to structural differences - ground footprint, feed
+   realisation, mesh-line placement. See `docs/verification.md`.
+2. **Dielectric loss is implemented but not validated in absolute terms.** The
+   generator maps the loss tangent onto an equivalent conductivity
+   (`--loss-model kappa` | `none`), exact at the sweep centre and drifting as 1/f;
+   the generated script prints the implied tan delta at the sweep edges. No
+   reference with a known Q has been used yet, so loss results are valid for
+   relative comparisons only.
 3. **One port only.** An NxM array is generated as geometry with a single port;
    a corporate feed network and per-element ports are not modelled.
-4. **No convergence control exposed.** Timestep cap and end criteria are
-   hard-coded constants, and a run that hits the step cap is not flagged in the
-   results (only in the solver log).
+4. **Generation-time contract is complete; runtime ergonomics are not.** Boundary
+   type, PML cells, mesh density, smoothing ratio, air and ground margins, loss
+   model, metal-edge snapping, timestep cap and end criteria are all knobs, they
+   are recorded in `run_manifest.json`, and `converged`/`timesteps` are reported
+   with the parsed results. Still missing: live progress streaming during a long
+   run, and a flag for a run that was stopped early.
 
 ## Phase 2 â€” physics coverage
 

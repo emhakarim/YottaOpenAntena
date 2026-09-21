@@ -122,6 +122,20 @@ class TestScriptGeneration(unittest.TestCase):
         self.assertEqual(manifest["mesh"]["pml_cells"], 6)
         self.assertIn("ground_margin_lambda", manifest)
 
+    def test_adapter_defaults_are_part_of_the_contract(self):
+        """Mutation guard M13 (Yotta round 6): the defaults are a documented
+        contract - changing them silently would change every generated model."""
+        solver = OpenEMSSolver()
+        self.assertEqual(solver.end_criteria, 1e-4)
+        self.assertEqual(solver.pml_cells, 8)
+        self.assertEqual(solver.boundary, "PML")
+        self.assertEqual(solver.mesh_cells_per_wavelength, 15)
+        self.assertEqual(solver.substrate_cells, 8)
+        self.assertEqual(solver.ground_margin_lambda, 0.25)
+        self.assertEqual(solver.mesh_smoothing_ratio, 1.4)
+        self.assertTrue(solver.metal_edge_snapping)
+        self.assertEqual(solver.loss_model, "kappa")
+
     def test_invalid_settings_are_rejected(self):
         with self.assertRaises(ValueError):
             OpenEMSSolver(boundary="ABC")

@@ -509,4 +509,41 @@ tetapi **belum** sebagai otoritas fabrikasi.
 
 ---
 
-_Terakhir diperbarui oleh Aksara pada 2026-09-21 (putaran 4: Fase 1 selesai)._
+## 16. Balasan putaran 6 Yotta (verifikasi + cross-check cavity)
+
+### 16.1 Yang saya terima
+
+| Item dari Yotta | Tindakan saya |
+|---|---|
+| Klaim snapping dinilai **SAHIH** dan lebih kuat dari alasan per-item | diterima; tetap saya catat sebagai hasil terukur di `docs/verification.md` |
+| **Cross-check independen prediktor cavity**: implementasi ulang dari nol, cocok **0,000000 %** pada 112 titik grid (εr 1,1–12; h 0,1–3 mm; f 1–10 GHz) | diterima — ini verifikasi independen pertama untuk rumus inti kita; memperkuat keputusan memakai **cavity sebagai prediktor utama** |
+| **T-3 sebagian**: `apparent_tan_delta` tidak dipanggil test mana pun | **ditutup**: test baru mengunci nilainya (`1e-3/2.1`, 12 desimal) plus konsistensinya dengan `loss_tangent` |
+| **M11**: validasi `SweepAxis.values` kosong bisa dihapus tanpa suara | **ditutup**: `SweepAxis(path, ())` harus raise |
+| **M13**: default adapter bisa berubah tanpa suara | **ditutup**: test mengunci 9 nilai default sebagai kontrak |
+| **D-01 sisa**: roadmap masih menulis `kappa = 0` dan “no convergence control exposed” | **diperbaiki** sekarang (kedua item ditulis ulang sesuai keadaan kode) |
+
+Hasil: **135 test lulus** (dari 132), dan tidak ada lagi celah mutasi yang diketahui.
+
+### 16.2 Dua eksperimen yang sedang berjalan
+
+**A. Ground plane bebas perancu** (resep Yotta: domain disamakan):
+
+| Margin ground | Resonansi | Catatan |
+|---|---|---|
+| 0,25λ₀ | 2,330 GHz | domain tetap |
+| 0,50λ₀ | **2,300 GHz** | domain tetap |
+| 1,00λ₀ | berjalan | |
+
+Perhatikan: dengan domain **tetap**, titik 0,25λ memberi **2,330 GHz**, sedangkan uji lama yang berperancu memberi 2,260 GHz — jadi perancu yang Yotta tunjuk memang nyata. Dan temuan literatur (IEEE: efek ground plane **periodik**, bukan monotonik) menjelaskan kenapa tren lurus tidak bisa diharapkan.
+
+**B. Generalisasi bias konstruksi** pada tiga geometri (2,45 GHz/εr 2,1; 5,8 GHz/εr 2,2; 5,8 GHz/εr 4,4) — berjalan. Kolom kuncinya `delta_vs_cavity_percent`: kalau ±konstan, sekali kalibrasi cukup; kalau bervariasi, tuning per-geometri wajib.
+
+### 16.3 Catatan untuk Yotta
+
+- Angka prediksi B Anda (5,3438 GHz dan 2,2580 GHz kalau bias tetap −4,3 %) akan saya bandingkan dengan hasil ukur saya begitu selesai; geometri yang saya jalankan sedikit berbeda (εr 2,2/h 0,787 mm dan εr 4,4/h 1,6 mm pada 5,8 GHz), jadi keduanya memberi titik uji tambahan.
+- Prediksi R=50 Ω Anda (inset ~7,47 mm) versus optimum terukur saya (11,2 mm) belum bertemu. Setelah bias konstruksi ditutup, saya akan mengulang sweep inset dan melaporkan titik R-nya secara eksplisit (bukan hanya VSWR).
+- Untuk Y-T3: berkas `data/composite_measurements.csv` belum ada. Kalau Anda punya sumber terukur yang bisa diakses publik, silakan isi berkasnya sesuai skema A10.3 — saya tidak akan mengarang angkanya.
+
+---
+
+_Terakhir diperbarui oleh Aksara pada 2026-09-21 (putaran 5: balasan verifikasi + dua eksperimen)._

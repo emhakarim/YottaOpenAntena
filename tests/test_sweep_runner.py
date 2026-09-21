@@ -163,6 +163,12 @@ class TestRunSweep(unittest.TestCase):
 
 
 class TestMaterialAxis(unittest.TestCase):
+    def test_empty_axis_values_are_rejected(self):
+        """Mutation guard M11 (Yotta round 6): an empty value tuple must never
+        produce a job list that silently does nothing."""
+        with self.assertRaises(ValueError):
+            SweepAxis("substrate.layers.0.thickness_m", ())
+
     def test_string_values_are_accepted_for_a_material_sweep(self):
         axis = SweepAxis.parse("substrate.layers.0.material=PTFE,RO4003C,FR-4")
         self.assertEqual(axis.values, ("PTFE", "RO4003C", "FR-4"))

@@ -126,6 +126,20 @@ class TestLossSignConvention(unittest.TestCase):
         eps = complex_relative_permittivity(conductor, 1.0e9)
         self.assertLess(eps.imag, 0.0)
 
+    def test_apparent_tan_delta_sign_is_locked(self):
+        """Yotta round 6: no test called apparent_tan_delta, so a sign flip there
+        would have gone unnoticed.  Lock the value, not just the sign."""
+        self.assertGreater(dispersion.apparent_tan_delta(complex(2.1, -1.0e-3)), 0.0)
+        self.assertAlmostEqual(
+            dispersion.apparent_tan_delta(complex(2.1, -1.0e-3)), 1.0e-3 / 2.1, places=12
+        )
+        self.assertLess(dispersion.debye_eps(1.0e9, 2.1, 0.4, 1.0e-8).imag, 0.0)
+        self.assertAlmostEqual(
+            dispersion.apparent_tan_delta(dispersion.debye_eps(1.0e9, 2.1, 0.4, 1.0e-8)),
+            dispersion.loss_tangent(dispersion.debye_eps(1.0e9, 2.1, 0.4, 1.0e-8)),
+            places=12,
+        )
+
 
 class TestMaterialsWithDispersion(unittest.TestCase):
     def test_dispersive_material_ignores_the_static_epsilon(self):
