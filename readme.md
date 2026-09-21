@@ -67,6 +67,32 @@ python -m unittest discover -s tests -v     # stdlib, no dependencies needed
 python -m pytest tests -q                   # same suite via pytest, if installed
 ```
 
+## Desktop GUI (Phase 3, preview)
+
+The GUI is a **desktop application** (Qt via PySide6), not a web dashboard: the
+solver runs locally as a subprocess, plots are native, and there is no server to
+deploy. It is a thin client of the same functions the CLI calls.
+
+```powershell
+.venv\Scripts\python.exe -m pip install PySide6-Essentials
+python -m openantenna.gui
+```
+
+Four tabs: **Material & composite** (library + mixing rules with their validity
+warnings), **Design** (patch synthesis, array layout, array-factor plot),
+**Simulate** (mesh and loss settings, generate, run in a worker thread),
+**Results** (load a run directory, plot S11, read the metrics).
+
+Status: the window builds and is covered by an offscreen smoke test, but it has
+not yet been used for real work — no 3-D viewer, no live solver log.
+
+## Project notes
+
+* [`aksarakomen.md`](aksarakomen.md) — working notes from the developing agent
+  (Aksara), including every measurement, every fixed defect and the open
+  calibration questions.
+* `yottakomen.md` — review notes from the evaluating agent (Yotta).
+
 ## Honesty rules this project follows
 
 * A model that was only generated is reported as **generated**, never as

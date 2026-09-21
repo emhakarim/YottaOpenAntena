@@ -11,6 +11,9 @@ pytest==9.1.1
 scikit-rf==2.1.0
 h5py==3.16.0
 
+# Desktop GUI (Phase 3). Optional: the core and the tests run without it.
+PySide6-Essentials==6.11.2
+
 # The CSXCAD and openEMS Python bindings are NOT on PyPI and are NOT pinned
 # here: they are shipped inside the official openEMS Windows package and must be
 # installed from that package's own wheels, which are built per Python version:

@@ -56,12 +56,16 @@ reporting of what is and is not verified.
 * Convergence reporting: flag runs that hit the timestep cap or miss the end
   criteria.
 
-## Phase 3 — desktop GUI
+## Phase 3 — desktop GUI (started)
 
 * PySide6 shell: project tree, material/stackup editor, geometry editor, 3-D
   viewport (PyVista), result plots (matplotlib), run queue with progress.
 * Composite explorer UI: mixing-rule spread, warnings, sensitivity sweeps.
 * Batch/sweep UI over the existing sweep engine.
+
+Done so far: four-tab window (material/composite, design, simulate, results), a
+worker thread so simulations do not block the event loop, and an offscreen smoke
+test. Not done: 3-D viewer, live solver log, batch UI, packaging.
 
 ## Phase 4 — depth and packaging
 
