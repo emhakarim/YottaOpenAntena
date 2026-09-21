@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Third-party solver installs and downloads - never commit these
+tools/
+
+# Simulation output. Run directories are small (project.json, sim.py,
+# run_manifest.json, s11.csv) but they are not source: share them explicitly
+# or keep them on a results branch instead of committing them by default.
+runs/
+
+# Local scratch / logs
+*.log
+scratch/

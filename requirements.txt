@@ -1,0 +1,22 @@
+# OpenAntenna Studio - dependency notes
+#
+# PHASE 1 (current): the core, the CLI and the test suite are deliberately
+# STD-LIBRARY ONLY.  Nothing in this file is required to run Phase 1, and the
+# project must keep working with an empty environment.  This file documents the
+# intended future dependencies so that later phases have a written plan.
+#
+# --- Phase 1: no runtime dependency (stdlib only) -------------------------
+#
+# --- Phase 2: external solver runtime (installed separately, NOT vendored) -
+# openEMS / CSXCAD   (GPL-3.0-or-later / LGPL-3.0-or-later; separate process)
+# numpy              (needed by generated openEMS scripts and by analysis)
+#
+# --- Phase 3: desktop GUI -------------------------------------------------
+# PySide6            (Qt 6 bindings, GUI)
+# pyvista            (3-D visualisation on top of VTK)
+# matplotlib         (2-D plotting inside the GUI)
+#
+# --- Optional / later -----------------------------------------------------
+# scikit-rf          (S-parameter handling, Touchstone, calibration)
+# pytest             (nicer test runner; unittest already works today)
+# gmsh               (meshing / CAD import for mesh-based solvers)
