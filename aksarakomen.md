@@ -140,17 +140,27 @@ Masalah: patch hasil sintesis 2,45 GHz diukur 2,26 GHz di FDTD (**−7,8 %**).
 - **Pembebanan feed bukan penyebabnya.** Menyapu inset 3× hanya menggeser
   resonansi ≤1,3 %, sementara match berubah drastis (−13 dB → −0,6 dB).
   Bonus: estimasi inset hasil sintesis terbukti paling bagus dari tiga yang diuji.
+- **Margin domain udara / kedekatan PML juga bukan penyebabnya.** Memperbesar
+  margin dari 0,20λ/0,30λ menjadi 0,50λ/0,60λ (domain 121.900 sel, ±3,8× lebih
+  besar, PML 2,5× lebih jauh) menggeser resonansi ke **2,220 GHz** — arah yang
+  **berlawanan** dengan yang dibutuhkan untuk menjelaskan defisit ke 2,45 GHz —
+  sambil memperbaiki match ke −17,6 dB / VSWR 1,30. Hipotesis ini gugur.
 - **Solver & alur kerja mampu akurat.** Tutorial resmi openEMS mendarat di
   frekuensi desainnya dengan VSWR 1,09. Jadi selisihnya ada di **konstruksi
   model kita**, bukan di openEMS.
 
 Kandidat yang **masih terbuka** (belum dikonfirmasi):
-1. **margin domain udara / kedekatan PML** (kita 0,20λ sisi, 0,30λ atas;
-   domain tutorial jauh lebih tinggi — 45 sel z vs 21 sel kita). PML terlalu
-   dekat akan membebani antena dan menarik resonansi turun.
-2. **validitas sintesis untuk patch sangat lebar** — patch kita W/h = 30,7 dan
-   W = 0,40λ₀, di luar rentang validasi formula Hammerstad; ε_eff keluar 2,016
-   padahal εr = 2,1, dan ε_eff yang terlalu rendah membuat patch terlalu panjang.
+1. **bias model sintesis analitik** — patch kita sangat lebar (W/h = 30,7;
+   W = 0,40λ₀), di luar rentang validasi formula fringe/ε_eff tipe Hammerstad;
+   ε_eff keluar 2,016 padahal εr = 2,1, dan ε_eff yang terlalu rendah membuat
+   panjang patch hasil sintesis terlalu panjang. Setelah tiga kandidat lain
+   dieliminasi, inilah satu-satunya tersangka yang tersisa, dan ia konsisten
+   dengan arah pergeseran (simulasi selalu di bawah target).
+
+Karena penyebabnya ada di sintesis (bukan di solver/mesh/feed), solusi
+engineering-nya bukan mengejar akurasi tanpa batas, melainkan **loop
+tuning**: sintesis → simulasi → ukur → koreksi dimensi → ulangi. Skrip
+`scripts/auto_tune.py` mengimplementasikan itu dan mencatat setiap iterasi.
 
 Literatur mendukung bahwa bias beberapa persen itu wajar (Sengupta 1983; rule of
 thumb 100 MHz → 96 MHz; laporan praktisi 900 → 869 MHz di tool komersial), tapi
@@ -198,9 +208,9 @@ microstrip edge-feed), bukan dengan memaksa inset ke nol.
 
 ## 7. Rencana berikutnya (urutan prioritas)
 
-1. **Tutup kalibrasi**: uji margin udara/PML (skrip `scripts/air_margin_test.py`
-   sudah siap), lalu uji sensitivitas sintesis (ε_eff wide-line limit vs
-   Hammerstad) untuk memisahkan bias model sintesis.
+1. **Loop sintesis→tuning otomatis** (`scripts/auto_tune.py`): sintesis
+   analitik, ukur pergeseran di FDTD, koreksi dimensi, ulangi sampai toleransi.
+   Ini jawaban engineering untuk bias sintesis yang sudah terlokalisasi.
 2. **Loop sintesis→tuning otomatis**: sintesis analitik, ukur pergeseran di FDTD,
    koreksi dimensi, ulangi. Ini fitur yang paling berguna bagi pengguna nyata.
 3. **Array 4×4**: mode unit-cell/periodic + matriks S 16 port + laporan kopling.

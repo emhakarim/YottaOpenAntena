@@ -140,6 +140,26 @@ match and lowers Q. This demonstrates that the loss path is **active**; it does
 **not** validate the absolute loss value (that needs a reference with a known Q
 or a measurement).
 
+## Issue 6 - air-domain / absorber proximity (candidate eliminated)
+
+| Run | Air margin (side / top) | Domain (mm) | Cells | Resonance | \|S11\| | VSWR |
+|---|---|---|---|---|---|---|
+| v4 (reference) | 0.20 / 0.30 lambda | 149 x 141 x 52 | 15,876 | 2.260 GHz | -13.32 dB | 1.550 |
+| air_margin_0.5 | 0.50 / 0.60 lambda | 209 x 201 x 112 | 121,900 | 2.220 GHz | -17.64 dB | 1.302 |
+
+Enlarging the domain by ~3.8x (PML pushed 2.5x further away) moved the resonance
+**down** by 1.8 % - the opposite of what is needed to explain a 7.8 % deficit -
+while improving the match. The "PML is too close" hypothesis is eliminated.
+
+Status after this batch: **mesh refinement, feed loading and air-domain
+proximity are all eliminated** as explanations for the offset on this geometry.
+The remaining candidate is bias in the analytic synthesis itself for a very wide
+patch (W/h = 30.7, W = 0.40 lambda0, eps_eff evaluated as 2.016 against a
+substrate eps_r of 2.1). That is a *candidate*, not a confirmed cause; the
+engineering response is a tuning loop (`scripts/auto_tune.py`) that corrects the
+synthesis empirically and records every iteration, rather than chasing unbounded
+accuracy out of a closed-form model.
+
 ## Test suite
 
 ```
