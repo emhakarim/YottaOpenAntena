@@ -1,4 +1,4 @@
-"""openEMS / CSXCAD adapter.
+﻿"""openEMS / CSXCAD adapter.
 
 PHASE 1 SCOPE - READ THIS FIRST
 -------------------------------
@@ -703,6 +703,7 @@ class OpenEMSSolver(SolverAdapter):
 
         trace = S11Trace(frequencies, [complex(r, i) for r, i in zip(reals, imags)])
         bands = trace.bandwidth_below(-10.0)
+        refined_hz, grid_step_hz, dip_curvature = trace.refine_resonance()
 
         # Convergence: a run that hit the timestep cap has not settled, and the
         # resonance minimum can still move (review item N-02).
@@ -736,6 +737,9 @@ class OpenEMSSolver(SolverAdapter):
             "s11_im": [s.imag for s in trace.s11],
             "vswr_at_resonance": vswr_from_gamma(abs(trace.s11[trace.worst_match_index()])),
             "resonance_hz": trace.resonance_hz(),
+            "resonance_refined_hz": refined_hz,
+            "resonance_grid_step_hz": grid_step_hz,
+            "resonance_curvature_db_per_hz2": dip_curvature,
             "worst_match_db": trace.worst_match_db(),
             "bands_below_minus10db": [
                 {"f_start_hz": a, "f_stop_hz": b, "bandwidth_hz": c} for a, b, c in bands
