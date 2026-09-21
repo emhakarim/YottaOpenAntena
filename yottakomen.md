@@ -950,3 +950,45 @@ Elemen yang menggerakkan resonansi = akar sisa bias. Ini menggantikan tebakan de
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 6). Dua klaim terverifikasi, satu klaim sebagian (T-3), dua celah lama masih terbuka, dan prediktor baru sudah saya cross-check independen: implementasi bersih, anchor cocok, perilaku benar.*
+
+---
+
+# 16. Putaran 7 — Review GUI + audit skrip eksperimen
+
+**Snapshot:** `main` @ `79e18fe` (head saat menulis = commit saya). `py -3 -m unittest discover -s tests` → **132 test OK (5 skipped)**.
+
+> Catatan penting soal "5 skipped": test itu **adalah test GUI** (`test_gui_smoke.py`) dan di-skip karena PySide6 tidak terpasang di lingkungan ini. Di mesin tanpa PySide6, lapisan GUI **sama sekali belum terverifikasi** — jangan membaca angka 132 sebagai cakupan GUI.
+
+## 16.1 Review kode GUI (`openantenna/gui/*`)
+
+**Yang sudah kuat:** GUI benar-benar *thin client* — ia memanggil fungsi paket yang sama (`synthesize_patch`, `build_array_layout`, `compare_models`, `S11Trace`, `OpenEMSSolver`), tidak menduplikasi logika. Label kejujurannya juga ada di tempat yang tepat (“built-in reference values, not measurements”, “Model output, not a measurement”, pengingat model belum terkalibrasi di status bar). `worker.py` memisahkan `progress`/`done`/`failed`, **tidak menelan exception**, dan memeriksa `available()` sebelum menjalankan solver.
+
+| ID | Temuan | Prio |
+|---|---|---|
+| G-1 | **Path default Windows di-hardcode** (`D:\OpenAntenna\runs\gui_run`, `...\patch_ptfe_v4`). Bagi pengguna lain path itu tidak ada. Pakai default portabel (`Path.cwd()/"runs"`) atau `QStandardPaths`. | P1 |
+| G-2 | **`self.worker` ditimpa dan tombol Generate tidak pernah dinonaktifkan** → QThread lama bisa dihancurkan saat masih berjalan (crash Qt), hasil simulasi bisa hilang, dan tombol Run bisa nyangkut `disabled`. Saran: satu worker aktif, nonaktifkan ketiga tombol selama proses, simpan worker di list + `deleteLater()`. | P1 |
+| G-3 | **Tidak ada timeout/pembatalan**: `solver.run(prepared)` tanpa `timeout_s`, dan QThread tidak bisa dibatalkan → solver yang hang membekukan worker selamanya. | P2 |
+| G-4 | `quasi_static_warning(frequency, 1e-6, filler)` — **ukuran partikel 1 µm di-hardcode**; jadikan input supaya peringatannya bermakna. | P2 |
+| G-5 | `ResultsTab.load`: perhitungan metrik (termasuk `impedance_ohm()`) berada **di luar** blok `try`. Karena `impedance_ohm` sekarang *melempar* bila tanpa fasa, kesalahan di sana tidak tertangkap di event loop. | P2 |
+| G-6 | `_plot_canvas()` memerlukan matplotlib; tanpa itu tab Design/Results gagal saat konstruksi tanpa pesan ramah. | P2 |
+| G-7 | `rundir` kosong → `Path("")` = direktori kerja → model ditulis diam-diam ke CWD. | P2 |
+
+## 16.2 Audit skrip eksperimen (`scripts/*.py`)
+
+| ID | Temuan | Prio |
+|---|---|---|
+| **S-1** | **Sistemik: ketujuh skrip** memakai `ROOT = Path(r"D:\OpenAntenna")` dan `OPENEMS_ROOT` hardcoded — `air_margin_test.py`, `analyze_resonance.py`, `auto_tune.py`, `calibration_batch.py`, `construction_ab_test.py`, `generator_anchor_test.py`, `ground_plane_test.py`, `tune_inset.py`. Akibatnya **bukti di `docs/verification.md` tidak dapat direproduksi dari repo** oleh siapa pun selain mesin itu (dan tidak bisa masuk CI). Perbaikan: `ROOT = Path(__file__).resolve().parents[1]`, run dir relatif, `OPENEMS_ROOT` dari env **tanpa** default absolut. | **P1** |
+| S-2 | `analyze_resonance.py` meng-hardcode geometri (εr 2,1 ; h 1,6 mm ; W ; L) padahal setiap run **punya `project.json`** → untuk geometri tutorial (εr 3,38 ; 40×32 mm) baris analitiknya akan salah. Ambil dari `project.json` run yang bersangkutan. | P2 |
+| S-3 | `crossing_zero()` mengembalikan persilangan pertama **ke arah mana pun**, sedangkan docstring-nya menyebut "inductive to capacitive". Samakan (dan catat: untuk resonator seri, tanda X berubah −→+ saat melewati resonansi). | P2 |
+| S-4 | `analyze_resonance.py` hanya mencetak ke layar, **tidak menulis JSON** — padahal angka di `verification.md` berasal dari output konsol itu. Bukti mentahnya tidak terarsip bersama run. Tulis `resonance_analysis.json` per run. | P2 |
+| S-5 | *(positif)* Metodenya justru **menutup caveat terbesar saya (N-04)**: membandingkan minimum \|S11\|, maks Re(Z), **dan** persilangan nol Im(Z). Hasil "ketiganya berimpit dalam satu langkah sweep" adalah bukti yang tepat — sekaligus menjelaskan VSWR 1,5–1,9 karena R ≈ 33–35 Ω saat resonansi. | — |
+
+## 16.3 Antrean saya
+
+* **Y-T3:** alat (`yotta_tools/mixing_validation.py`) siap dan sudah diuji-jalan; tinggal `data/composite_measurements.csv`.
+* **Uji generalisasi §14.2B** (geometri kedua): menunggu Aksara menjalankannya.
+* Berikutnya dari saya: begitu hasil bisection §15.3 dipush, saya verifikasi; kalau belum, saya susun *checklist* "definition of done" Phase 1 (apa yang harus benar sebelum angka solver boleh disebut otoritas desain).
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 7). Dua temuan P1: satu di GUI (G-2: worker ditimpa) dan satu sistemik di skrip riset (S-1: path hardcoded → bukti tidak reproducible). GUI sendiri secara arsitektur sudah benar sebagai thin client.*
