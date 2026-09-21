@@ -103,6 +103,43 @@ subtracted `model.imag` directly, inflating every imaginary residual by about
 **Fix.** Compare against `-model.imag`. Regression test:
 `test_fit_residual_is_small`.
 
+## Calibration progress
+
+### Mesh convergence — first data point (2026-09-21)
+
+| Run | Mesh | Cells | Resonance | \|S11\| | VSWR | Fractional BW |
+|---|---|---|---|---|---|
+| v4 | 15 cells/lambda, 8 substrate cells | 15,876 | 2.260 GHz | −13.32 dB | 1.550 | 0.995 % |
+| v5 | 25 cells/lambda, 12 substrate cells | 124,620 | 2.280 GHz | −15.12 dB | 1.425 | 1.188 % |
+
+Refining the mesh by roughly 8x in cell count moved the resonance by **+0.9 %**
+(2.260 → 2.280 GHz) and improved the match. A mesh-induced numerical-dispersion
+offset of this size cannot account for the 7.8 % gap to the 2.45 GHz synthesis
+target, so **mesh dispersion is eliminated as the dominant candidate** for this
+geometry. Remaining candidates: feed loading (inset/probe) and bias in the
+transmission-line synthesis model, which the literature documents as a
+few-percent downward bias.
+
+### Dielectric loss is now in the model
+
+`--loss-model kappa` maps the material loss tangent to an equivalent constant
+conductivity, exact at the sweep centre and drifting as 1/f:
+`kappa = 2*pi*f0*eps0*eps_r*tan_delta`. For PTFE on 1.6 mm at 2.45 GHz that is
+`1.168e-4 S/m`. `--loss-model none` builds a lossless substrate.
+
+Differential run, identical geometry and mesh (lossless v4 vs lossy):
+
+| Run | Loss | Resonance | \|S11\| | Fractional BW |
+|---|---|---|---|---|
+| v4 | none | 2.260 GHz | −13.32 dB | 0.995 % |
+| calib_loss_kappa | kappa = 1.168e-4 S/m | 2.270 GHz | −14.44 dB | 1.157 % |
+
+The loss term measurably changes the result and widens the band — the expected
+direction for a partially mismatched antenna, where added loss improves the
+match and lowers Q. This demonstrates that the loss path is **active**; it does
+**not** validate the absolute loss value (that needs a reference with a known Q
+or a measurement).
+
 ## Test suite
 
 ```
@@ -119,9 +156,11 @@ deliberately do **not** claim to have executed it.
 
 * The generated openEMS model has **not** been calibrated against an independent
   reference. A ~7 % resonance shift and a weak match were observed on the first
-  converged-looking case; this is unexplained, not fixed.
-* Dielectric loss is not represented in the generated solver model
-  (`kappa = 0`); no loss validation has been performed.
+  converged-looking case; mesh refinement was ruled out as the dominant cause,
+  and a feed study plus an external tutorial anchor are the next measurements.
+* Dielectric loss is represented as an equivalent conductivity, but has never
+  been validated against a reference with a known Q or against measurement; use
+  it for relative comparisons only.
 * Array behaviour (mutual coupling, unit-cell/periodic mode) has never been
   simulated.
 * `store/results.py` has unit-level coverage only; it is not yet wired into a
