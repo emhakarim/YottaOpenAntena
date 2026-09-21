@@ -44,6 +44,7 @@ from typing import Any, Dict, Optional
 
 from ..geometry.array import build_array_layout
 from ..geometry.patch import ground_plane_size, synthesize_patch
+from ..materials.library import get_material
 from ..model.project import C0, Project
 from .base import SolverAdapter, SolverRun, SolverStatus, SolverUnavailableError
 
@@ -595,11 +596,35 @@ class OpenEMSSolver(SolverAdapter):
 
         warnings = project.check()
         lambda_min = C0 / project.sweep.stop_hz
+
+        # Self-describing runs: record the substrate that was actually used, so a
+        # stored result can be re-analysed without the material library that created
+        # it (an analyser reading project.json only sees a material *name*).
+        layers = project.substrate.dielectric_layers() or project.substrate.layers
+        layer = layers[0]
+        substrate_info: Dict[str, Any] = {
+            "material": layer.material,
+            "thickness_m": layer.thickness_m,
+        }
+        try:
+            material = get_material(layer.material)
+            substrate_info.update(
+                {
+                    "epsilon_r": material.epsilon_r,
+                    "mu_r": material.mu_r,
+                    "tan_delta": material.tan_delta,
+                    "conductivity_s_per_m": material.conductivity_s_per_m,
+                }
+            )
+        except KeyError:
+            substrate_info["note"] = "material not found in the built-in material library"
+
         meta = {
             "solver": self.name,
             "generator_version": GENERATOR_VERSION,
             "project": project.name,
             "verified": False,
+            "substrate": substrate_info,
             "conductor_model": "PEC (ideal; conductor loss is not modelled) - review item Y-03",
             "ground_margin_lambda": self.ground_margin_lambda,
             "boundary": self.boundary,

@@ -65,7 +65,13 @@ def crossing_zero(freqs, values) -> tuple[float | None, str]:
 
 
 def geometry_from(run_dir: Path) -> dict | None:
-    """Read the run's own project.json and the material it names."""
+    """Geometry for a run: prefer its own run_manifest.json, fall back to project.json.
+
+    The manifest records the substrate constants that were actually used, so a run
+    stays analysable even when its material is not in the built-in library (review
+    A-3: the generalisation geometries were registered only inside the script that
+    generated them, which silently disabled the analytic predictions).
+    """
     project_file = run_dir / "project.json"
     if not project_file.exists():
         return None
@@ -73,19 +79,37 @@ def geometry_from(run_dir: Path) -> dict | None:
         project = Project.from_json(project_file.read_text(encoding="utf-8"))
     except Exception:
         return None
+
     layer = (project.substrate.dielectric_layers() or project.substrate.layers)[0]
-    try:
-        epsilon_r = get_material(layer.material).epsilon_r
-    except KeyError:
-        epsilon_r = None
-    return {
+    geometry = {
         "material": layer.material,
-        "epsilon_r": epsilon_r,
+        "epsilon_r": None,
         "height_m": layer.thickness_m,
         "width_m": project.patch.width_m,
         "length_m": project.patch.length_m,
         "center_hz": project.sweep.center_hz,
+        "epsilon_r_source": None,
     }
+
+    manifest_file = run_dir / "run_manifest.json"
+    if manifest_file.exists():
+        try:
+            manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+            substrate = manifest.get("substrate") or {}
+            if substrate.get("epsilon_r"):
+                geometry["epsilon_r"] = float(substrate["epsilon_r"])
+                geometry["epsilon_r_source"] = "run_manifest.json"
+                geometry["manifest_thickness_m"] = substrate.get("thickness_m")
+        except Exception:
+            pass
+
+    if geometry["epsilon_r"] is None:
+        try:
+            geometry["epsilon_r"] = get_material(layer.material).epsilon_r
+            geometry["epsilon_r_source"] = "material library"
+        except KeyError:
+            pass
+    return geometry
 
 
 def analyse(run_dir: Path) -> dict | None:
@@ -115,8 +139,9 @@ def analyse(run_dir: Path) -> dict | None:
     }
 
     geometry = geometry_from(run_dir)
-    if geometry and geometry["epsilon_r"] and geometry["width_m"] and geometry["length_m"]:
+    if geometry:
         record["geometry"] = geometry
+    if geometry and geometry["epsilon_r"] and geometry["width_m"] and geometry["length_m"]:
         record["analytic_transmission_line_hz"] = resonant_frequency(
             geometry["epsilon_r"], geometry["height_m"], geometry["width_m"], geometry["length_m"]
         )
@@ -130,9 +155,13 @@ def analyse(run_dir: Path) -> dict | None:
         f"{('%.4f GHz' % (x_zero/1e9)) if x_zero else 'none'} ({x_direction})"
     )
     if "analytic_cavity_hz" in record:
+        measured = record["s11_min_hz"]
+        cavity = record["analytic_cavity_hz"]
+        record["delta_vs_cavity_percent"] = (measured - cavity) / cavity * 100.0
         print(
-            f"{'':<34} analytic: TL {record['analytic_transmission_line_hz']/1e9:.4f} GHz, "
-            f"cavity {record['analytic_cavity_hz']/1e9:.4f} GHz"
+            f"{'':<34} analytic (src {record['geometry'].get('epsilon_r_source')}): "
+            f"TL {record['analytic_transmission_line_hz']/1e9:.4f} GHz, "
+            f"cavity {cavity/1e9:.4f} GHz -> delta {record['delta_vs_cavity_percent']:+.2f} %"
         )
     return record
 
