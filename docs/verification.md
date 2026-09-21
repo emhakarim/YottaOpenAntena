@@ -165,3 +165,47 @@ deliberately do **not** claim to have executed it.
   simulated.
 * `store/results.py` has unit-level coverage only; it is not yet wired into a
   CLI run path.
+
+## Issue 5 — the 7.8 % resonance offset: candidate elimination (2026-09-21)
+
+Four measurements were run. The reference is the lossless 2.45 GHz PTFE patch
+(W = 49.143 mm, L = 41.379 mm, eps_eff = 2.0164, dL = 0.854 mm, inset = 14.658 mm).
+
+| Test | Variable | Resonance | \|S11\| | VSWR | Verdict |
+|---|---|---|---|---|---|
+| v4 (reference) | 15 cells/lambda, 8 substrate cells | 2.260 GHz | -13.32 dB | 1.550 | baseline |
+| v5 | 25 cells/lambda, 12 substrate cells (8x the cells) | 2.280 GHz | -15.12 dB | 1.425 | mesh refinement moves it +0.9 % only |
+| feed half | inset 7.33 mm (0.5x estimate) | 2.290 GHz | -6.99 dB | 2.619 | match collapses, resonance does not move |
+| feed 1.5x | inset 21.99 mm (1.5x estimate) | 2.260 GHz | -0.58 dB | 29.71 | match collapses, resonance does not move |
+| feed edge | inset ~ 0 (radiating edge) | aborted | - | - | see note below |
+| **tutorial anchor** | **openEMS-shipped Simple_Patch_Antenna.py, unmodified** | **2.435 GHz** | **-27.02 dB** | **1.093** | design frequency 2.4 GHz: +1.5 %, excellent match |
+
+Two conclusions are supported by this table:
+
+1. **Mesh dispersion is not the cause.** An 8x refinement moved the resonance by
+   0.9 %, far too little to explain 7.8 %.
+2. **Feed loading is not the cause.** Sweeping the inset over a 3x range moved
+   the resonance by at most 1.3 % while the match changed from -13 dB to -0.6 dB.
+   (The inset estimate is therefore directionally sound: the synthesised value
+   gave the best match of the three.)
+3. **The solver and the workflow are capable of the accuracy we are missing.**
+   The unmodified openEMS tutorial model of the same class of antenna landed on
+   2.435 GHz against a 2.4 GHz design with -27 dB and VSWR 1.09.
+
+The remaining difference therefore sits in **our** model construction, not in
+openEMS, the mesh or the feed. Remaining candidates, in order of leverage:
+
+* **air domain / absorber proximity** - our margin is 0.20 lambda on the sides
+  and 0.30 lambda above; the tutorial's domain is far more generously meshed in
+  the vertical direction (45 z cells vs our 21). A too-close PML loads the
+  antenna and pulls the resonance down.
+* **wide-patch validity of the transmission-line synthesis** - at W/h = 30.7 and
+  W = 0.40 lambda0 the patch is outside the range where the Hammerstad-type
+  fringe and eps_eff fits were validated, and eps_eff came out at 2.016, *below*
+  the substrate eps_r of 2.1, which lengthens the synthesised patch.
+
+Note on the aborted edge case: feeding exactly at the radiating edge (inset ~ 0)
+did not converge in a reasonable time (10 minutes with no result vs ~4 minutes
+for the other cases) and was terminated deliberately. That configuration is
+degenerate for a lumped-port feed and should be modelled differently (e.g. an
+edge-feed transmission line) rather than by pushing the inset to zero.
