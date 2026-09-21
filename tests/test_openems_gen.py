@@ -101,13 +101,14 @@ class TestScriptGeneration(unittest.TestCase):
         )
         script = solver.render_script(make_project())
         self.assertIn('FDTD.SetBoundaryCond(["MUR"] * 6)', script)
-        self.assertIn("BOUNDARY: MUR", script)
+        self.assertIn('BOUNDARY_MODE = "MUR"', script)
         self.assertIn("MESH_SMOOTHING = 1.2", script)
         self.assertIn("MAX_TS = 50000", script)
         self.assertIn("END_CRITERIA = 1e-05", script)
 
         pml = OpenEMSSolver(boundary="PML", pml_cells=6).render_script(make_project())
         self.assertIn('FDTD.SetBoundaryCond(["PML_6"] * 6)', pml)
+        self.assertIn('BOUNDARY_MODE = "PML"', pml)
 
     def test_settings_are_recorded_in_the_manifest(self):
         solver = OpenEMSSolver(boundary="MUR", pml_cells=6, max_timesteps=12345)
