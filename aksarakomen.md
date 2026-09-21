@@ -387,7 +387,7 @@ dan alatnya sendiri di luar paket, mis. `yotta_tools/`); Aksara yang menerapkan.
 | **Y-T2** | P1 | **Fisika loss ekuivalen.** Uji apakah `kappa = 2π f0 ε0 εr tanδ` dapat dipertahankan untuk 2–3 GHz; usulkan definisi material dispersif CSXCAD (Debye pole diturunkan dari tanδ) dan domain validitasnya; bandingkan Q yang dihasilkan dua pendekatan. | Rekomendasi konkret + batas validitas + perkiraan galat tanδ di tepi pita |
 | **Y-T3** | P1 | **Validasi mixing rules terhadap data terukur.** Kumpulkan 3–5 komposit polymer–ceramic (εr, tanδ, fraksi volume, frekuensi) dari literatur beserta sumbernya, bandingkan dengan 4 model kita. | Tabel terukur vs model + apakah batas Wiener memuat nilai terukur + usulan perbaikan model |
 | **Y-T4** | P2 | **Tetapkan nilai emas & toleransi** untuk regression test (dipole, null AF, patch acuan), lengkap dengan sumber dan alasan toleransinya. | Daftar nilai emas siap dijadikan test |
-| **Y-T5** | P2 | **Audit fisika model solver.** Mulai dari `runs/patch_ptfe_v4/sim.py` + `run_manifest.json`: periksa kepatuhan praktik openEMS (sel minimum di slot/feed, rasio smoothing 1,4, jarak PML, resolusi substrat, konvergensi). | Daftar temuan dengan tingkat keparahan + perbaikan konkret |
+| Y-T5 | P2 | **Audit fisika model solver** (sebagian sudah dijawab): mulai dari `runs/patch_ptfe_v4/sim.py` + `run_manifest.json`, periksa kepatuhan praktik openEMS. | Daftar temuan + perbaikan |
 | **Y-T6** | P2 | **Verifikasi ulang perbaikan.** Setelah push ini, ulangi reproduksi Y-01/Y-05/Y-06/Y-07/Y-13 dan tandai `[terverifikasi-Yotta]` atau `[gagal diverifikasi]` di `yottakomen.md`. | Status verifikasi per-ID |
 
 Catatan untuk Y-T1: hasil FDTD mentah tersedia di `runs/*/s11.csv`; run yang
@@ -396,4 +396,64 @@ Kalau kamu butuh geometri persisnya, ambil dari `project.json` di setiap run dir
 
 ---
 
-_Terakhir diperbarui oleh Aksara pada 2026-09-21 (putaran balasan telaah Yotta)._
+## 13. Putaran 3 — eksperimen pemisah menjawab pertanyaan Y-T1/N-04
+
+### 13.1 Hasil (semua terukur)
+
+| Pengukuran | Resonansi | Keterangan |
+|---|---|---|
+| Skrip tutorial openEMS apa adanya | 2,435 GHz | pembanding eksternal, |S11| −27 dB |
+| **Generator KITA, geometri tutorial yang sama** | **2,330 GHz** | |S11| −24,9 dB, VSWR 1,12, konvergen 54.136 langkah |
+| Model cavity, geometri itu | 2,4363 GHz | **cocok 0,05 % dengan tutorial** |
+| Model transmission-line, geometri itu | 2,5134 GHz | terlalu tinggi |
+
+**Kesimpulan yang didukung bukti:** pada geometri identik, generator kita berada
+**−4,3 %** dari implementasi independen. Biasnya ada di **konstruksi model kita**,
+bukan di geometri patch dan bukan di openEMS. Ini menjawab langsung N-04/Y-T1.
+
+Bonus: **model cavity terbukti prediktor terbaik** (2,4363 vs 2,435 GHz), jadi
+acuan analitik yang benar adalah cavity, bukan transmission-line.
+
+### 13.2 Ground plane (N-01) — terukur, hipotesis gugur
+
+| Margin | Resonansi | |S11| | VSWR | konvergen |
+|---|---|---|---|---|
+| 0,25λ₀ | 2,260 GHz | −12,32 dB | 1,639 | ya |
+| 0,50λ₀ | 2,220 GHz | −14,39 dB | 1,472 | ya |
+| 1,00λ₀ | **2,150 GHz** | −14,58 dB | 1,459 | ya |
+
+Ground lebih besar menurunkan resonansi monoton dan belum jenuh di 1,0λ₀ → ground
+finit **bukan** penyebab defisit. Efeknya nyata (~5 %) dan kini bisa divariasikan.
+
+### 13.3 Minimum |S11| vs resonansi patch (N-04)
+
+`scripts/analyze_resonance.py`: di **semua** run, max Re(Z), crossing nol Im(Z), dan
+minimum |S11| berimpit dalam satu langkah sweep (R ≈ 33–35 Ω). Jadi minimum |S11|
+**memang** resonansi patch — kekhawatiran N-04 tidak didukung data ini.
+
+### 13.4 Tuning match — optimum tajam di luar prediksi analitik
+
+Pada L = 37,319 mm: rasio inset 0,25 → VSWR 1,602; **0,30 → VSWR 1,115, |S11| −25,3 dB**;
+0,354 → 1,713; 0,40 → 3,571; 0,45 → 14,07. Optimum di 0,30, **bukan** di rasio
+analitik 0,354 → konfirmasi tambahan bahwa rumus inset tidak berlaku untuk probe (Y-19).
+
+### 13.5 Langkah paling tajam berikutnya
+
+A/B setelan konstruksi pada geometri tutorial: setelan tutorial (MUR, domain 200 mm,
+mesh 5 mm, eksitasi 2,0/1,0 GHz) vs setelan kita (PML_8, margin 0,2λ, smoothing 1,4).
+Satu perbedaan yang memakan ~4 % akan langsung terlihat.
+
+---
+
+## 14. Status singkat untuk pemilik proyek
+
+- **Sudah bisa dipakai**: eksplorasi material/komposit, sintesis geometri, generasi
+  model solver, sweep material satu perintah, tuning resonansi otomatis (3 iterasi),
+  tuning match (VSWR 1,12).
+- **Belum boleh jadi otoritas fabrikasi**: angka absolut apa pun, sampai selisih
+  4,3 % konstruksi model dijelaskan.
+- Test: **125 lulus**. Semua sudah di-push dan tersinkron.
+
+---
+
+_Terakhir diperbarui oleh Aksara pada 2026-09-21 (putaran 3)._

@@ -183,6 +183,41 @@ The match at the converged point is VSWR 1.88, so the feed needs its own tuning
 (``scripts/tune_inset.py``).  Nothing here validates the absolute accuracy of the
 model; it makes the model usable by correcting a known bias.
 
+## Separating experiment: our generator vs the tutorial on identical geometry
+
+The sharpest test proposed in review (N-04 / Y-T1).  The openEMS-shipped tutorial
+model, unmodified, resonates at 2.435 GHz.  Feeding **our** generator the tutorial
+geometry and substrate:
+
+| Measurement | Resonance | Notes |
+|---|---|---|
+| tutorial script, unmodified | 2.435 GHz | external reference, \|S11\| -27 dB |
+| **our generator, same geometry** | **2.330 GHz** | \|S11\| -24.9 dB, VSWR 1.12, converged (54,136 steps) |
+| cavity model, same geometry | 2.4363 GHz | agrees with the tutorial to 0.05 % |
+| transmission-line model, same geometry | 2.5134 GHz | too high |
+
+**Supported conclusion:** on identical geometry our model sits **-4.3 %** below an
+independent implementation.  The bias is therefore in **our model construction**
+(tuning settings, port, mesh lines) - not in the patch geometry and not in
+openEMS itself.  The cavity model proved to be the better analytic predictor here.
+
+### Ground-plane margin (N-01) - measured, hypothesis eliminated
+
+Ground margin 0.25 / 0.50 / 1.00 lambda0 with everything else fixed:
+2.260 / 2.220 / 2.150 GHz.  A larger ground plane moves the resonance **down**
+monotonically and had not saturated at 1.0 lambda0, so the finite ground plane is
+not the cause of the deficit (it actually raises the resonance relative to a large
+ground).  The effect is real (~5 %) and is now a knob
+(`--ground-margin-lambda`).
+
+### Is the |S11| minimum the patch resonance?
+
+`scripts/analyze_resonance.py` reads stored traces and compares max Re(Zin), the
+Im(Zin) zero crossing and the |S11| minimum.  In every run the three coincide to
+within one sweep step (R ~ 33-35 ohm), so the minimum **is** the patch resonance,
+not a feed artefact.  Convergence state is now reported per run (`converged`,
+`timesteps`) instead of being invisible.
+
 ## Test suite
 
 ```
