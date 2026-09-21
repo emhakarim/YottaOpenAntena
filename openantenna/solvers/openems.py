@@ -269,15 +269,6 @@ CSX.AddMaterial("air").AddBox(
     [-DOM_X, -DOM_Y, DOM_Z_BOT], [DOM_X, DOM_Y, DOM_Z_TOP], priority=0
 )
 
-# Near-to-far-field recording box.  It auto-adapts to the grid and to the
-# boundaries.  The transformation happens after the run, so it costs recording
-# memory but must not change the near-field solution - check that with a
-# differential run (same S11 with and without).
-nf2ff = None
-if NF2FF_ENABLED:
-    nf2ff = FDTD.CreateNF2FFBox(name="nf2ff")
-    print("NF2FF: recording box created (far field computed after the run)")
-
 # Structure edges are added as explicit mesh lines so that the substrate,
 # patch and feed land exactly on cell boundaries; the free-space regions then
 # get a coarser staircase which SmoothMeshLines refines.
@@ -318,6 +309,16 @@ print(
         DOM_Z_BOT * 1e3, DOM_Z_TOP * 1e3,
     )
 )
+
+# Near-to-far-field recording box.  It MUST be created after the mesh is complete:
+# openEMS raises "Error::CreateNF2FFBox: Grid is invalid" if the grid has no lines
+# yet.  It auto-adapts to the grid and boundaries; the transformation runs after the
+# simulation, so it costs recording memory but must not change the near field -
+# verify with a differential run (same S11 with and without).
+nf2ff = None
+if NF2FF_ENABLED:
+    nf2ff = FDTD.CreateNF2FFBox(name="nf2ff")
+    print("NF2FF: recording box created (far field computed after the run)")
 
 
 def main():

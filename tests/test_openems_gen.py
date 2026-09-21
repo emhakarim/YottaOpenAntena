@@ -202,6 +202,21 @@ class TestScriptGeneration(unittest.TestCase):
             script = OpenEMSSolver(**kwargs).render_script(make_project())
             compile(script, "sim.py", "exec")
 
+    def test_nf2ff_box_is_created_after_the_mesh(self):
+        """A static ordering check for a runtime-only failure.
+
+        openEMS raises "Error::CreateNF2FFBox: Grid is invalid" when the box is
+        created before the mesh has lines.  That only shows up at run time, so the
+        order is asserted here instead of waiting for a solver to tell us.
+        """
+        script = OpenEMSSolver(nf2ff=True).render_script(make_project())
+        self.assertLess(
+            script.index("SmoothMeshLines"),
+            script.index("CreateNF2FFBox"),
+            "the NF2FF box must be created after SmoothMeshLines",
+        )
+        self.assertLess(script.index('print("DOMAIN:'), script.index("CreateNF2FFBox"))
+
     def test_unknown_material_is_rejected(self):
         project = make_project(material="unobtainium")
         with self.assertRaises(ValueError):
