@@ -310,15 +310,27 @@ print(
     )
 )
 
-# Near-to-far-field recording box.  It MUST be created after the mesh is complete:
-# openEMS raises "Error::CreateNF2FFBox: Grid is invalid" if the grid has no lines
-# yet.  It auto-adapts to the grid and boundaries; the transformation runs after the
-# simulation, so it costs recording memory but must not change the near field -
-# verify with a differential run (same S11 with and without).
+# Near-to-far-field recording box.  It MUST be created after the mesh is complete.
+# Explicit start/stop bounds are passed on purpose: the automatic bounds require more
+# than pml_cells+1 mesh lines on each side of the domain, which this mesh does not
+# have, and openEMS then raises "not enough lines in some direction".  The box is
+# placed just outside the ground plane and inside the absorber.
+NF_CLEAR = 0.05 * lambda_min
 nf2ff = None
 if NF2FF_ENABLED:
-    nf2ff = FDTD.CreateNF2FFBox(name="nf2ff")
-    print("NF2FF: recording box created (far field computed after the run)")
+    nf2ff = FDTD.CreateNF2FFBox(
+        name="nf2ff",
+        start=[-GROUND_X / 2.0 - NF_CLEAR, -GROUND_Y / 2.0 - NF_CLEAR, -H_TOTAL - NF_CLEAR],
+        stop=[GROUND_X / 2.0 + NF_CLEAR, GROUND_Y / 2.0 + NF_CLEAR, DOM_Z_TOP - NF_CLEAR],
+    )
+    print(
+        "NF2FF: box x=[%.1f, %.1f] y=[%.1f, %.1f] z=[%.1f, %.1f] mm"
+        % (
+            (-GROUND_X / 2.0 - NF_CLEAR) * 1e3, (GROUND_X / 2.0 + NF_CLEAR) * 1e3,
+            (-GROUND_Y / 2.0 - NF_CLEAR) * 1e3, (GROUND_Y / 2.0 + NF_CLEAR) * 1e3,
+            (-H_TOTAL - NF_CLEAR) * 1e3, (DOM_Z_TOP - NF_CLEAR) * 1e3,
+        )
+    )
 
 
 def main():
@@ -410,8 +422,8 @@ class OpenEMSSolver(SolverAdapter):
         self,
         mesh_cells_per_wavelength: int = 15,
         substrate_cells: int = 8,
-        air_margin_lambda: float = 0.20,
-        air_top_lambda: float = 0.30,
+        air_margin_lambda: float = 0.80,
+        air_top_lambda: float = 0.80,
         loss_model: str = "kappa",
         ground_margin_lambda: float = 0.25,
         boundary: str = "PML",
@@ -429,6 +441,14 @@ class OpenEMSSolver(SolverAdapter):
         The defaults are a *fast* setting, not a converged one.  Mesh
         convergence must be established per design by re-running with finer
         values; nothing in this package has been calibrated yet.
+
+        The air margins default to 0.80 lambda0 because the absorbing boundary
+        needs at least ``pml_cells`` cells of clearance: at 15 cells/wavelength a
+        0.20 lambda0 margin leaves only ~3 cells, and openEMS then rejects the
+        near-to-far-field box ("not enough lines in some direction") and applies
+        the PML over the structure.  The earlier air-margin A/B showed that a
+        larger domain leaves the resonance unchanged and converges in *fewer*
+        timesteps, so this is a strict improvement.
         """
         if mesh_cells_per_wavelength < 4:
             raise ValueError("mesh_cells_per_wavelength must be >= 4")
@@ -703,6 +723,7 @@ class OpenEMSSolver(SolverAdapter):
                 "air_top_lambda": self.air_top_lambda,
                 "air_margin_m": self.air_margin_lambda * lambda_min,
                 "free_space_to_pml_m": self.air_margin_lambda * lambda_min,
+                "pml_clearance_cells": self.air_margin_lambda * self.mesh_cells_per_wavelength,
                 "pml_cells": self.pml_cells,
                 "pml_thickness_m": self.pml_cells * lambda_min / self.mesh_cells_per_wavelength,
                 "converged": False,

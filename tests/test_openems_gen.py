@@ -215,7 +215,13 @@ class TestScriptGeneration(unittest.TestCase):
             script.index("CreateNF2FFBox"),
             "the NF2FF box must be created after SmoothMeshLines",
         )
-        self.assertLess(script.index('print("DOMAIN:'), script.index("CreateNF2FFBox"))
+        self.assertLess(script.index("DOMAIN:"), script.index("CreateNF2FFBox"))
+        # and the domain must leave the absorbing boundary enough room: openEMS
+        # needs pml_cells of clearance, otherwise CreateNF2FFBox fails at run time
+        solver = OpenEMSSolver()
+        self.assertGreaterEqual(
+            solver.mesh_cells_per_wavelength * solver.air_margin_lambda, solver.pml_cells
+        )
 
     def test_unknown_material_is_rejected(self):
         project = make_project(material="unobtainium")
