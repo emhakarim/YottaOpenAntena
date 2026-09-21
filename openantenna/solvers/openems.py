@@ -374,7 +374,7 @@ def main():
                 accepted = float(p_acc[n]) if n < len(p_acc) else float("nan")
                 eta = prad / accepted if accepted > 0 else float("nan")
                 handle.write(
-                    "\n%.6e,%.6e,%.6e,%.9e,%.9e,%.9e"
+                    "\\n%.6e,%.6e,%.6e,%.9e,%.9e,%.9e"
                     % (frequency, d, 10.0 * np.log10(max(d, 1e-12)), prad, accepted, eta)
                 )
         print("NF2FF: wrote", summary_path)
@@ -384,10 +384,10 @@ def main():
         pattern_path = os.path.join(HERE, "nf2ff_pattern.csv")
         e_norm = res.E_norm[idx]
         with open(pattern_path, "w", encoding="utf-8") as handle:
-            handle.write("theta_deg,phi_deg,e_norm\n")
+            handle.write("theta_deg,phi_deg,e_norm\\n")
             for i, theta in enumerate(np.rad2deg(res.theta)):
                 for j, phi in enumerate(np.rad2deg(res.phi)):
-                    handle.write("%.3f,%.3f,%.9e\n" % (theta, phi, e_norm[i, j]))
+                    handle.write("%.3f,%.3f,%.9e\\n" % (theta, phi, e_norm[i, j]))
         print("NF2FF: wrote %s (pattern at %.4f GHz)" % (pattern_path, res.freq[idx] / 1e9))
 
 
