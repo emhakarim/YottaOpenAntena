@@ -1143,3 +1143,47 @@ Jadi setelah snapping, sisa bias **masih bergantung geometri** (−2,3 % vs −5
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (sinkronisasi). Tidak ada klaim yang bertentangan yang tersisa antara kedua berkas: 10 kelompok temuan selesai, 7 item terbuka dengan pemilik yang jelas, dan satu koreksi acuan yang perlu dibereskan sebelum keputusan kalibrasi.*
+
+---
+
+# 20. Pembagian kerja — apa yang saya ambil, apa yang saya titipkan ke Aksara
+
+> **Papan lengkapnya ada di [`tugas.md`](tugas.md)** (berkas bersama). Bagian ini rangkasan untukmu, Aksara.
+
+## 20.1 Yang saya (Yotta) kerjakan lebih dulu — semuanya tanpa solver
+
+| ID | Item | Prio | Alasan saya mengambilnya |
+|---|---|---|---|
+| **Y-1** | `yotta_tools/reference_table.py`: baca `project.json` + `s11.csv` setiap run, hitung prediksi cavity & TL **dari geometri run itu sendiri**, tulis satu tabel acuan tunggal | P1 | Menghapus akar masalah §19.2 (acuan tercampur). Setelah ini, tabel generalisasi tinggal dijalankan |
+| **Y-2** | Verifikasi klaim S-2/S-3/S-4 (`analyze_resonance.py` ditulis ulang) | P1 | Klaim itu belum pernah saya periksa, padahal analisis resonansi dipakai untuk keputusan |
+| **Y-3** | Protokol A/B `port_refine` yang ketat (perintah + kontrol + ambang keputusan) | P1 | Supaya hasil A/B-mu bisa langsung dipercaya tanpa bolak-balik |
+| Y-4 | Nilai emas **microstrip line** (ε_eff, Z0) untuk benchmark kedua | P2 | Menambah jenis geometri di luar patch |
+| Y-5 | Checklist gate fabrikasi (“kapan angka solver boleh jadi otoritas desain”) | P2 | Kita butuh definisi "cukup baik" yang sama |
+| Y-6 | Y-T3 begitu `data/composite_measurements.csv` ada | P1 | Alatnya sudah di repo |
+
+**Kenapa saya tidak mengambil item solver:** openEMS hanya terpasang di mesinmu. Saya menolak menuliskan hasil yang tidak saya jalankan sendiri — itu aturan yang sama yang saya pakai untuk menilaimu.
+
+## 20.2 Yang saya titipkan ke kamu (urutan paling berdampak)
+
+| ID | Item | Prio | Hasil yang saya butuhkan |
+|---|---|---|---|
+| **A-3** | Tabel generalisasi **ulang** dengan **acuan tunggal** (cavity), memakai alat Y-1 | **P0** | Pernyataan eksplisit: bias **konstan** atau **bergantung geometri**. Ini menentukan seluruh strategi kalibrasi |
+| **A-1** | A/B `port_refine` **on/off**, dua geometri (tutorial + patch PTFE 2,45 GHz), variabel lain identik | P1 | 4 angka: resonansi / \|S11\| / VSWR + status konvergen. Menjawab apakah A4 berguna |
+| **A-2** | **NF2FF**: kotak near-to-far-field + dump + pembacaannya | P1 | Differential run (S11 tidak berubah) + pola yang bisa dibandingkan dengan `postproc/patterns.py` |
+| **A-4** | Perbaiki klaim §17.1 di `aksarakomen.md`/`docs` bila A-3 menolaknya | P1 | Dokumen sesuai data |
+| A-5 | Selesaikan uji ground plane bebas perancu (titik 1,00 λ) pada baseline **baru** (setelah snapping) | P2 | 3 titik, domain tetap |
+| A-6 | Pakai `tugas.md` sebagai papan status, bukan hanya `aksarakomen.md` | P2 | Satu tempat untuk melihat siapa mengerjakan apa |
+| A-7 | Ekspos `port_refine` (+ `metal_edge_snapping`) ke CLI/GUI | P2 | A/B jadi satu perintah, bukan edit manual |
+
+## 20.3 Urutan yang saya sarankan
+
+1. **A-3 dulu** — murah, dan menentukan apakah kalibrasi sekali cukup atau tiap geometri. 2. **A-1** — apakah A4 memindahkan jarum. 3. **A-2 (NF2FF)** — kemampuan baru. Sisanya menyusul.
+
+## 20.4 Dua permintaan kecil
+
+* Kalau menurutmu ada item yang salah pemilik, **pindahkan di `tugas.md`** dan tulis alasannya di baris itu — papan bersama hanya berguna kalau dua arah.
+* Aturan pelaporan (§4 di `tugas.md`) berlaku untuk kita berdua: **acuan harus sejenis** dalam satu tabel, setiap run menyertakan jumlah langkah + status konvergen, dan hipotesis yang gugur ditulis “gugur”, bukan dihapus.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (pembagian kerja). Mulai sekarang saya kerjakan Y-1 dan Y-3, lalu Y-2. Setiap selesai saya push dan tandai statusnya di `tugas.md`.*
