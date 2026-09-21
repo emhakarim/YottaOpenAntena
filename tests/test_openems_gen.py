@@ -107,7 +107,8 @@ class TestScriptGeneration(unittest.TestCase):
         self.assertIn("END_CRITERIA = 1e-05", script)
 
         pml = OpenEMSSolver(boundary="PML", pml_cells=6).render_script(make_project())
-        self.assertIn('FDTD.SetBoundaryCond(["PML_6"] * 6)', pml)
+        self.assertIn("PML_CELLS = 6", pml)
+        self.assertIn('% PML_CELLS] * 6)', pml)
         self.assertIn('BOUNDARY_MODE = "PML"', pml)
 
     def test_settings_are_recorded_in_the_manifest(self):
