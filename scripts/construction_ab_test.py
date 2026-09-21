@@ -24,7 +24,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(r"D:\OpenAntenna")
+ROOT = Path(__file__).resolve().parents[1]  # repository root (portable, no absolute paths)
 sys.path.insert(0, str(ROOT))
 
 from openantenna.geometry.patch import resonant_frequency_cavity
@@ -98,9 +98,12 @@ def main() -> int:
         solver.prepare(project, rundir)
 
         env = dict(os.environ)
-        env.setdefault("OPENEMS_ROOT", r"D:\OpenAntenna\tools\openEMS")
+        if "OPENEMS_ROOT" not in env:
+            print("note: OPENEMS_ROOT is not set - simulations will fail unless the "
+                  "openEMS runtime is findable. Point it at the folder that holds "
+                  "openEMS.exe / CSXCAD.dll.")
         proc = subprocess.run(
-            [sys.executable, str(ROOT / "tools" / "run_with_openems.py"), str(rundir / "sim.py")],
+            [sys.executable, str(ROOT / "scripts" / "run_with_openems.py"), str(rundir / "sim.py")],
             cwd=str(rundir),
             capture_output=True,
             text=True,
