@@ -1,4 +1,4 @@
-﻿"""Calibration batch for the openEMS patch model.
+"""Calibration batch for the openEMS patch model.
 
 Runs four comparison cases and one external anchor, then writes a summary:
 
@@ -20,9 +20,10 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1]  # repository root (portable, no absolute paths)
 sys.path.insert(0, str(ROOT))
 
 from openantenna.geometry.patch import synthesize_patch
@@ -40,7 +41,7 @@ ER = 2.1
 H = 1.6e-3
 RUNS = ROOT / "runs"
 LOG_PATH = RUNS / "calibration_batch.log"
-WRAPPER = ROOT / "scripts" / "run_with_openems.py"
+WRAPPER = ROOT / "tools" / "run_with_openems.py"
 PY = sys.executable
 
 
@@ -71,7 +72,10 @@ def run_case(name: str, project: Project, solver: OpenEMSSolver, rundir: Path) -
     rundir.mkdir(parents=True, exist_ok=True)
     solver.prepare(project, rundir)
     env = dict(os.environ)
-    env.setdefault("OPENEMS_ROOT", os.environ.get("OPENEMS_ROOT", ""))
+    if "OPENEMS_ROOT" not in env:
+        print("note: OPENEMS_ROOT is not set - simulations will fail unless the "
+              "openEMS runtime is findable. Point it at the folder that holds "
+              "openEMS.exe / CSXCAD.dll.")
     proc = subprocess.run(
         [PY, str(WRAPPER), str(rundir / "sim.py")],
         cwd=str(rundir),
@@ -100,10 +104,7 @@ def run_case(name: str, project: Project, solver: OpenEMSSolver, rundir: Path) -
 
 def patch_tutorial() -> Path:
     """Copy the shipped tutorial and append a CSV dump of its S11."""
-    openems_root = os.environ.get("OPENEMS_ROOT", "")
-    if not openems_root:
-        raise RuntimeError("OPENEMS_ROOT must point at the openEMS installation")
-    source = Path(openems_root) / "python" / "Tutorials" / "Simple_Patch_Antenna.py"
+    source = ROOT / "tools" / "openEMS" / "python" / "Tutorials" / "Simple_Patch_Antenna.py"
     target_dir = RUNS / "tutorial_anchor"
     target_dir.mkdir(parents=True, exist_ok=True)
     text = source.read_text(encoding="utf-8")
@@ -181,7 +182,10 @@ def main() -> int:
     try:
         tutorial = patch_tutorial()
         env = dict(os.environ)
-        env.setdefault("OPENEMS_ROOT", os.environ.get("OPENEMS_ROOT", ""))
+        if "OPENEMS_ROOT" not in env:
+            print("note: OPENEMS_ROOT is not set - simulations will fail unless the "
+                  "openEMS runtime is findable. Point it at the folder that holds "
+                  "openEMS.exe / CSXCAD.dll.")
         proc = subprocess.run(
             [PY, str(WRAPPER), str(tutorial)],
             cwd=str(tutorial.parent),
@@ -193,7 +197,7 @@ def main() -> int:
             (proc.stdout or "") + (proc.stderr or ""), encoding="utf-8"
         )
         csv_path = None
-        for candidate in Path(os.environ.get("TEMP", r"C:\Windows\Temp")).glob("Simp_Patch/s11_tutorial.csv"):
+        for candidate in Path(tempfile.gettempdir()).glob("Simp_Patch/s11_tutorial.csv"):
             csv_path = candidate
         anchor: dict = {
             "case": "tutorial_anchor",
