@@ -1,4 +1,4 @@
-"""Calibration batch for the openEMS patch model.
+﻿"""Calibration batch for the openEMS patch model.
 
 Runs four comparison cases and one external anchor, then writes a summary:
 
@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(r"D:\OpenAntenna")
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from openantenna.geometry.patch import synthesize_patch
@@ -40,7 +40,7 @@ ER = 2.1
 H = 1.6e-3
 RUNS = ROOT / "runs"
 LOG_PATH = RUNS / "calibration_batch.log"
-WRAPPER = ROOT / "tools" / "run_with_openems.py"
+WRAPPER = ROOT / "scripts" / "run_with_openems.py"
 PY = sys.executable
 
 
@@ -71,7 +71,7 @@ def run_case(name: str, project: Project, solver: OpenEMSSolver, rundir: Path) -
     rundir.mkdir(parents=True, exist_ok=True)
     solver.prepare(project, rundir)
     env = dict(os.environ)
-    env.setdefault("OPENEMS_ROOT", r"D:\OpenAntenna\tools\openEMS")
+    env.setdefault("OPENEMS_ROOT", os.environ.get("OPENEMS_ROOT", ""))
     proc = subprocess.run(
         [PY, str(WRAPPER), str(rundir / "sim.py")],
         cwd=str(rundir),
@@ -100,7 +100,10 @@ def run_case(name: str, project: Project, solver: OpenEMSSolver, rundir: Path) -
 
 def patch_tutorial() -> Path:
     """Copy the shipped tutorial and append a CSV dump of its S11."""
-    source = ROOT / "tools" / "openEMS" / "python" / "Tutorials" / "Simple_Patch_Antenna.py"
+    openems_root = os.environ.get("OPENEMS_ROOT", "")
+    if not openems_root:
+        raise RuntimeError("OPENEMS_ROOT must point at the openEMS installation")
+    source = Path(openems_root) / "python" / "Tutorials" / "Simple_Patch_Antenna.py"
     target_dir = RUNS / "tutorial_anchor"
     target_dir.mkdir(parents=True, exist_ok=True)
     text = source.read_text(encoding="utf-8")
@@ -178,7 +181,7 @@ def main() -> int:
     try:
         tutorial = patch_tutorial()
         env = dict(os.environ)
-        env.setdefault("OPENEMS_ROOT", r"D:\OpenAntenna\tools\openEMS")
+        env.setdefault("OPENEMS_ROOT", os.environ.get("OPENEMS_ROOT", ""))
         proc = subprocess.run(
             [PY, str(WRAPPER), str(tutorial)],
             cwd=str(tutorial.parent),

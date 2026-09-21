@@ -109,12 +109,18 @@ class MaterialTab(QWidget):
         self.mix_freq.setRange(0.001, 100.0)
         self.mix_freq.setValue(2.45)
         self.mix_freq.setSuffix(" GHz")
+        self.particle_size = QDoubleSpinBox()
+        self.particle_size.setDecimals(3)
+        self.particle_size.setRange(0.001, 1000.0)
+        self.particle_size.setValue(1.0)
+        self.particle_size.setSuffix(" um")
         form.addRow("matrix eps_r", self.matrix)
         form.addRow("filler eps_r", self.filler)
         form.addRow("filler volume fraction", self.volume_fraction)
         form.addRow("matrix tan delta", self.tan_matrix)
         form.addRow("filler tan delta", self.tan_filler)
         form.addRow("frequency", self.mix_freq)
+        form.addRow("filler particle size", self.particle_size)
         mix_layout.addLayout(form)
 
         right = QVBoxLayout()
@@ -171,7 +177,7 @@ class MaterialTab(QWidget):
             warnings = [
                 percolation_warning(vf),
                 maxwell_wagner_warning(frequency),
-                quasi_static_warning(frequency, 1e-6, filler),
+                quasi_static_warning(frequency, self.particle_size.value() * 1e-6, filler),
             ]
             relevant = [w for w in warnings if w]
             if relevant:
@@ -234,8 +240,13 @@ class DesignTab(QWidget):
         self.summary.setReadOnly(True)
         layout.addWidget(self.summary)
 
-        self.figure, self.canvas = _plot_canvas()
-        layout.addWidget(self.canvas)
+        try:
+            self.figure, self.canvas = _plot_canvas()
+            layout.addWidget(self.canvas)
+        except Exception as exc:  # matplotlib is optional
+            self.figure = None
+            self.canvas = None
+            layout.addWidget(QLabel(f"Plotting unavailable: {exc}"))
 
     def current_project(self) -> Project:
         frequency = self.frequency.value() * 1e9
@@ -289,6 +300,8 @@ class DesignTab(QWidget):
         )
         self.summary.setPlainText("\n".join(lines))
 
+        if self.figure is None:
+            return  # matplotlib missing; the numeric summary above is still shown
         axes = self.figure.add_subplot(111)
         axes.clear()
         samples = array_factor_plane(layout.positions_m, frequency, n_points=361, plane="e")
@@ -319,7 +332,8 @@ class SimulateTab(QWidget):
         self.substrate_cells.setValue(8)
         self.loss_model = QComboBox()
         self.loss_model.addItems(["kappa", "none"])
-        self.rundir = QLineEdit(str(Path(r"D:\OpenAntenna\runs\gui_run")))
+        self.rundir = QLineEdit(str(Path.cwd() / "runs" / "gui_run"))
+        self._workers: list = []
         browse = QPushButton("Browse ...")
         browse.clicked.connect(self.pick_directory)
         form.addRow("mesh cells / wavelength", self.mesh_cells)
@@ -362,29 +376,66 @@ class SimulateTab(QWidget):
         self.log.append(f"binary    : {status.binary_path or '-'}")
         self.log.append(f"detail    : {status.detail}")
 
+    def _begin_work(self) -> bool:
+        """Disable the buttons while a worker runs; one worker at a time (G-2)."""
+        for widget in (self.status_button, self.generate_button, self.run_button):
+            widget.setEnabled(False)
+        if not self.rundir.text().strip():
+            self.log.append(
+                "FAILED: the run directory is empty (an empty path would silently write "
+                "into the current working directory)"
+            )
+            self._end_work()
+            return False
+        return True
+
+    def _end_work(self) -> None:
+        for widget in (self.status_button, self.generate_button, self.run_button):
+            widget.setEnabled(True)
+
+    def _track(self, worker) -> None:
+        """Hold a reference until the thread finishes, then release it.
+
+        Overwriting ``self.worker`` while a QThread is still running can destroy the
+        thread from under Qt - review item G-2.
+        """
+        self._workers.append(worker)
+
+        def _cleanup() -> None:
+            self._end_work()
+            if worker in self._workers:
+                self._workers.remove(worker)
+            worker.deleteLater()
+
+        worker.finished.connect(_cleanup)
+        worker.start()
+
     def generate(self) -> None:
+        if not self._begin_work():
+            return
         self.log.append("generating model ...")
-        self.worker = GenerateWorker(
+        worker = GenerateWorker(
             self.design_tab.current_project(),
             Path(self.rundir.text()),
             **self._solver_kwargs(),
         )
-        self.worker.done.connect(lambda path: self.log.append(f"model written: {path}"))
-        self.worker.failed.connect(lambda message: self.log.append(f"FAILED: {message}"))
-        self.worker.start()
+        worker.done.connect(lambda path: self.log.append(f"model written: {path}"))
+        worker.failed.connect(lambda message: self.log.append(f"FAILED: {message}"))
+        self._track(worker)
 
     def simulate(self) -> None:
-        self.run_button.setEnabled(False)
+        if not self._begin_work():
+            return
         self.log.append("starting simulation (the window stays responsive) ...")
-        self.worker = SimulateWorker(
+        worker = SimulateWorker(
             self.design_tab.current_project(),
             Path(self.rundir.text()),
             **self._solver_kwargs(),
         )
-        self.worker.progress.connect(self.log.append)
-        self.worker.done.connect(self._finished)
-        self.worker.failed.connect(self._failed)
-        self.worker.start()
+        worker.progress.connect(self.log.append)
+        worker.done.connect(self._finished)
+        worker.failed.connect(self._failed)
+        self._track(worker)
 
     def _finished(self, payload: dict) -> None:
         results = payload["results"]
@@ -396,11 +447,9 @@ class SimulateTab(QWidget):
                 results["vswr_at_resonance"],
             )
         )
-        self.run_button.setEnabled(True)
 
     def _failed(self, message: str) -> None:
         self.log.append(f"FAILED: {message}")
-        self.run_button.setEnabled(True)
 
 
 class ResultsTab(QWidget):
@@ -411,7 +460,7 @@ class ResultsTab(QWidget):
         layout = QVBoxLayout(self)
 
         row = QHBoxLayout()
-        self.path = QLineEdit(str(Path(r"D:\OpenAntenna\runs\patch_ptfe_v4")))
+        self.path = QLineEdit(str(Path.cwd() / "runs"))
         browse = QPushButton("Open run directory ...")
         browse.clicked.connect(self.pick)
         load = QPushButton("Load s11.csv")
@@ -426,8 +475,13 @@ class ResultsTab(QWidget):
         self.metrics.setMaximumHeight(150)
         layout.addWidget(self.metrics)
 
-        self.figure, self.canvas = _plot_canvas()
-        layout.addWidget(self.canvas)
+        try:
+            self.figure, self.canvas = _plot_canvas()
+            layout.addWidget(self.canvas)
+        except Exception as exc:  # matplotlib is optional
+            self.figure = None
+            self.canvas = None
+            layout.addWidget(QLabel(f"Plotting unavailable: {exc}"))
 
     def pick(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, "Choose a run directory")
@@ -439,30 +493,40 @@ class ResultsTab(QWidget):
         csv_path = candidate / "s11.csv" if candidate.is_dir() else candidate
         try:
             trace = S11Trace.from_csv(csv_path)
+            index = trace.worst_match_index()
+            bands = trace.bandwidth_below(-10.0)
+            impedance = trace.impedance_ohm()
+            lines = [
+                f"file              : {csv_path}",
+                f"points            : {len(trace.frequencies_hz)}",
+                f"resonance         : {trace.frequencies_hz[index] / 1e9:.4f} GHz",
+                f"|S11| at resonance: {trace.db()[index]:.2f} dB   VSWR {trace.vswr()[index]:.3f}",
+                f"Zin at resonance  : {impedance[index].real:.2f} "
+                f"{impedance[index].imag:+.2f}j ohm",
+            ]
+            for start, stop, width in bands:
+                lines.append(
+                    f"-10 dB band       : {start / 1e9:.4f} - {stop / 1e9:.4f} GHz"
+                    f"  ({width / 1e6:.1f} MHz)"
+                )
+            fractional = trace.fractional_bandwidth(-10.0)
+            if fractional:
+                lines.append(f"fractional BW     : {fractional * 100:.2f} %")
+            lines.append("")
+            lines.append(
+                "Model output, not a measurement. See run_manifest.json for the mesh and "
+                "loss model used."
+            )
         except Exception as exc:
+            # All of the above is inside the try: impedance_ohm() deliberately raises
+            # for a phase-less trace (review item G-5), and an exception escaping into
+            # the Qt event loop would go uncaught.
             QMessageBox.warning(self, "Cannot load", f"{type(exc).__name__}: {exc}")
             return
-
-        index = trace.worst_match_index()
-        bands = trace.bandwidth_below(-10.0)
-        lines = [
-            f"file              : {csv_path}",
-            f"points            : {len(trace.frequencies_hz)}",
-            f"resonance         : {trace.frequencies_hz[index] / 1e9:.4f} GHz",
-            f"|S11| at resonance: {trace.db()[index]:.2f} dB   VSWR {trace.vswr()[index]:.3f}",
-            f"Zin at resonance  : {trace.impedance_ohm()[index].real:.2f} "
-            f"{trace.impedance_ohm()[index].imag:+.2f}j ohm",
-        ]
-        for start, stop, width in bands:
-            lines.append(f"-10 dB band       : {start / 1e9:.4f} - {stop / 1e9:.4f} GHz"
-                         f"  ({width / 1e6:.1f} MHz)")
-        fractional = trace.fractional_bandwidth(-10.0)
-        if fractional:
-            lines.append(f"fractional BW     : {fractional * 100:.2f} %")
-        lines.append("")
-        lines.append("Model output, not a measurement. See run_manifest.json for the mesh and loss model used.")
         self.metrics.setPlainText("\n".join(lines))
 
+        if self.figure is None:
+            return  # matplotlib missing; the metrics above are still shown
         axes = self.figure.add_subplot(111)
         axes.clear()
         axes.plot([f / 1e9 for f in trace.frequencies_hz], trace.db())
