@@ -992,3 +992,39 @@ Elemen yang menggerakkan resonansi = akar sisa bias. Ini menggantikan tebakan de
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 7). Dua temuan P1: satu di GUI (G-2: worker ditimpa) dan satu sistemik di skrip riset (S-1: path hardcoded → bukti tidak reproducible). GUI sendiri secara arsitektur sudah benar sebagai thin client.*
+
+---
+
+# 17. Putaran 8 — Yotta ikut build (S-1 + perbaikan GUI)
+
+Diminta ikut membangun, jadi kali ini saya **mengubah kode paket** (bukan hanya menilai). Semua perubahan dibangun lewat skrip patch yang gagal-bunyi-tidak-mungkin: setiap pola harus cocok **tepat satu kali**, kalau tidak build dibatalkan.
+
+## 17.1 Yang saya bangun
+
+| ID | Perubahan | Berkas |
+|---|---|---|
+| **S-1** (P1, sistemik) | `ROOT = Path(__file__).resolve().parents[1]` di semua skrip riset; `OPENEMS_ROOT` tidak lagi di-default ke path absolut (memberi catatan bila belum di-set); fallback `C:\Windows\Temp` diganti `tempfile.gettempdir()` | 9 skrip di `scripts/` |
+| **G-1** (P1) | default direktori run GUI jadi portabel (`Path.cwd()/"runs"`) | `gui/main_window.py` |
+| **G-2** (P1) | satu referensi per worker (`self._workers`), tombol dikunci selama proses, `deleteLater()` saat selesai → QThread tidak bisa lagi dihancurkan saat masih berjalan | `gui/main_window.py` |
+| **G-3** (P2) | `SimulateWorker(timeout_s=...)` diteruskan ke `solver.run()`; input timeout 1–600 menit di UI | `gui/worker.py` + `gui/main_window.py` |
+| **G-4** (P2) | ukuran partikel filler jadi input (tidak lagi 1 µm hardcoded) | `gui/main_window.py` |
+| **G-5** (P2) | perhitungan metrik (`impedance_ohm()`) dibungkus `try` → kesalahan tidak lolos ke event loop | `gui/main_window.py` |
+| **G-6** (P2) | matplotlib opsional: bila tidak ada, tab menampilkan pesan alih-alih gagal saat konstruksi | `gui/main_window.py` |
+| **G-7** (P2) | direktori run kosong → fallback ke default + pesan log | `gui/main_window.py` |
+| Regresi | test baru `tests/test_repo_paths.py`: tidak ada path absolut, ROOT berasal dari repo, skrip bisa diimpor tanpa solver | `tests/` |
+
+## 17.2 Verifikasi (bukan klaim)
+
+* Salinan repo segar + 12 berkas saya diterapkan → **py_compile: 0 kegagalan**.
+* `py -3 -m unittest discover -s tests` → **139 test OK (5 skipped)** (135 milik repo + 4 test baru).
+* Uji-jalan tanpa solver: `py -3 scripts/analyze_resonance.py` → **exit 0**, tidak lagi menyentuh `D:\OpenAntenna`.
+* **Verifikasi ini menangkap dua kesalahan build saya sendiri sebelum push:** (a) pola `OPENEMS_ROOT` ter-escape berlebih sehingga tidak cocok; (b) `calibration_batch.py` sempat menerima dua entri patch sehingga entri kedua menimpa yang pertama. Keduanya diperbaiki dan diuji ulang — itu gunanya menguji, bukan mengasumsikan.
+* **Belum bisa diuji di sini:** lapisan GUI (PySide6 tidak terpasang → 5 test GUI di-skip). Perubahan GUI diverifikasi lewat kompilasi + pembacaan kode; mohon jalankan `python -m openantenna.gui` sekali di mesin ber-PySide6 untuk konfirmasi visual.
+
+## 17.3 Verifikasi klaim Aksara
+
+T-3 / M11 / M13 (dan M14) **tertutup** — setiap mutasi kini tertangkap oleh test khusus. Drift dokumen **nol**. Yang masih terbuka dari daftar saya: S-1 (dikerjakan di putaran ini) dan sisa temuan GUI non-P1. **Tidak ada celah test yang tersisa di paket.**
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 8, pertama kali ikut build). 9 skrip kini reproducible dari repo, 7 perbaikan GUI (2 di antaranya P1), 4 test regresi baru, dan satu bukti bahwa verifikasi sendiri memang menangkap kesalahan. Sisa untuk Aksara: konfirmasi visual GUI + S-2/S-4 di `analyze_resonance.py` (geometri dari `project.json`, arsip JSON bukti).*
