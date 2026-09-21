@@ -731,3 +731,86 @@ Saran: perbarui keempat berkas segera. Nilai terbesar proyek ini justru **kejuju
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (scorecard). Ringkas: numerik akurat, fisik belum terkalibrasi (92–93 % capaian), proyek ≈ 30 %, review loop 89,5 % tuntas, dan 4 berkas dokumen perlu disinkronkan ulang dengan kode.*
+
+---
+
+# 13. Putaran 5 — bias konstruksi berhasil dilokalisasi (dan offset 7,8 % hampir tuntas dijelaskan)
+
+**Penulis:** Yotta · Snapshot disinkronkan ke `main` @ **`ab4e472`** (setelah 7 commit kode baru: `08466eb`, `b74541c`, `a83683d`, `0ef2391`, `dcf4020`, `b7e4ff9`, `4ee4389`). `py -3 -m unittest discover -s tests` → **128 test, OK (5 skipped)**.
+
+## 13.1 Yang sudah beres (dan satu hipotesis saya yang gugur lagi)
+
+| Item | Status | Catatan |
+|---|---|---|
+| **N-02** pelaporan konvergensi | **SELESAI** | `run_manifest.json` kini memuat `converged`, `max_timesteps`, `end_criteria`, `boundary`, `pml_cells`, `pml_thickness_m`, `free_space_to_pml_m` — dan catatannya menyebut "review item Y-18" secara eksplisit |
+| **A5** konfigurabilitas mesh | **SELESAI** | `boundary` (PML/MUR), `pml_cells`, `mesh_smoothing_ratio`, `ground_margin_lambda`, `end_criteria` kini parameter konstruktor |
+| **A1** PML vs ruang bebas | **TERUKUR** | manifest menyebut `pml_thickness_m = 56,7 mm` vs `free_space_to_pml_m = 21,3 mm` — persis angka yang saya taksir (51–57 mm vs 21 mm); kini dicatat, bukan ditebak |
+| **sweep runner + stub adapter** | **SELESAI** | `sweep/runner.py` + `tests/test_sweep_runner.py`: adapter dapat disuntik, menolak jalan tanpa solver (`SolverUnavailableError`), dan menulis ke store sqlite → rekomendasi §9.5(7b) tuntas |
+| **N-01** knob margin ground plane | **SELESAI (tapi hipotesis saya salah arah)** | lihat 13.3 |
+| **N-04 / Y-T1** eksperimen pemisah | **DIJALANKAN** | lihat 13.2 — hasilnya justru mengonfirmasi analisis batas fisis saya |
+
+## 13.2 Hasil kunci: bias konstruksi **−4,3 %** — dan offset 7,8 % kini terurai
+
+Eksperimen pemisah yang saya usulkan sudah dijalankan (generator kita menjalankan **geometri tutorial**):
+
+| Pengukuran | Resonansi |
+|---|---|
+| skrip tutorial openEMS, tanpa ubah | 2,435 GHz (\|S11\| −27 dB) |
+| **generator kita, geometri sama** | **2,330 GHz** (\|S11\| −24,9 dB, VSWR 1,12, konvergen 54.136 langkah) |
+| model cavity, geometri sama | 2,4363 GHz — **cocok dengan tutorial sampai 0,05 %** |
+| model transmission-line, geometri sama | 2,5134 GHz (terlalu tinggi) |
+
+Dua kesimpulan yang sah: **(a)** selisih ada di **konstruksi model kita**, bukan di openEMS maupun di formula geometri patch; **(b)** **model cavity terbukti prediktor yang benar** (0,05 % terhadap implementasi independen), sedangkan TL meleset +3,4 % pada geometri itu.
+
+### Rekonsiliasi angka (kontribusi saya)
+
+Sekarang seluruh defisit PTFE 2,45 GHz bisa diuraikan:
+
+| Komponen | Besar | Sumber |
+|---|---|---|
+| TL memprediksi terlalu tinggi vs cavity | **−2,0 %** | 2,4500 vs 2,4007 GHz (perhitungan saya, §9.3) |
+| Bias konstruksi model | **−4,3 %** | eksperimen pemisah di atas |
+| Sisa tak terjelaskan | **−0,8 … −1,6 %** | 2,4007 × 0,957 = 2,2975 GHz vs terukur 2,266–2,280 GHz |
+| **Total** | **−7,1 … −7,9 %** | ≈ defisit terukur **−7,5 %** |
+
+Artinya: **misteri 7,8 % sudah hampir tuntas** — bukan "bias sintesis patch lebar" (yang terbatas 2 %), melainkan **2 % prediktor + 4,3 % konstruksi + ~1 % sisa**.
+
+**Implikasi desain (P1):** jadikan **model cavity sebagai prediktor utama**, bukan TL. Cavity tervalidasi 0,05 % terhadap solver independen; TL terbukti +3,4 % terlalu tinggi pada geometri tutorial dan +2,0 % pada geometri kita.
+
+## 13.3 N-01 (ground plane) — arah hipotesis saya salah, dan uji-nya masih ada perancu
+
+Data baru: margin ground 0,25 / 0,50 / 1,00 λ₀ → **2,260 / 2,220 / 2,150 GHz**. Ground lebih besar justru menurunkan resonansi (~5 %, belum jenuh). Jadi ground plane finit **bukan** penyebab defisit — hipotesis saya gugur untuk kedua kalinya di putaran ini, dan saya terima.
+
+Tapi ada **perancu yang perlu dihilangkan (P1):** `DOM_X = GROUND_X/2 + AIRBOX_LAMBDA·λ_min`, jadi memperbesar margin ground **sekaligus** memperbesar domain dan mengubah mesh (`linspace(-DOM_X, DOM_X, 25)`). Tren 5 % itu karena itu belum bisa diatribusikan murni ke ground plane. Selain itu, arahnya bertentangan dengan limit ground-tak-berhingga dari model cavity (2,4007 GHz lebih tinggi dari semua titik ukur). **Uji bersih yang saya minta:** jaga **domain + mesh tetap**, ubah **hanya bentang ground** (mis. ground sebagai objek terpisah, atau verifikasi di manifest bahwa jumlah sel & domain tidak berubah), lalu ulangi 0,25/0,50/1,00 λ₀.
+
+## 13.4 Peringatan urutan kerja (P1) — **perbaiki bias konstruksi dulu, baru tuning**
+
+Tuning loop menghasilkan L = 37,319 mm dengan cara **menyerap bias konstruksi ke dalam geometri**. Sekarang setelah bias itu terukur (−4,3 %) dan jelas **bukan sifat fisik antena**, konsekuensinya:
+
+- Selama bias konstruksi belum dihilangkan, L hasil tuning akan salah sekitar **+4,5 %** (terlalu pendek) begitu bias itu diperbaiki; dan sebaliknya, angka itu tidak boleh dipakai sebagai dimensi fabrikasi.
+- Aturan yang saya usulkan: **(1)** benahi konstruksi (port/mesh/setelan) sampai selisih terhadap anchor turun mendekati ~1 %; **(2)** baru jalankan tuning; **(3)** selalu catat *faktor koreksi* dan **model mana** yang dipakai sebagai acuan di dokumen desain.
+
+**Uji generalisasi yang saya minta (P1):** ulangi eksperimen pemisah pada **geometri kedua** (mis. 5,8 GHz atau εr berbeda). Kalau bias tetap ≈ −4,3 %, ia bisa dikompensasi sebagai faktor tunggal; kalau bergantung geometri, justru tuning per-geometri yang wajib — dan keduanya adalah kesimpulan yang berbeda untuk roadmap.
+
+## 13.5 Prediksi saya yang bisa Anda uji (P2)
+
+Dari `verification.md`: pada resonansi, **R ≈ 33–35 Ω** (sehingga VSWR 1,5–1,9), padahal rumus inset menjanjikan 50 Ω. Angka ini memberi prediksi kuantitatif:
+
+- Jika R_edge efektif yang terwujud ≈ **0,68×** nilai rumus empiris (`90 εr²/(εr−1)(L/W)²` = 255,8 Ω → nyata ≈ **173 Ω**), maka supaya R = 50 Ω feed harus digeser ~**10 % lebih dekat ke tepi**, dari inset 14,66 mm → **y ≈ 13,2 mm**.
+- Uji: jalankan `scripts/tune_inset.py` dan lihat apakah R mendekati 50 Ω di sekitar y ≈ 13,2 mm (±1 mm). Kalau ya, hipotesis "R_edge nyata ≈ 0,68× rumus" terkonfirmasi dan rumus `inset_depth_for_input_resistance` perlu faktor koreksi yang didokumentasikan.
+
+## 13.6 D-01 (diperbarui) — drift dokumen bertambah
+
+| Berkas | Klaim basi |
+|---|---|
+| `docs/verification.md` (bagian "Test suite") | masih **"Ran 82 tests"** — padahal sekarang **128** |
+| `docs/verification.md` ("Open, unverified items") | masih menulis *"mesh refinement was ruled out … a feed study plus an external tutorial anchor are the next measurements"* — padahal ketiganya sudah dijalankan di bagian atas berkas yang sama |
+| `docs/roadmap.md:22,25,34-35` | masih "82 tests", "Dielectric loss: open", "generator writes `kappa = 0`" |
+| `docs/roadmap.md` (item sqlite store) | "not yet wired to the CLI run path" — padahal `sweep run` + `runner.py` sudah menulis ke store |
+| `docs/capabilities-and-comparison.md:35,37` | masih "Dielectric loss … not implemented" dan "GUI … not implemented" |
+
+Ini kini bukan sekadar kerapian: `verification.md` **bertentangan dengan dirinya sendiri** dalam satu berkas. Untuk proyek yang aset utamanya kejujuran status, ini yang paling perlu dibereskan berikutnya.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 5). Ringkas: N-02/A5/sweep-runner tuntas, N-01 gugur (arah saya salah), dan yang terpenting — **bias konstruksi −4,3 % kini terukur**, sehingga offset 7,8 % terurai menjadi 2 % prediktor + 4,3 % konstruksi + ~1 % sisa. Urutan kerja yang saya minta: benahi konstruksi → uji generalisasi pada geometri kedua → baru tuning; plus satu uji ground plane yang bersih dari perancu.*
