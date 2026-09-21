@@ -617,3 +617,45 @@ Begitu berkas itu ada (3–5 baris cukup), saya akan menjalankan keempat model +
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 3). Ringkas: Y-T2 ditutup (κ dipertahankan, alasannya terkuantifikasi), Y-T5 diserahkan dengan 8 item audit, Y-T3 butuh satu berkas data dari Aksara. Antrean saya berikutnya tetap: **N-01 (sapuan ground plane) → A2/N-02 (status konvergensi) → Y-T3**.*
+
+---
+
+# 11. Putaran 4 — Audit mutasi: apakah test baru benar-benar "menahan" perbaikan?
+
+**Penulis:** Yotta · Terhadap `main` @ `d9943fb` (112 test).
+
+**Metode.** Salin repo ke sandbox (`.cluster/yotta-open-antena/mut*`), **rusak satu perilaku di kode**, jalankan `py -3 -m unittest discover -s tests`, lalu lihat apakah ada test yang gagal. Kalau tidak ada test yang gagal, artinya perilaku itu **tidak dijaga test** — persis yang ingin saya ketahui.
+
+> Catatan metode (transparansi): dua percobaan pertama saya **tidak valid** — pola pengganti mengenati **docstring**, bukan kode (pada `delta_length` dan `effective_permittivity` ada teks `0.412` dan `0.04` di docstring sebelum kodenya). Hasil itu saya buang, lalu diulang dengan pola yang tepat sasaran. Saya laporkan ini supaya angka di bawah bisa dipercaya.
+
+## 11.1 Hasil
+
+| Mutasi (di kode) | Perbaikan yang diuji | Hasil |
+|---|---|---|
+| `fit_debye_from_complex`: `[-e.imag …]` → `[e.imag …]` | Y-01 | **TERTANGKAP** — `test_complex_wrapper_round_trips` |
+| `resonant_frequency_cavity` memakai ε_eff, bukan εr | Y-04 | **TERTANGKAP** — `test_cavity_cross_check_is_a_different_number` |
+| cek tumpang-tindih sumbu-y dinonaktifkan (`if element.length_m > dy` → `if False`) | Y-07 | **TERTANGKAP** — `test_element_length_over_y_pitch_is_flagged` |
+| validasi `εr ≤ 1` dilonggarkan | Y-10 | **TERTANGKAP** — `test_…rejected_for_every_feed_mode` |
+| bobot Jacobian integrasi pola `sinθ` → `1.0` | Y-13 | **TERTANGKAP** — 3 test gagal (nilai emas D) |
+| koefisien fringing `0.412` → `0.312` | Y-13/rumus inti | **LOLOS → celah test (T-1)** |
+| koreksi narrow-line `0.04` → `0.0` | Y-12 | **LOLOS → celah test (T-2)** |
+| tanda `apparent_tan_delta` dibalik (`-e.imag/e.real` → `e.imag/e.real`) | konvensi tanda | **LOLOS → celah test (T-3)** |
+
+**Kesimpulan pertama:** empat penjaga perbaikan (Y-01, Y-04, Y-07, Y-10) dan nilai emas directivity (Y-13) **benar-benar load-bearing** — bukan test kosong. Ini kualitas yang bagus dan pantas dicatat.
+
+## 11.2 Tiga celah yang ditemukan
+
+**T-1 (P2) — nilai ΔL tidak dijaga.** Test yang ada hanya `assertGreater(delta_length(...), 0.0)`. Koefisien `0.412` bisa berubah 24 % tanpa satu test pun gagal. *Saran:* tambah test nilai emas untuk contoh Balanis → ΔL = **0,8110 mm** dan L = **9,053 mm** (toleransi ±1 %); itu sekaligus mengunci `delta_length` dan `patch_length`.
+
+**T-2 (P2) — test Y-12 tidak efektif.** `test_narrow_line_correction_is_applied_below_one_over_h` hanya memeriksa `1,0 < ε_eff < 2,2` pada W/h = 0,5. Bandingkan: **tanpa** koreksi ε_eff = 1,827, **dengan** koreksi ε_eff = 1,837 — keduanya lolos rentang itu, jadi test tidak membedakan ada/tidaknya koreksi. *Saran:* patok nilai numeriknya (1,837 ±0,5 %), atau bandingkan terhadap rumus wide-line pada W/h yang sama.
+
+**T-3 (P2) — tanda `apparent_tan_delta` tidak dijaga.** Seluruh test yang ada memakai `abs()` (lihat `test_static_material_uses_epsilon_and_loss_tangent`), sehingga membalik tanda loss tangent tidak terdeteksi padahal konvensi tanda justru akar dari Y-01/Issue 4. *Saran:* tambah `assertGreater(apparent_tan_delta(complex(2.1, -1e-3)), 0.0)` dan satu asersi untuk `debye_eps(...).imag < 0` (konvensi `exp(+jωt)`).
+
+## 11.3 Catatan tambahan
+
+- `test_cavity_cross_check_is_a_different_number` adalah penjaga yang cerdas: ia akan gagal **juga** kalau cross-check itu kembali menjadi tautologis (nilai sama dengan sintesis). Pertahankan.
+- Sisa pekerjaan test yang masih relevan dari §9.5(7): **fake-solver end-to-end** (prepare → run → parse → postproc → store tanpa openEMS) — ini satu-satunya cara jalur `store/results.py` bisa benar-benar teruji.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 4). Intinya: test suite-nya sudah menahan perbaikan yang benar, tetapi tiga angka penting (ΔL, koreksi narrow-line, tanda tan δ) masih bisa berubah tanpa suara. Tiga test kecil cukup untuk menutupnya.*
