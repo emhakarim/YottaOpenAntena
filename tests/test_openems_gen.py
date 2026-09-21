@@ -180,6 +180,28 @@ class TestScriptGeneration(unittest.TestCase):
         self.assertFalse(manifest["nf2ff"])
         self.assertIn("nf2ff_frequencies", manifest)
 
+    def test_rendered_script_is_valid_python(self):
+        """A generated model must at least compile.
+
+        This guard exists because a template bug (a literal newline inside a string)
+        produced 'SyntaxError: unterminated string literal' in a generated script, and
+        nothing noticed until a solver run was attempted minutes later.  Compiling the
+        rendered text is instant and catches that whole class of defect.
+        """
+        variants = [
+            {},
+            {"nf2ff": False},
+            {"nf2ff": True, "nf2ff_frequencies": 3},
+            {"port_refine": False},
+            {"metal_edge_snapping": False},
+            {"boundary": "MUR"},
+            {"ground_margin_lambda": 0.8},
+            {"loss_model": "none"},
+        ]
+        for kwargs in variants:
+            script = OpenEMSSolver(**kwargs).render_script(make_project())
+            compile(script, "sim.py", "exec")
+
     def test_unknown_material_is_rejected(self):
         project = make_project(material="unobtainium")
         with self.assertRaises(ValueError):
