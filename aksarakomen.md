@@ -206,11 +206,33 @@ microstrip edge-feed), bukan dengan memaksa inset ke nol.
 
 ---
 
+### 5.5 Loop tuning menutup masalah kalibrasi (hasil terukur)
+
+Setelah tiga kandidat dieliminasi, sifat bias sintesis dikoreksi secara empiris
+lewat loop: sintesis → simulasi → ukur → skala ulang panjang → ulangi.
+
+| Iterasi | Panjang patch | Resonansi | Galat | \|S11\| | VSWR |
+|---|---|---|---|---|---|
+| 1 (sintesis) | 41,379 mm | 2,266 GHz | −7,5 % | −12,54 dB | 1,618 |
+| 2 | 38,275 mm | 2,389 GHz | −2,5 % | −10,64 dB | 1,832 |
+| 3 | 37,319 mm | **2,426 GHz** | **−1,0 %** | −10,27 dB | 1,884 |
+
+**Konvergen dalam 3 kali simulasi (±14 menit).** Artinya: untuk geometri ini
+sintesis transmission-line butuh **koreksi panjang −9,8%** (41,379 → 37,319 mm).
+
+Dua catatan jujur yang harus ikut menyertai angka ini:
+1. Loop ini hanya menala **resonansi**. Match di titik konvergen masih VSWR 1,88,
+jadi feed perlu penalaan sendiri (sedang dijalankan: `scripts/tune_inset.py`).
+2. Ini **tidak** memvalidasi akurasi absolut model; ia membuat model **bisa
+dipakai** dengan mengoreksi bias yang sudah terkarakterisasi.
+
+---
+
 ## 7. Rencana berikutnya (urutan prioritas)
 
-1. **Loop sintesis→tuning otomatis** (`scripts/auto_tune.py`): sintesis
-   analitik, ukur pergeseran di FDTD, koreksi dimensi, ulangi sampai toleransi.
-   Ini jawaban engineering untuk bias sintesis yang sudah terlokalisasi.
+1. ~~Loop sintesis→tuning otomatis~~ **SELESAI**: `scripts/auto_tune.py`, konvergen
+   dalam 3 iterasi (galat −7,5% → −1,0%). Lanjutannya: penalaan match `tune_inset.py`,
+   lalu jadikan hasil tuned sebagai basis sweep material/loss.
 2. **Loop sintesis→tuning otomatis**: sintesis analitik, ukur pergeseran di FDTD,
    koreksi dimensi, ulangi. Ini fitur yang paling berguna bagi pengguna nyata.
 3. **Array 4×4**: mode unit-cell/periodic + matriks S 16 port + laporan kopling.

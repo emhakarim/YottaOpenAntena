@@ -160,6 +160,29 @@ engineering response is a tuning loop (`scripts/auto_tune.py`) that corrects the
 synthesis empirically and records every iteration, rather than chasing unbounded
 accuracy out of a closed-form model.
 
+## Tuning loop: the synthesis offset is corrected empirically (2026-09-21)
+
+With mesh refinement, feed loading and air-domain proximity all eliminated as
+explanations (Issues 1-6 above), the residual offset is an attribute of the
+analytic synthesis for this very wide patch.  The engineering answer is a tuning
+loop (``scripts/auto_tune.py``): synthesise, simulate, measure, rescale the length
+by ``f_measured / f_target``, repeat.
+
+| Iteration | Patch length | Resonance | Offset | \|S11\| | VSWR |
+|---|---|---|---|---|---|
+| 1 (synthesis) | 41.379 mm | 2.266 GHz | -7.5 % | -12.54 dB | 1.618 |
+| 2 | 38.275 mm | 2.389 GHz | -2.5 % | -10.64 dB | 1.832 |
+| 3 | 37.319 mm | **2.426 GHz** | **-1.0 %** | -10.27 dB | 1.884 |
+
+Converged within 1 % in **three** FDTD runs.  The practical consequence: for this
+geometry the transmission-line synthesis needs a **-9.8 % length correction**
+(41.379 -> 37.319 mm) before the design resonates where intended.
+
+Caveat that must travel with this result: the loop tunes the *resonance* only.
+The match at the converged point is VSWR 1.88, so the feed needs its own tuning
+(``scripts/tune_inset.py``).  Nothing here validates the absolute accuracy of the
+model; it makes the model usable by correcting a known bias.
+
 ## Test suite
 
 ```
