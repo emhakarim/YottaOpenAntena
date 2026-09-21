@@ -1,12 +1,12 @@
 """Guard against machine-specific absolute paths in the research scripts.
 
-Review item S-1: every script under ``scripts/`` used to hardcode
-``ROOT = Path(r"D:\\OpenAntenna")`` (plus an absolute ``OPENEMS_ROOT``), so the
-evidence quoted in ``docs/verification.md`` could not be reproduced from the
+Review item S-1: the scripts under ``scripts/`` used to hardcode
+``ROOT = Path(r"D:\\OpenAntenna")`` (plus absolute ``OPENEMS_ROOT`` defaults), so
+the evidence quoted in ``docs/verification.md`` could not be reproduced from the
 repository by anybody else.  These tests keep that from coming back.
 
-They are deliberately textual: the scripts drive an external solver and cannot be
-executed in CI, but their *portability* can still be pinned.
+They are deliberately textual: most of the scripts drive an external solver and
+cannot run in CI, but their *portability* can still be pinned.
 """
 
 from __future__ import annotations
@@ -22,14 +22,26 @@ SCRIPTS = sorted((REPO_ROOT / "scripts").glob("*.py"))
 ABSOLUTE_DRIVE = re.compile(r"(?<![A-Za-z])[A-Za-z]:[\\/]")
 
 
+def _text(path: Path) -> str:
+    return path.read_text(encoding="utf-8-sig")
+
+
+#: scripts that import the package by putting the repository root on sys.path
+REPO_PATH_SCRIPTS = [p for p in SCRIPTS if "sys.path.insert(0, str(ROOT))" in _text(p)]
+#: scripts written to be executed (not imported), i.e. with a main() guard
+GUARDED_SCRIPTS = [p for p in SCRIPTS if 'if __name__ == "__main__"' in _text(p)]
+
+
 class TestResearchScriptsArePortable(unittest.TestCase):
     def test_the_scripts_are_actually_there(self):
         self.assertGreaterEqual(len(SCRIPTS), 8, "expected the research scripts to be present")
+        self.assertGreaterEqual(len(REPO_PATH_SCRIPTS), 8, "expected the repo-path scripts")
+        self.assertGreaterEqual(len(GUARDED_SCRIPTS), 8, "expected main()-guarded scripts")
 
     def test_no_absolute_drive_paths(self):
         offenders = []
         for path in SCRIPTS:
-            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            for number, line in enumerate(_text(path).splitlines(), start=1):
                 stripped = line.strip()
                 if stripped.startswith("#"):
                     continue
@@ -42,8 +54,8 @@ class TestResearchScriptsArePortable(unittest.TestCase):
         )
 
     def test_root_is_derived_from_the_repository(self):
-        for path in SCRIPTS:
-            text = path.read_text(encoding="utf-8")
+        for path in REPO_PATH_SCRIPTS:
+            text = _text(path)
             self.assertIn(
                 "__file__", text,
                 f"{path.name} must derive ROOT from its own location, not from a fixed drive",
@@ -53,6 +65,17 @@ class TestResearchScriptsArePortable(unittest.TestCase):
                 f"{path.name} must take parents[1] as the repository root",
             )
 
+    def test_the_openems_launcher_is_inside_the_repository(self):
+        """The scripts drive the solver through the committed launcher, not tools/."""
+        launcher = REPO_ROOT / "scripts" / "run_with_openems.py"
+        self.assertTrue(launcher.is_file(), "scripts/run_with_openems.py must exist")
+        for path in SCRIPTS:
+            text = _text(path)
+            self.assertNotIn(
+                '"tools" / "run_with_openems.py"', text,
+                f"{path.name} points at tools/run_with_openems.py, which is not in the repository",
+            )
+
 
 class TestScriptsDoNotRequireTheSolverToImport(unittest.TestCase):
     """Importing a script must not need openEMS (they guard main() themselves)."""
@@ -60,7 +83,7 @@ class TestScriptsDoNotRequireTheSolverToImport(unittest.TestCase):
     def test_modules_import_cleanly(self):
         import importlib.util
 
-        for path in SCRIPTS:
+        for path in GUARDED_SCRIPTS:
             spec = importlib.util.spec_from_file_location(f"_yotta_{path.stem}", path)
             module = importlib.util.module_from_spec(spec)
             try:
