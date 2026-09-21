@@ -78,6 +78,23 @@ class TestDebyeFit(unittest.TestCase):
         result = dispersion.fit_debye_1pole(self.freqs, self.eps_real, self.eps_imag)
         self.assertLess(result.rmse_total, 0.05)
 
+    def test_complex_wrapper_round_trips(self):
+        """Y-01: the wrapper used to forward eps'' with the wrong sign.
+
+        debye_eps() returns a negative imaginary part while fit_debye_1pole()
+        expects a positive loss term; the wrapper must convert, not forward.
+        """
+        freqs = [10.0 ** (6.0 + 4.0 * i / 24.0) for i in range(25)]
+        samples = [dispersion.debye_eps(f, EPS_INF, DELTA_EPS, TAU, 0.0) for f in freqs]
+        result = dispersion.fit_debye_from_complex(freqs, samples)
+        self.assertTrue(result.is_physical)
+        self.assertLess(result.rmse_total, 0.01)
+        self.assertAlmostEqual(result.params.eps_inf, EPS_INF, delta=0.05)
+        self.assertAlmostEqual(result.params.delta_eps, DELTA_EPS, delta=0.05)
+        ratio = result.params.tau_s / TAU
+        self.assertGreater(ratio, 0.5)
+        self.assertLess(ratio, 2.0)
+
     def test_fit_result_is_serialisable(self):
         result = dispersion.fit_debye_1pole(self.freqs, self.eps_real, self.eps_imag)
         payload = result.to_dict()

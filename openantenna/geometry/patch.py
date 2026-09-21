@@ -54,11 +54,20 @@ def patch_width(frequency_hz: float, epsilon_r: float) -> float:
 
 
 def effective_permittivity(epsilon_r: float, height_m: float, width_m: float) -> float:
-    """Effective permittivity ``ereff`` of the microstrip-like patch line."""
+    """Effective permittivity ``ereff`` of the microstrip-like patch line.
+
+    Wide-line expression (``W/h >= 1``).  Below ``W/h = 1`` Hammerstad's
+    narrow-line correction ``0.04*(1 - W/h)^2`` is added, otherwise the
+    wide-line form over-estimates ``ereff`` (review item Y-12).
+    """
     if height_m <= 0 or width_m <= 0 or epsilon_r <= 0:
         raise ValueError("epsilon_r, height_m and width_m must all be > 0")
     ratio = height_m / width_m
-    return 0.5 * (epsilon_r + 1.0) + 0.5 * (epsilon_r - 1.0) * (1.0 + 12.0 * ratio) ** -0.5
+    ereff = 0.5 * (epsilon_r + 1.0) + 0.5 * (epsilon_r - 1.0) * (1.0 + 12.0 * ratio) ** -0.5
+    w_over_h = width_m / height_m
+    if w_over_h < 1.0:
+        ereff += 0.5 * (epsilon_r - 1.0) * 0.04 * (1.0 - w_over_h) ** 2
+    return ereff
 
 
 def delta_length(height_m: float, epsilon_eff: float, width_m: float) -> float:
@@ -84,9 +93,57 @@ def resonant_frequency(
     epsilon_r: float, height_m: float, width_m: float, length_m: float
 ) -> float:
     """First-order resonance of an already-sized patch [Hz]."""
-    ereff = effective_permittivity(epsilon_r, height_m, width_m)
-    dl = delta_length(height_m, ereff, width_m)
-    return C0 / (2.0 * (length_m + 2.0 * dl) * math.sqrt(ereff))
+    eps_eff = effective_permittivity(epsilon_r, height_m, width_m)
+    delta_l = delta_length(height_m, eps_eff, width_m)
+    return C0 / (2.0 * (length_m + 2.0 * delta_l) * math.sqrt(eps_eff))
+
+
+def _validate_microstrip(epsilon_r: float, height_m: float) -> None:
+    """Single validation gate for a microstrip patch (review items Y-10, Y-11).
+
+    ``epsilon_r <= 1`` is rejected for every feed mode, instead of producing a
+    ``NaN`` bandwidth on one path and raising on another.
+    """
+    if epsilon_r <= 1.0:
+        raise ValueError(
+            f"epsilon_r must be > 1 for a microstrip patch, got {epsilon_r!r}; "
+            "a substrate in air cannot support a guided patch mode"
+        )
+    if height_m <= 0:
+        raise ValueError("height_m must be > 0")
+
+
+def substrate_is_electrically_thick(
+    height_m: float, frequency_hz: float, threshold: float = 0.01
+) -> bool:
+    """True when ``h / lambda0`` exceeds ``threshold``.
+
+    Single shared criterion for "the transmission-line model is no longer
+    reliable"; ``model.Project.check`` applies the same number so a design cannot
+    pass one path and fail the other (review item Y-11).
+    """
+    if height_m <= 0 or frequency_hz <= 0:
+        raise ValueError("height_m and frequency_hz must be > 0")
+    return height_m / wavelength0(frequency_hz) > threshold
+
+
+def resonant_frequency_cavity(
+    epsilon_r: float, height_m: float, width_m: float, length_m: float
+) -> float:
+    """Resonance from the **cavity model** - a genuinely different model.
+
+    Same fringing extension as the transmission-line model, but ``sqrt(eps_r)``
+    instead of ``sqrt(eps_eff)``.  Because ``eps_r > eps_eff`` the wave is slower
+    and this predicts a **lower** frequency than the transmission-line synthesis
+    (2.4007 GHz vs the 2.45 GHz target for the PTFE reference geometry).  The gap
+    between the two models is informative; the old "resonance check" merely
+    re-evaluated the synthesis formula and was an algebraic identity (review item
+    Y-04).
+    """
+    _validate_microstrip(epsilon_r, height_m)
+    eps_eff = effective_permittivity(epsilon_r, height_m, width_m)
+    dl = delta_length(height_m, eps_eff, width_m)
+    return C0 / (2.0 * (length_m + 2.0 * dl) * math.sqrt(epsilon_r))
 
 
 def estimate_fractional_bandwidth(
@@ -97,9 +154,9 @@ def estimate_fractional_bandwidth(
     Uses the widely quoted empirical relation
     ``B ~ 3.77 * (er-1)/er^2 * (h/lambda0) * (W/L)``.  It is an order-of-magnitude
     aid for a *matched* patch; it is not a substitute for a swept simulation.
+    ``epsilon_r <= 1`` is rejected by :func:`_validate_microstrip` instead of
+    returning ``NaN`` (review item Y-10).
     """
-    if epsilon_r <= 1.0:
-        return float("nan")
     lam0 = wavelength0(frequency_hz)
     return (
         3.77
@@ -161,11 +218,17 @@ class PatchDesign:
     height_m: float
     feed_mode: str = "inset"
     inset_depth_m: float = 0.0
+    frequency_cavity_hz: float = 0.0
     warnings: List[str] = field(default_factory=list)
 
     @property
     def frequency_error_hz(self) -> float:
-        return self.achieved_frequency_hz - self.target_frequency_hz
+        """Offset of the **cavity-model** cross-check, not of the synthesis.
+
+        The synthesis result is algebraic identity by construction; this property
+        deliberately reports the independent model (review item Y-04).
+        """
+        return self.frequency_cavity_hz - self.target_frequency_hz
 
     def to_dict(self) -> dict:
         return {
@@ -175,6 +238,7 @@ class PatchDesign:
             "delta_l_m": self.delta_l_m,
             "target_frequency_hz": self.target_frequency_hz,
             "achieved_frequency_hz": self.achieved_frequency_hz,
+            "frequency_cavity_hz": self.frequency_cavity_hz,
             "fractional_bandwidth_est": self.fractional_bandwidth_est,
             "epsilon_r": self.epsilon_r,
             "height_m": self.height_m,
@@ -190,8 +254,15 @@ class PatchDesign:
             f"patch W x L      : {self.width_m * 1e3:.3f} x {self.length_m * 1e3:.3f} mm",
             f"eps_eff          : {self.epsilon_eff:.4f}",
             f"fringing dL      : {self.delta_l_m * 1e3:.4f} mm (per side)",
-            f"resonance check  : {self.achieved_frequency_hz / 1e9:.4f} GHz "
-            f"(delta {self.frequency_error_hz / 1e6:+.3f} MHz)",
+            (
+                f"cavity cross-chk : {self.frequency_cavity_hz / 1e9:.4f} GHz "
+                f"(delta {self.frequency_error_hz / 1e6:+.1f} MHz vs target, "
+                "independent model)"
+            ),
+            (
+                "self-consistency : the synthesis formula re-evaluated - algebraic "
+                "identity, NOT a verification"
+            ),
             f"BW estimate      : ~{self.fractional_bandwidth_est * 100.0:.2f} % (VSWR<=2, crude)",
         ]
         if self.feed_mode == "inset":
@@ -210,6 +281,7 @@ def synthesize_patch(
 ) -> PatchDesign:
     """Design a rectangular patch for ``frequency_hz`` on a single layer."""
     _check(frequency_hz, epsilon_r, height_m)
+    _validate_microstrip(epsilon_r, height_m)
 
     width = patch_width(frequency_hz, epsilon_r)
     ereff = effective_permittivity(epsilon_r, height_m, width)
@@ -222,10 +294,11 @@ def synthesize_patch(
         )
 
     warnings: List[str] = []
-    if height_m / wavelength0(frequency_hz) > 0.01:
+    if substrate_is_electrically_thick(height_m, frequency_hz):
         warnings.append(
             "Substrate is electrically thick (h/lambda0 > 0.01): the transmission-line "
-            "model is no longer reliable, expect a resonance shift and surface waves."
+            "model is no longer reliable, expect a resonance shift and surface waves. "
+            "(Same criterion as model.Project.check - review item Y-11.)"
         )
     if epsilon_r > 12:
         warnings.append(
@@ -250,6 +323,7 @@ def synthesize_patch(
         delta_l_m=dl,
         target_frequency_hz=frequency_hz,
         achieved_frequency_hz=resonant_frequency(epsilon_r, height_m, width, length),
+        frequency_cavity_hz=resonant_frequency_cavity(epsilon_r, height_m, width, length),
         fractional_bandwidth_est=estimate_fractional_bandwidth(
             epsilon_r, height_m, width, length, frequency_hz
         ),

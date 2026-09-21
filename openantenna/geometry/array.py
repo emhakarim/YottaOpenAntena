@@ -152,11 +152,19 @@ def build_array_layout(
             "Spacing > 0.5 lambda0: grating lobes (and, for a finite array, high "
             "sidelobes) are expected for wide scan angles."
         )
-    if min(array.spacing_x_lambda0, array.spacing_y_lambda0) < 0.5 and element is not None:
-        if element.width_m > min(dx, dy):
+    if element is not None and layout.element_count > 1:
+        # Per-axis check: the patch has two dimensions, so comparing only the
+        # width lets an overlapping array through (review item Y-07).  The old
+        # `min(spacing) < 0.5` gate is gone for the same reason.
+        if element.width_m > dx:
             warnings.append(
-                f"Element width {element.width_m * 1e3:.3f} mm exceeds the element pitch "
-                f"{min(dx, dy) * 1e3:.3f} mm: the patches physically overlap."
+                f"Element width {element.width_m * 1e3:.3f} mm exceeds the x pitch "
+                f"{dx * 1e3:.3f} mm: patches overlap along x."
+            )
+        if element.length_m > dy:
+            warnings.append(
+                f"Element length {element.length_m * 1e3:.3f} mm exceeds the y pitch "
+                f"{dy * 1e3:.3f} mm: patches overlap along y."
             )
     if layout.element_count >= 16:
         warnings.append(
@@ -218,17 +226,29 @@ def array_factor_plane(
     plane: str = "e",
     scan_theta_rad: float = 0.0,
     scan_phi_rad: float = 0.0,
+    weights: Sequence[complex] | None = None,
+    normalise: str = "plane",
 ) -> List[Tuple[float, float]]:
-    """Array factor magnitude in dB over one principal plane.
+    """Array factor magnitude in dB over one principal *coordinate* cut.
 
-    ``plane="e"`` sweeps theta with phi = 0 (x-z plane), ``plane="h"`` sweeps
-    theta with phi = 90 deg (y-z plane).  Returns ``[(angle_deg, af_db), ...]``
-    normalised so that the maximum is 0 dB.
+    ``plane="e"`` sweeps theta with phi = 0 (the **x-z cut**), ``plane="h"``
+    sweeps theta with phi = 90 deg (the **y-z cut**).  These are coordinate cuts,
+    not the physical E-plane/H-plane of a real patch - the old labels invited
+    that confusion (review item Y-14).
+
+    ``weights`` allows an amplitude taper to be plotted.  ``normalise="plane"``
+    (default) scales to the peak *within this cut*; ``normalise="global"``
+    divides by the total array-factor peak over all directions, so a beam steered
+    out of the cut no longer shows as 0 dB.
     """
     if plane not in ("e", "h"):
         raise ValueError("plane must be 'e' or 'h'")
+    if normalise not in ("plane", "global"):
+        raise ValueError("normalise must be 'plane' or 'global'")
     if n_points < 3:
         raise ValueError("n_points must be >= 3")
+    if weights is not None and len(weights) != len(positions_m):
+        raise ValueError("weights and positions must have the same length")
 
     phi = 0.0 if plane == "e" else math.pi / 2.0
     samples: List[Tuple[float, float]] = []
@@ -240,13 +260,39 @@ def array_factor_plane(
                 frequency_hz,
                 theta,
                 phi,
+                weights=weights,
                 scan_theta_rad=scan_theta_rad,
                 scan_phi_rad=scan_phi_rad,
             )
         )
         samples.append((math.degrees(theta), value))
 
-    peak = max(value for _, value in samples) or 1.0
+    if normalise == "plane":
+        peak = max(value for _, value in samples) or 1.0
+    else:
+        # Global normalisation: peak of the array factor over all directions on a
+        # coarse sphere, so a beam steered out of this cut cannot masquerade as 0 dB.
+        peak = 0.0
+        n_theta = n_phi = 61
+        for i in range(n_theta):
+            theta = math.pi * i / (n_theta - 1)
+            for j in range(n_phi):
+                phi_global = 2.0 * math.pi * j / (n_phi - 1)
+                peak = max(
+                    peak,
+                    abs(
+                        array_factor(
+                            positions_m,
+                            frequency_hz,
+                            theta,
+                            phi_global,
+                            weights=weights,
+                            scan_theta_rad=scan_theta_rad,
+                            scan_phi_rad=scan_phi_rad,
+                        )
+                    ),
+                )
+        peak = peak or 1.0
     return [
         (angle, 20.0 * math.log10(max(value / peak, 1e-12))) for angle, value in samples
     ]

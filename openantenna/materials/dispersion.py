@@ -435,6 +435,10 @@ def fit_debye_from_complex(
     return fit_debye_1pole(
         freqs_hz,
         [e.real for e in samples],
-        [e.imag for e in samples],
+        # Sign convention: debye_eps() returns a NEGATIVE imaginary part, while
+        # fit_debye_1pole() expects eps'' as a POSITIVE loss term (see
+        # _lsq_for_tau and apparent_tan_delta).  Forwarding e.imag unchanged
+        # inverted the sign and produced non-physical fits -- review item Y-01.
+        [-e.imag for e in samples],
         **kwargs,
     )

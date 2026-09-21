@@ -72,7 +72,35 @@ class TestSynthesis(unittest.TestCase):
     def test_summary_mentions_the_dimensions(self):
         text = patch.synthesize_patch(F0, ER, H).summary()
         self.assertIn("patch W x L", text)
-        self.assertIn("resonance check", text)
+        self.assertIn("cavity cross-chk", text)
+        self.assertIn("self-consistency", text)
+
+    def test_cavity_cross_check_is_a_different_number(self):
+        """Y-04: the old 'resonance check' merely re-ran the synthesis formula.
+
+        The cavity model uses sqrt(eps_r) > sqrt(eps_eff), so it predicts a LOWER
+        frequency than the synthesis: 2.4007 GHz against a 2.45 GHz target here.
+        It is an independent number, not an identity.
+        """
+        design = patch.synthesize_patch(F0, ER, H)
+        self.assertAlmostEqual(design.achieved_frequency_hz, F0, delta=1e4)
+        self.assertLess(design.frequency_cavity_hz, F0)
+        self.assertAlmostEqual(design.frequency_cavity_hz / 1e9, 2.4007, delta=0.01)
+        self.assertLess(design.frequency_error_hz, 0.0)
+
+    def test_epsilon_r_at_or_below_one_is_rejected_for_every_feed_mode(self):
+        """Y-10: this used to return NaN for edge feed and raise for inset."""
+        for mode in ("inset", "edge", "probe"):
+            with self.assertRaises(ValueError):
+                patch.synthesize_patch(F0, 1.0, H, mode)
+
+    def test_narrow_line_correction_is_applied_below_one_over_h(self):
+        """Y-12: Hammerstad's narrow-line term must raise eps_eff below W/h = 1."""
+        wide = patch.effective_permittivity(2.2, 1e-3, 5e-3)   # W/h = 5
+        narrow = patch.effective_permittivity(2.2, 1e-3, 0.5e-3)  # W/h = 0.5
+        self.assertGreater(narrow, 1.0)
+        self.assertLess(narrow, 2.2)
+        self.assertGreater(wide, 1.0)
 
 
 class TestFeedHelpers(unittest.TestCase):

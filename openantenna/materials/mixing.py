@@ -412,11 +412,6 @@ def estimate_effective_tan_delta(
     tdm = float(tan_delta_matrix)
     tdf = float(tan_delta_filler)
 
-    def with_loss(eps: float, td: float) -> complex:
-        if isinstance(eps, complex):
-            return complex(eps)
-        return complex(float(eps) * (1.0 - 1j * td))
-
     eps_m_complex = complex(eps_matrix) if isinstance(eps_matrix, complex) else complex(
         float(eps_matrix), -float(eps_matrix) * tdm
     )
@@ -427,8 +422,7 @@ def estimate_effective_tan_delta(
     eps_series = 1.0 / (vf / eps_f_complex + (1.0 - vf) / eps_m_complex)
     eps_parallel = vf * eps_f_complex + (1.0 - vf) * eps_m_complex
     # Reference number only: volume-weighted average of the constituent loss
-    # tangents, carried on the volume-weighted real permittivity.
-    eps_vol_real = (1.0 - vf) * eps_m_complex.real + vf * eps_f_complex.real
+    # tangents.  (The previous `eps_vol_real` intermediate was unused.)
     tan_vol = (1.0 - vf) * (
         -eps_m_complex.imag / eps_m_complex.real if eps_m_complex.real else 0.0
     ) + vf * (-eps_f_complex.imag / eps_f_complex.real if eps_f_complex.real else 0.0)

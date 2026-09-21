@@ -62,6 +62,18 @@ class TestLayout(unittest.TestCase):
         layout = array.build_array_layout(cfg, F0, self.design)
         self.assertFalse(any("grating" in w.lower() for w in layout.warnings))
 
+    def test_element_length_over_y_pitch_is_flagged(self):
+        """Y-07: the old overlap check compared only the element width."""
+        cfg = ArrayConfig(nx=4, ny=4, spacing_x_lambda0=0.2, spacing_y_lambda0=0.2)
+        layout = array.build_array_layout(cfg, F0, self.design)
+        self.assertTrue(any("along y" in w for w in layout.warnings))
+        self.assertTrue(any("along x" in w for w in layout.warnings))
+
+    def test_roomy_array_has_no_overlap_warning(self):
+        cfg = ArrayConfig(nx=4, ny=4, spacing_x_lambda0=0.5, spacing_y_lambda0=0.5)
+        layout = array.build_array_layout(cfg, F0, self.design)
+        self.assertFalse(any("overlap" in w for w in layout.warnings))
+
     def test_summary_reports_the_aperture(self):
         layout = array.build_array_layout(ArrayConfig(nx=4, ny=4), F0, self.design)
         text = layout.summary()

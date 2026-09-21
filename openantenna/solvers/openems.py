@@ -44,7 +44,7 @@ from typing import Any, Dict, Optional
 
 from ..geometry.array import build_array_layout
 from ..geometry.patch import ground_plane_size, synthesize_patch
-from ..model.project import Project
+from ..model.project import C0, Project
 from .base import SolverAdapter, SolverRun, SolverStatus, SolverUnavailableError
 
 GENERATOR_VERSION = "0.1.0"
@@ -118,10 +118,11 @@ W_PATCH = $W_PATCH         # patch width along x [m]
 L_PATCH = $L_PATCH         # patch length along y [m]
 GROUND_X = $GROUND_X       # ground plane size along x [m]
 GROUND_Y = $GROUND_Y       # ground plane size along y [m]
-CONDUCTOR_KAPPA = $CONDUCTOR_KAPPA   # conductor conductivity [S/m]
+CONDUCTOR_MODEL = "$CONDUCTOR_MODEL"   # metals are ideal PEC: conductor loss is NOT modelled
 
 FEED_X = $FEED_X
 FEED_Y = $FEED_Y
+FEED_INSET = $FEED_INSET
 FEED_Z0 = $FEED_Z0         # port reference impedance [ohm]
 
 MESH_MAX_RES = C0 / F_MAX / $MESH_CELLS_PER_WAVELENGTH
@@ -196,12 +197,20 @@ for index, (x0, y0) in enumerate(ELEMENTS, start=1):
         priority=3,
     )
 
-# Feed: a single lumped port through the substrate.  ``edges2grid`` snaps the
-# port box onto the mesh; without it openEMS reports
-# "Unused primitive (type: Box) ... port_excite", the port never excites and
-# every S11 value comes out NaN.
-# NOTE: a real NxM array also needs a feed network and one port per element
-# (or a proper corporate-feed model).  Phase 1 models ONE port only.
+# Feed realisation.  CAREFUL - what this actually models: a *vertical lumped
+# port* from the ground plane up through the substrate to the patch, i.e. a
+# probe/coax feed.  FEED_Y is shifted by the inset depth, so feed_mode="inset"
+# only moves the probe; it is NOT a coplanar inset line with a notch.  The
+# closed-form inset formula used by the synthesis describes a coplanar inset
+# feed, so this model cannot validate that formula (review item Y-19).
+#
+# ``edges2grid`` snaps the port box onto the mesh; without it openEMS reports
+# "Unused primitive (type: Box) ... port_excite", the port never excites and every
+# S11 value comes out NaN.
+# NOTE: a real NxM array also needs a feed network and one port per element (or a
+# proper corporate-feed model).  Phase 1 models ONE port only.
+print("CONDUCTOR: %s (conductor loss not modelled)" % CONDUCTOR_MODEL)
+print("FEED: vertical lumped port (probe); inset depth = %.3f mm" % (FEED_INSET * 1e3))
 port = FDTD.AddLumpedPort(
     1,
     FEED_Z0,
@@ -456,8 +465,7 @@ class OpenEMSSolver(SolverAdapter):
             feed_x = 0.0
             feed_y = length / 2.0
 
-        conductor_kappa = 5.8e7
-        conductor_thickness = 35e-6
+        conductor_model = "PEC"
 
         def fmt(value: float) -> str:
             return f"{value:.10g}"
@@ -479,9 +487,10 @@ class OpenEMSSolver(SolverAdapter):
             L_PATCH=fmt(length),
             GROUND_X=fmt(ground_x),
             GROUND_Y=fmt(ground_y),
-            CONDUCTOR_KAPPA=fmt(conductor_kappa),
+            CONDUCTOR_MODEL=conductor_model,
             FEED_X=fmt(feed_x),
             FEED_Y=fmt(feed_y),
+            FEED_INSET=fmt(project.patch.feed_inset_m or design.inset_depth_m),
             FEED_Z0=fmt(50.0),
             MESH_CELLS_PER_WAVELENGTH=self.mesh_cells_per_wavelength,
             MESH_SUBSTRATE_CELLS=self.substrate_cells,
@@ -502,17 +511,28 @@ class OpenEMSSolver(SolverAdapter):
         (run_path / self.script_name).write_text(self.render_script(project), encoding="utf-8")
 
         warnings = project.check()
+        lambda_min = C0 / project.sweep.stop_hz
         meta = {
             "solver": self.name,
             "generator_version": GENERATOR_VERSION,
             "project": project.name,
             "verified": False,
+            "conductor_model": "PEC (ideal; conductor loss is not modelled) - review item Y-03",
             "mesh": {
                 "cells_per_wavelength": self.mesh_cells_per_wavelength,
                 "substrate_cells": self.substrate_cells,
                 "air_margin_lambda": self.air_margin_lambda,
                 "air_top_lambda": self.air_top_lambda,
+                "air_margin_m": self.air_margin_lambda * lambda_min,
+                "free_space_to_pml_m": self.air_margin_lambda * lambda_min,
+                "pml_cells": 8,
+                "pml_thickness_m": 8 * lambda_min / self.mesh_cells_per_wavelength,
                 "converged": False,
+                "note": (
+                    "free_space_to_pml_m is the nominal gap between the ground-plane "
+                    "edge and the absorbing boundary; it is recorded so this quantity "
+                    "can be checked instead of guessed (review item Y-18)"
+                ),
             },
             "dielectric_loss": {
                 "model": self.loss_model,

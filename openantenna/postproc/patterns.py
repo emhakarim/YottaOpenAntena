@@ -22,6 +22,11 @@ def dipole_element_pattern(theta_rad: float, length_lambda: float = 0.5) -> floa
     ``F(theta) = [cos(kL/2 cos t) - cos(kL/2)] / sin(t)``, with
     ``kL/2 = pi * length_lambda``.  ``length_lambda=0.5`` gives the familiar
     half-wave dipole.  Undefined (0) exactly on the axis.
+
+    CAREFUL - argument contract: the second positional argument is the dipole
+    *length in wavelengths*, not an azimuth angle.  Use :func:`dipole_element`
+    when you need the ``f(theta, phi)`` signature that
+    :func:`array_pattern_product` expects (review item Y-02).
     """
     if length_lambda <= 0:
         raise ValueError("length_lambda must be > 0")
@@ -30,6 +35,16 @@ def dipole_element_pattern(theta_rad: float, length_lambda: float = 0.5) -> floa
         return 0.0
     half = math.pi * length_lambda
     return abs((math.cos(half * math.cos(theta_rad)) - math.cos(half)) / sin_theta)
+
+
+def dipole_element(theta_rad: float, phi_rad: float, length_lambda: float = 0.5) -> float:
+    """Dipole amplitude pattern adapted to the ``f(theta, phi)`` contract.
+
+    ``phi`` is accepted and ignored: a thin dipole aligned with z is rotationally
+    symmetric in phi.  Use this -- not :func:`dipole_element_pattern` -- as the
+    ``element_pattern`` argument of :func:`array_pattern_product`.
+    """
+    return dipole_element_pattern(theta_rad, length_lambda)
 
 
 def array_pattern_product(
@@ -43,6 +58,11 @@ def array_pattern_product(
     scan_phi_rad: float = 0.0,
 ) -> float:
     """Pattern multiplication: ``|AF| * |element pattern|``.
+
+    ``element_pattern`` must have the signature ``f(theta_rad, phi_rad)``.  For a
+    dipole use :func:`dipole_element`; passing :func:`dipole_element_pattern`
+    directly would be interpreted as ``length_lambda=phi`` and is wrong
+    (review item Y-02).
 
     This is the standard approximation for an array of identical elements whose
     mutual coupling is neglected.  It is invalid near scan blindness and for
@@ -72,9 +92,14 @@ def directivity_from_pattern(
 ) -> float:
     """Numerical directivity (linear) from a far-field *amplitude* function.
 
-    Uses the standard ``D = 4*pi*|F|max^2 / integral(|F|^2 sin(theta) dtheta dphi)``
-    with a simple midpoint/trapezoidal rule.  The grid must be a regular
-    rectangular ``theta`` x ``phi`` grid.
+    ``D = 4*pi*|F|max^2 / integral(|F|^2 sin(theta) dtheta dphi)`` using
+    **trapezoidal** weights (endpoints in each dimension count half), which
+    removes the systematic under-estimate of a plain rectangle rule (review item
+    Y-13).
+
+    The grid must be a regular rectangular ``theta`` x ``phi`` grid.  The peak is
+    taken from the grid samples, so a very sharp beam needs a fine grid; the
+    golden-value tests on dipoles (theory 1.5 and 1.641) guard the accuracy.
     """
     thetas = list(theta_rad_values)
     phis = list(phi_rad_values)
@@ -86,14 +111,21 @@ def directivity_from_pattern(
     if d_theta <= 0 or d_phi <= 0:
         raise ValueError("grids must be strictly increasing")
 
+    def trap_weight(index: int, count: int) -> float:
+        if count == 2:
+            return 1.0
+        return 0.5 if index in (0, count - 1) else 1.0
+
     total = 0.0
     peak = 0.0
-    for theta in thetas:
+    for i, theta in enumerate(thetas):
         sin_theta = math.sin(theta)
-        for phi in phis:
+        w_theta = trap_weight(i, len(thetas))
+        for j, phi in enumerate(phis):
             value = abs(pattern(theta, phi))
             peak = max(peak, value)
-            total += value * value * sin_theta * d_theta * d_phi
+            w_phi = trap_weight(j, len(phis))
+            total += w_theta * w_phi * value * value * sin_theta * d_theta * d_phi
     if total <= 0.0:
         raise ValueError("pattern integrates to zero")
     return 4.0 * math.pi * peak * peak / total
@@ -121,6 +153,11 @@ def efficiency_budget(
             "radiated_power_w cannot exceed accepted_power_w; check which reference "
             "plane each number was measured at"
         )
+    if abs(s11) > 1.0 + 1e-12:
+        raise ValueError(
+            f"|s11| = {abs(s11):.4g} > 1 is not physical for a passive antenna; "
+            "check the reflection coefficient (review item Y-08)"
+        )
 
     radiation_efficiency = radiated_power_w / accepted_power_w
     mismatch_factor = 1.0 - abs(s11) ** 2
@@ -146,9 +183,21 @@ def gain_dbi(directivity_linear: float, efficiency_linear: float) -> float:
 
 
 def aperture_directivity(
-    size_x_m: float, size_y_m: float, frequency_hz: float, aperture_efficiency: float = 1.0
+    size_x_m: float,
+    size_y_m: float,
+    frequency_hz: float,
+    aperture_efficiency: float = 1.0,
+    allow_small: bool = False,
 ) -> float:
-    """Upper-bound directivity of a uniform rectangular aperture (linear)."""
+    """Upper-bound directivity of a large, uniformly illuminated aperture (linear).
+
+    ``D = 4*pi*A/lambda^2`` is an upper bound **only** for a large uniform
+    aperture.  Applied to a small radiator it *under*-states the directivity
+    badly (a single 49 x 41 mm patch at 2.45 GHz comes out near 2.3 dBi against a
+    realistic 7-8 dBi), so this function refuses small apertures unless
+    ``allow_small=True`` is given explicitly (review item Y-06).  For real
+    element patterns use :func:`directivity_from_pattern`.
+    """
     if size_x_m <= 0 or size_y_m <= 0:
         raise ValueError("aperture dimensions must be > 0")
     if frequency_hz <= 0:
@@ -156,4 +205,10 @@ def aperture_directivity(
     if not 0.0 < aperture_efficiency <= 1.0:
         raise ValueError("aperture_efficiency must be in (0, 1]")
     lam0 = 299792458.0 / frequency_hz
+    if not allow_small and min(size_x_m, size_y_m) < lam0:
+        raise ValueError(
+            f"aperture {size_x_m:.4g} x {size_y_m:.4g} m is smaller than one wavelength "
+            f"({lam0:.4g} m): D = 4*pi*A/lambda^2 would under-state the directivity. "
+            "Use directivity_from_pattern(), or pass allow_small=True to get the bound anyway."
+        )
     return aperture_efficiency * 4.0 * math.pi * size_x_m * size_y_m / (lam0 * lam0)

@@ -284,14 +284,15 @@ class Project:
             )
 
         substrate_thickness = self.substrate.total_thickness_m
-        if self.patch.is_synthesised() and self.patch.length_m is not None:
-            ratio = substrate_thickness / self.patch.length_m
-            if ratio > 0.1:
-                warnings.append(
-                    f"Substrate thickness is {ratio:.2f} x patch length: surface-wave "
-                    "excitation and a shift away from the transmission-line model are "
-                    "likely. Verify with a full-wave run."
-                )
+        lam0 = C0 / self.sweep.center_hz
+        h_over_lambda = substrate_thickness / lam0
+        if h_over_lambda > 0.01:
+            warnings.append(
+                f"Substrate is electrically thick (h/lambda0 = {h_over_lambda:.4f} > 0.01): "
+                "surface-wave excitation and a shift away from the transmission-line "
+                "model are likely; verify with a full-wave run. (Same criterion as "
+                "geometry.patch.substrate_is_electrically_thick - review item Y-11.)"
+            )
         return warnings
 
     def summary(self) -> str:

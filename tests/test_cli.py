@@ -78,7 +78,7 @@ class TestDesignCommands(unittest.TestCase):
     def test_patch_synthesis(self):
         result = run_cli("design", "patch", "--freq", "2.45e9", "--material", "PTFE", "--h", "0.0016")
         self.assertIn("patch W x L", result.stdout)
-        self.assertIn("resonance check", result.stdout)
+        self.assertIn("cavity cross-chk", result.stdout)
 
     def test_patch_writes_a_project_document(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openantenna"
+version = "0.1.0"
+description = "Open-source antenna analysis and design toolkit: material exploration, analytic synthesis, and a openEMS model generator"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "OpenAntenna contributors" }]
+keywords = ["antenna", "electromagnetics", "FDTD", "openEMS", "RF", "microwave", "patch antenna"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+# The core has NO required dependency on purpose: it is standard-library only.
+dependencies = []
+
+[project.optional-dependencies]
+# Analysis and plotting (optional).
+analysis = ["numpy>=2.0", "scipy>=1.14", "matplotlib>=3.8", "scikit-rf>=1.5", "h5py>=3.10"]
+gui = ["PySide6-Essentials>=6.7", "matplotlib>=3.8"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+openantenna = "openantenna.cli:main"
+
+[project.gui-scripts]
+openantenna-gui = "openantenna.gui:main"
+
+[project.urls]
+Repository = "https://github.com/emhakarim/YottaOpenAntena"
+
+[tool.setuptools]
+packages = [
+    "openantenna",
+    "openantenna.materials",
+    "openantenna.model",
+    "openantenna.geometry",
+    "openantenna.solvers",
+    "openantenna.postproc",
+    "openantenna.sweep",
+    "openantenna.store",
+    "openantenna.gui",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

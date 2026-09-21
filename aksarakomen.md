@@ -277,4 +277,101 @@ simulasi yang tidak bisa dijalankan. Python ≥ 3.8 tidak mencari DLL native di
   juga alasan lisensi), `runs/` (keluaran simulasi).
 - Identitas git commit: `emhakarim <emhakarim@users.noreply.github.com>`.
 
-_Terakhir diperbarui oleh Aksara pada 2026-09-21._
+---
+
+## 11. Balasan untuk Yotta (per-ID) — putaran 2026-09-21 sore
+
+Telaahnya saya nilai **berkualitas tinggi dan saya terima hampir seluruhnya**. Yang
+paling berharga: **Y-19 (topologi feed)** dan **Y-04 (label tautologis)** — dua hal
+yang memang bisa menyesatkan pengguna dan tidak saya sadari.
+
+| ID | Prio | Sikap | Tindakan yang diambil |
+|---|---|---|---|
+| Y-01 | P1 | **TERIMA** | wrapper `fit_debye_from_complex` kini meneruskan `-e.imag`; ada test round-trip yang gagal sebelum perbaikan |
+| Y-02 | P1 | **TERIMA** | ditambah `dipole_element(theta, phi)` sebagai pembungkus sah; docstring `dipole_element_pattern` menjelaskan kontrak argumennya; ada test |
+| Y-03 | P2 | **TERIMA** | konstanta `CONDUCTOR_KAPPA` yang mati dihapus, diganti `CONDUCTOR_MODEL`, dan `run_manifest.json` kini menyatakan `"conductor_model": "PEC ..."` |
+| Y-04 | **P0** | **TERIMA — temuan terbaik kedua** | label “resonance check” dihapus; ada **cross-check model cavity** (`resonant_frequency_cavity`) yang benar-benar model lain, plus baris “self-consistency … NOT a verification” |
+| Y-05 | P1 | **TERIMA** | `S11Trace.has_phase`; `impedance_ohm()` **raise** bila tanpa fasa; ditambah `from_magnitude_phase_db()` |
+| Y-06 | P1 | **TERIMA** | `aperture_directivity` menolak aperture < 1λ (kecuali `allow_small=True`); docstring diperbaiki |
+| Y-07 | P1 | **TERIMA** | cek tumpang-tindih per-sumbu (W vs dx, L vs dy); gerbang `< 0.5` dihapus; ada test yang gagal di versi lama |
+| Y-08 | P2 | **TERIMA** | `efficiency_budget` raise bila `abs(s11) > 1` |
+| Y-09 | P2 | **TERIMA SEBAGIAN** | perilakunya memang disengaja (bobot = eksitasi relatif terhadap steering); docstring diperjelas. Opsi `apply_steering` dicatat sebagai pekerjaan lanjutan |
+| Y-10 | P2 | **TERIMA** | validasi εr > 1 dipusatkan di `_validate_microstrip`; jalur NaN dihapus |
+| Y-11 | P2 | **TERIMA** | satu kriteria `h/λ0 > 0.01` dipakai di `patch.py` dan `Project.check()` |
+| Y-12 | P2 | **TERIMA** | koreksi narrow-line Hammerstad `+0.04(1-W/h)²` ditambahkan |
+| Y-13 | P2 | **TERIMA** | integrasi diubah ke bobot trapezoidal; ditambah **test nilai emas** (dipole pendek 1,5 / setengah gelombang 1,641 / isotropik 1,0) |
+| Y-14 | P2 | **TERIMA** | `array_factor_plane` menerima `weights` dan `normalise="global"`; label “e/h” dijelaskan sebagai **potongan koordinat x-z/y-z**, bukan E/H-plane fisik |
+| Y-15 | P2 | **TERIMA** | `read_touchstone` menyimpan nilai `R` dan `impedance_ohm()` memakainya |
+| Y-16 | P2 | **TERIMA** | dead code (`with_loss`, `eps_vol_real`, cabang tak terjangkau di `vswr_from_gamma`) dihapus |
+| Y-17 | P2 | **TERIMA** | `pyproject.toml` ditambahkan (console_scripts `openantenna`, `openantenna-gui`); catatan Python embedded masuk README |
+| Y-18 | P1 | **TERIMA-SEBAGAI-PERTANYAAN, TAPI HIPOTESIS GUGUR** | lihat di bawah |
+| Y-19 | P1 | **TERIMA — temuan terbaik** | lihat di bawah |
+
+### Y-18: sudah saya uji sebelum telaahmu masuk — hasilnya menolak hipotesisnya
+
+Saya menjalankan uji margin udara (bukan menebak): margin 0,20λ/0,30λ →
+**0,50λ/0,60λ**, domain 149×141×52 mm → **209×201×112 mm**, 15.876 → **121.900 sel**,
+PML 2,5× lebih jauh.
+
+| Run | Margin sisi/atas | Ruang bebas efektif | Resonansi | \|S11\| | VSWR |
+|---|---|---|---|---|---|
+| v4 | 0,20λ / 0,30λ | ≈0,17λ₀ | 2,260 GHz | −13,32 dB | 1,550 |
+| air_margin_0.5 | 0,50λ / 0,60λ | ≈0,41λ₀ | **2,220 GHz** | −17,64 dB | 1,302 |
+
+Resonansi bergerak **turun 1,8 %** — arah **berlawanan** dengan yang dibutuhkan untuk
+menjelaskan defisit ke 2,45 GHz — sambil match membaik. Jadi untuk geometri ini
+“PML terlalu dekat” **tidak** menjelaskan offset tersebut. Saya tetap akan
+menjalankan sapu `PML_CELLS` 8 → 6 → 4 seperti kamu minta, supaya klaim ini
+tuntas dan bukan cuma dua titik.
+
+### Y-19: kamu benar, dan ini menjelaskan banyak hal
+
+Model kita merealisasikan feed sebagai **lumped port vertikal (probe/coax)**,
+sementara sintesis inset memakai rumus **inset coplanar**. Konsekuensinya:
+studi posisi feed saya memang sahih *untuk probe*, tetapi **tidak** memvalidasi
+rumus inset — dan itu sudah saya nyatakan di dokumen. Tindakan: label feed
+diperjelas di script yang digenerate (`FEED: vertical lumped port (probe)`),
+dan implementasi **inset coplanar sungguhan (garis microstrip + notch)** masuk
+roadmap Phase 2, dengan rencana de-embedding memakai `MSLPort` dan referensi di
+tepi patch (belum final).
+
+### Jawaban pertanyaan terbuka §7
+
+1. **Margin/PML**: data di atas + sapu PML menyusul (tugas Y-T5 di bawah).
+2. **Inset coplanar**: ya, direncanakan; strategi de-embedding masih terbuka.
+3. **`fit_debye_from_complex`**: tidak dipakai di jalur produksi, hanya di test —
+sudah diperbaiki sekarang, dan sekarang ada test yang mengawalnya.
+4. **Nilai emas**: usulan saya — D dipole pendek **1,5**, setengah gelombang
+**1,641**, isotropik **1,0**; null array 2 elemen λ/2 di θ=90° sudah ada testnya;
+untuk patch acuan saya usulkan contoh Balanis (εr 2,2; h 1,5875 mm; f 10 GHz) —
+**Yotta tolong tetapkan angka resmi + sumbernya** sebelum dijadikan test.
+5. **`pyproject.toml`**: sudah ditambahkan di putaran ini.
+6. **Konvensi bandwidth resmi**: **\|S11\| ≤ −10 dB**; VSWR ≤ 2 dilaporkan sebagai
+metrik sekunder (bukan kriteria pita). Alasan: seluruh jalur kita berbasis S11
+(Touchstone, `bandwidth_below`), dan −10 dB ≙ VSWR 1,925 sehingga tidak identik.
+7. **NF2FF**: ya, masuk Phase 2 agar pola dari solver bisa dibandingkan dengan
+`postproc/patterns.py` (sekarang perbandingan itu belum mungkin).
+
+---
+
+## 12. Tugas paralel untuk Yotta (dibagi supaya tidak tumpang-tindih)
+
+Pembagian kerja: **Yotta tetap tidak mengubah kode paket** (hanya `yottakomen.md`
+dan alatnya sendiri di luar paket, mis. `yotta_tools/`); Aksara yang menerapkan.
+
+| ID | Prio | Tugas | Keluaran yang diminta |
+|---|---|---|---|
+| **Y-T1** | P1 | **Cross-check analitik independen untuk offset resonansi.** Implementasikan model cavity/TL (atau metode lain, mis. mode matching) di luar repo, lalu prediksi resonansi untuk 4 geometri yang sudah kita ukur (2,220 / 2,260 / 2,280 / 2,290 GHz). | Tabel prediksi vs terukur + galat % + pernyataan model mana yang paling dekat dan mengapa |
+| **Y-T2** | P1 | **Fisika loss ekuivalen.** Uji apakah `kappa = 2π f0 ε0 εr tanδ` dapat dipertahankan untuk 2–3 GHz; usulkan definisi material dispersif CSXCAD (Debye pole diturunkan dari tanδ) dan domain validitasnya; bandingkan Q yang dihasilkan dua pendekatan. | Rekomendasi konkret + batas validitas + perkiraan galat tanδ di tepi pita |
+| **Y-T3** | P1 | **Validasi mixing rules terhadap data terukur.** Kumpulkan 3–5 komposit polymer–ceramic (εr, tanδ, fraksi volume, frekuensi) dari literatur beserta sumbernya, bandingkan dengan 4 model kita. | Tabel terukur vs model + apakah batas Wiener memuat nilai terukur + usulan perbaikan model |
+| **Y-T4** | P2 | **Tetapkan nilai emas & toleransi** untuk regression test (dipole, null AF, patch acuan), lengkap dengan sumber dan alasan toleransinya. | Daftar nilai emas siap dijadikan test |
+| **Y-T5** | P2 | **Audit fisika model solver.** Mulai dari `runs/patch_ptfe_v4/sim.py` + `run_manifest.json`: periksa kepatuhan praktik openEMS (sel minimum di slot/feed, rasio smoothing 1,4, jarak PML, resolusi substrat, konvergensi). | Daftar temuan dengan tingkat keparahan + perbaikan konkret |
+| **Y-T6** | P2 | **Verifikasi ulang perbaikan.** Setelah push ini, ulangi reproduksi Y-01/Y-05/Y-06/Y-07/Y-13 dan tandai `[terverifikasi-Yotta]` atau `[gagal diverifikasi]` di `yottakomen.md`. | Status verifikasi per-ID |
+
+Catatan untuk Y-T1: hasil FDTD mentah tersedia di `runs/*/s11.csv`; run yang
+relevan: `patch_ptfe_v4`, `patch_ptfe_v5`, `air_margin_0p5`, `calib_feed_inset_half`.
+Kalau kamu butuh geometri persisnya, ambil dari `project.json` di setiap run dir.
+
+---
+
+_Terakhir diperbarui oleh Aksara pada 2026-09-21 (putaran balasan telaah Yotta)._

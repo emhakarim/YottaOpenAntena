@@ -19,12 +19,14 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 
 
 def vswr_from_gamma(gamma: float) -> float:
-    """VSWR from the magnitude of a reflection coefficient (0 <= |gamma| < 1)."""
+    """VSWR from the magnitude of a reflection coefficient.
+
+    The magnitude is taken internally, so any sign of the input is accepted.
+    ``|gamma| >= 1`` (active or unphysical) returns ``inf``.
+    """
     gamma = abs(float(gamma))
     if gamma >= 1.0:
         return float("inf")
-    if gamma < 0:
-        raise ValueError("gamma must be a magnitude >= 0")
     return (1.0 + gamma) / (1.0 - gamma)
 
 
@@ -44,10 +46,20 @@ def _interp(x0: float, y0: float, x1: float, y1: float, target: float) -> float:
 
 @dataclass
 class S11Trace:
-    """A frequency trace of S11 (complex reflection coefficient)."""
+    """A frequency trace of S11 (complex reflection coefficient).
+
+    ``has_phase`` records whether the samples really carry phase.  Data built
+    from magnitudes alone (:meth:`from_magnitude_db`) has no phase, and every
+    phase-dependent quantity - only the input impedance here - is therefore
+    meaningless; :meth:`impedance_ohm` refuses to answer in that case (review
+    item Y-05).  ``reference_impedance_ohm`` carries the reference impedance
+    from a Touchstone option line when one was read (review item Y-15).
+    """
 
     frequencies_hz: List[float]
     s11: List[complex]
+    has_phase: bool = True
+    reference_impedance_ohm: float = 50.0
 
     def __post_init__(self) -> None:
         if len(self.frequencies_hz) != len(self.s11):
@@ -66,8 +78,31 @@ class S11Trace:
     def from_magnitude_db(
         cls, frequencies_hz: Sequence[float], magnitude_db: Sequence[float]
     ) -> "S11Trace":
+        """Build a phase-less trace from magnitudes (see :meth:`has_phase`)."""
         mags = [10.0 ** (db / 20.0) for db in magnitude_db]
-        return cls(list(frequencies_hz), [complex(m, 0.0) for m in mags])
+        return cls(list(frequencies_hz), [complex(m, 0.0) for m in mags], has_phase=False)
+
+    @classmethod
+    def from_magnitude_phase_db(
+        cls,
+        frequencies_hz: Sequence[float],
+        magnitude_db: Sequence[float],
+        phase_deg: Sequence[float],
+        reference_impedance_ohm: float = 50.0,
+    ) -> "S11Trace":
+        """Build a full trace from magnitude (dB) and phase (degrees) pairs."""
+        if not (len(frequencies_hz) == len(magnitude_db) == len(phase_deg)):
+            raise ValueError("frequencies, magnitudes and phases must have equal length")
+        values = [
+            cmath.rect(10.0 ** (db / 20.0), math.radians(phase))
+            for db, phase in zip(magnitude_db, phase_deg)
+        ]
+        return cls(
+            list(frequencies_hz),
+            values,
+            has_phase=True,
+            reference_impedance_ohm=reference_impedance_ohm,
+        )
 
     @classmethod
     def from_db_frequency_grid(
@@ -103,14 +138,26 @@ class S11Trace:
     def worst_match_db(self) -> float:
         return self.db()[self.worst_match_index()]
 
-    def impedance_ohm(self, z0_ohm: float = 50.0) -> List[complex]:
-        """Input impedance from S11 (ignores any transmission-line reference plane)."""
+    def impedance_ohm(self, z0_ohm: Optional[float] = None) -> List[complex]:
+        """Input impedance from S11, referred to the trace's reference impedance.
+
+        Raises when the trace has no phase information: with a forced-zero phase
+        the reactance would be silently wrong (review item Y-05).  Use
+        :meth:`from_magnitude_phase_db` for data that carries phase.
+        """
+        if not self.has_phase:
+            raise ValueError(
+                "this S11Trace has no phase information (built from magnitudes only), "
+                "so the input impedance is undefined; use from_magnitude_phase_db() or "
+                "read a Touchstone file with RI/MA/DB data"
+            )
+        z0 = self.reference_impedance_ohm if z0_ohm is None else z0_ohm
         out: List[complex] = []
         for s in self.s11:
             if abs(s - 1.0) < 1e-15:
                 out.append(complex(float("inf"), 0.0))
             else:
-                out.append(z0_ohm * (1.0 + s) / (1.0 - s))
+                out.append(z0 * (1.0 + s) / (1.0 - s))
         return out
 
     # ----------------------------------------------------------- bandwidth
@@ -219,6 +266,7 @@ def read_touchstone(path: str | Path) -> S11Trace:
     text = Path(path).read_text(encoding="utf-8")
     freq_scale = 1.0
     fmt = "ri"
+    reference_impedance_ohm = 50.0
     freqs: List[float] = []
     values: List[complex] = []
     seen_option = False
@@ -229,11 +277,18 @@ def read_touchstone(path: str | Path) -> S11Trace:
             continue
         if line.startswith("#"):
             tokens = line[1:].upper().split()
-            for token in tokens:
+            for index, token in enumerate(tokens):
                 if token.lower() in _FREQ_UNITS:
                     freq_scale = _FREQ_UNITS[token.lower()]
                 elif token in ("RI", "MA", "DB"):
                     fmt = token.lower()
+                elif token == "R" and index + 1 < len(tokens):
+                    # Touchstone option line: "... R <value>"; keep it so that
+                    # impedance_ohm() uses the right reference (review item Y-15).
+                    try:
+                        reference_impedance_ohm = float(tokens[index + 1])
+                    except ValueError:
+                        reference_impedance_ohm = 50.0
             seen_option = True
             continue
         if not seen_option:
@@ -256,4 +311,6 @@ def read_touchstone(path: str | Path) -> S11Trace:
 
     if not freqs:
         raise ValueError(f"no data rows found in {path}")
-    return S11Trace(freqs, values)
+    return S11Trace(
+        freqs, values, has_phase=True, reference_impedance_ohm=reference_impedance_ohm
+    )
