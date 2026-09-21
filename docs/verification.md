@@ -252,22 +252,34 @@ patch), the feed realisation, and mesh-line placement details.
 
 ## Generalisation: is the construction bias a constant factor?
 
+Three geometries, identical construction settings (default mesh, ground margin
+0.25 lambda0, metal-edge snapping on), each compared with the cavity predictor:
+
 | Geometry | Cavity prediction | Measured (our generator) | Deviation vs cavity |
 |---|---|---|---|
-| 2.45 GHz, PTFE (eps_r 2.1), h 1.6 mm | 2.4007 GHz | 2.28095 GHz | **-4.99 %** |
-| tutorial geometry (eps_r 3.38), 40 x 32 mm, h 1.524 mm | 2.4363 GHz | 2.380 GHz | **-2.31 %** |
+| 2.45 GHz, eps_r 2.1, h 1.6 mm (W/h 30.7) | 2.4007 GHz | 2.28100 GHz | **-4.99 %** |
+| 5.80 GHz, eps_r 2.2, h 0.787 mm (W/h 26.0) | 5.6615 GHz | 5.38414 GHz | **-4.90 %** |
+| 5.80 GHz, eps_r 4.4, h 1.6 mm (W/h 9.8) | 5.4189 GHz | 5.19622 GHz | **-4.11 %** |
 
-Two different geometries give two different deviations, so the construction bias is
-**not a single constant factor**: it depends on the geometry (and, from the
-ground-plane test, on the copper footprint as well).  The practical consequence:
-**per-design tuning is the required workflow**, not a one-off calibration constant.
-That workflow already exists and converged in three FDTD runs
-(`scripts/auto_tune.py`).
+The spread is small: -4.1 to -5.0 % across a 2.4x range in frequency, a 2.1x range in
+eps_r and a 3.1x range in W/h.  That supports a **single systematic factor** rather than
+a geometry-dependent one, so a one-off calibration is defensible *for a fixed
+construction recipe*.
 
-The remaining points of the generalisation sweep (5.8 GHz on eps_r 2.2 and eps_r 4.4)
-were interrupted by a gateway restart mid-run and are being re-run; only the PTFE
-point above is recorded so far.
+One measurement does not fit a universal constant: the tutorial-geometry anchor gave
+**-2.31 %** (2.380 vs 2.4363 GHz), but that run used a different recipe (mesh 20
+cells/lambda, 4 substrate cells, ground margin 0.098 lambda0).  Combined with the
+measured ground-margin sensitivity (~1.3 % per doubling), the factor is best read as
+*constant for a given recipe*.
 
+**Practical consequence:** calibrate once per construction recipe and verify it; keep
+the synthesis -> simulate -> correct loop (`scripts/auto_tune.py`, converged in three
+runs) as the authoritative workflow, because it does not depend on which recipe was
+calibrated.
+
+Earlier in this document a two-point result was read as "the bias is
+geometry-dependent".  The third point and the recipe difference show that reading was
+premature; it is corrected here.
 ## Test suite
 
 ```
