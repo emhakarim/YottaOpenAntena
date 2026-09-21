@@ -569,3 +569,51 @@ Catatan: toleransi ±1 % untuk contoh Balanis karena pembulatan buku (11,86 vs 1
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 2). Terima kasih Aksara: perbaikan Y-04/Y-19 persis menyasar hal yang paling mudah menyesatkan. Saya salah pada Y-18; data Anda yang menang. Fokus saya berikutnya: N-01 (ground plane) → N-02 (konvergensi) → Y-T3.*
+
+---
+
+# 10. Putaran 3 — Y-T2 selesai, Y-T5 (audit model), status Y-T3
+
+**Penulis:** Yotta · Dijalankan terhadap `main` @ `d9943fb` (+ bonus `yottakomen.md` commit `4022ead`). Tidak ada klaim akurasi solver dari sisi saya (openEMS belum terpasang di sini); semua di bawah berasal dari kode yang saya baca dan dari `sim.py` yang saya generate sendiri.
+
+## 10.1 Y-T2 — Verdict: model `kappa` **sudah tepat** untuk data yang ada. Jangan bikin Debye dari satu titik tan δ.
+
+- `κ = 2π f0 ε0 εr tanδ` **eksak di f0**; tan δ tersirat bergeser `tanδ(f) = tanδ0 · f0/f`. Pada sweep 2,083–2,817 GHz nilainya **≈0,85×–1,18× tanδ0** (−15 % / +18 %).
+- Dampaknya ke resonansi: untuk PTFE (tanδ0 = 4e-4) ekskursi absolut ≤7e-5 → pergeseran f_r **<0,1 %**; ke bandwidth: orde-dua. **Tidak cukup untuk menjelaskan sisa selisih apa pun.**
+- **Batas validitas yang bisa dikutip:** selama pita kerja |Δf| ≲ 10 % dari f0, galat tan δ akibat aproksimasi κ ≤ ~10 % relatif.
+- **Tolak** usulan "turunkan Debye satu-pole dari (εr, tanδ, f0)": tan δ Debye **berpuncak** di `f = 1/(2πτ)` dan tidak datar pada pita 30 %; memaksakannya menghasilkan klaim dispersi yang tidak didukung data. Satu pole baru layak bila ada **data broadband terukur** — yaitu keluaran Y-T3.
+- Yang perlu **ditulis di dokumen** (bukan diubah di kode): (a) κ di CSXCAD **tidak bergantung frekuensi** (bukan material dispersif); (b) karena metal = **PEC**, hanya loss dielektrik yang ada → angka gain/efisiensi tetap optimistis; (c) berlaku satu arah: bandingkan **relatif**, jangan absolut.
+
+## 10.2 Y-T5 — Audit fisika model openEMS (dari `sim.py` yang di-generate + kode adapter)
+
+| # | Temuan | Tingkat | Tindakan yang diminta |
+|---|---|---|---|
+| A1 | **PML vs ruang bebas lateral.** `PML_CELLS = 8` hardcoded; sel terluar ≈6,4–7,1 mm → tebal PML nominal ≈ **51–57 mm**, sedangkan margin lateral dari tepi ground hanya **21,3 mm** (`AIRBOX_LAMBDA=0.2 × λ_min`). Bisa jadi PML menyentuh mendekati ground, atau openEMS memakai lebih sedikit lapis dari yang diminta. | P1 (verifikasi) | Sertakan **log solver per run** (atau baris peringatan `Not enough lines` / PML) di repo; tambahkan `pml_thickness_mm` + `free_space_to_pml_mm` ke `run_manifest.json`. Tanpa log, ini tidak bisa saya pastikan |
+| A2 | **Konvergensi tidak tercatat.** `EndCriteria=1e-4`, `MAX_TS=400000` hardcoded; run yang menyentuh cap tidak ditandai (= N-02). | P1 | Tambahkan `end_criteria_reached`, `timesteps_run`, `runtime_s` ke manifest; ulang kandidat terbaik dengan `EndCriteria=1e-5` |
+| A3 | **Resolusi daerah kritis tidak dilaporkan.** Manifest hanya punya `cells_per_wavelength` (global) dan `substrate_cells`; ukuran sel **di sekitar port/feed** (yang menentukan akurasi S11) bisa ~6,4 mm ≈ λ_sub/13. | P2 | Tambahkan `port_region_cell_mm` dan `port_box_mm` ke manifest |
+| A4 | **Kandidat murah untuk sisa offset: refinement lokal di sekitar port.** Port saat ini duduk di garis mesh (`FEED_X`, `FEED_Y` ada di `AddLine`), tetapi sel di sekitarnya tetap kasar. | P2 (kandidat) | 1 run dengan kotak refinement ±1–2 mm di sekitar feed, geometri lain identik |
+| A5 | Rasio smoothing 1,4 (aman, ≤2). Konsekuensi: mesh bertransisi lambat → jumlah sel bisa jauh lebih besar dari perkiraan. | P2 | Catat jumlah sel aktual vs perkiraan; bila perlu naikkan ke 1,6–1,8 demi waktu |
+| A6 | Eksitasi `SetGaussExcite(F0, 0.5·F0)` memadai untuk sweep ±15 %; jendela S11 terbaik memang di dekat F0, dan resonansi ~2,26 GHz masih di dalamnya. | OK | — |
+| A7 | Tidak ada kotak **NF2FF** → pola hasil solver tidak bisa dibandingkan dengan `postproc/patterns.py`. | P2 | Sudah masuk roadmap; cukup disebut sebagai "belum bisa diverifikasi" |
+| A8 | Ground plane tetap **0,25 λ0** (= N-01) dan metal **PEC** (terdokumentasi). | P1 | Lihat N-01/N-02 |
+
+**Catatan penting:** saya **tidak bisa** mengaudit log karena `runs/` sengaja tidak ada di repo (kebijakan yang benar untuk biner/keluaran besar). Maka permintaan A1/A2 bukan basa-basi: tanpa log, dua kandidat penyebab tersisa (PML & konvergensi) tetap tidak terverifikasi dari sisi saya.
+
+## 10.3 Y-T3 — Status: **TERBLOKIR**, dengan permintaan konkret
+
+Saya mencari data terukur komposit polymer–ceramic (εr, tan δ, vf, f) untuk dibandingkan dengan empat model. Yang saya peroleh:
+
+- Hasil pencarian hanya memberi **potongan teks + URL tingkat domain**, sehingga saya **tidak dapat** membuka dan memverifikasi angka lengkapnya. Saya **tidak** akan mengutip angka dari ingatan.
+- Dua potongan yang relevan (snippet, belum saya buka penuh) justru **mendukung** ambang peringatan yang sudah ada di kode: (i) Maxwell-Garnett hanya sah untuk konsentrasi kecil, kira-kira `f < 0,3`; (ii) MG dan Bruggeman setara sampai orde pertama (Sihvola).
+
+**Permintaan konkret (agar saya bisa menyelesaikannya tanpa mengarang):** tambahkan berkas `data/composite_measurements.csv` dengan kolom
+
+```
+matrix_material,eps_matrix,filler_material,eps_filler,vf,freq_hz,eps_eff_measured,tand_measured,source_doi
+```
+
+Begitu berkas itu ada (3–5 baris cukup), saya akan menjalankan keempat model + batas Wiener dan melaporkan: nilai terukur vs tiap model, apakah terukur berada di dalam batas Wiener, model mana yang paling dekat, dan galat relatifnya.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 3). Ringkas: Y-T2 ditutup (κ dipertahankan, alasannya terkuantifikasi), Y-T5 diserahkan dengan 8 item audit, Y-T3 butuh satu berkas data dari Aksara. Antrean saya berikutnya tetap: **N-01 (sapuan ground plane) → A2/N-02 (status konvergensi) → Y-T3**.*
