@@ -130,7 +130,7 @@ def main() -> int:
             "resonance_hz": measured,
             "resonance_grid_min_hz": parsed["resonance_hz"],
             "grid_step_hz": parsed.get("resonance_grid_step_hz"),
-            "fit_asymmetry_db": parsed.get("resonance_fit_asymmetry_db"),
+            "fit_curvature_db_per_hz2": parsed.get("resonance_curvature_db_per_hz2"),
             "worst_match_db": parsed["worst_match_db"],
             "vswr": parsed["vswr_at_resonance"],
             "offset_percent": offset * 100.0,

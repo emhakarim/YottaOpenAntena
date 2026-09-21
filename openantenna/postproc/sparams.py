@@ -169,9 +169,10 @@ class S11Trace:
         Fitting a parabola through the minimum and its two neighbours locates the
         vertex far below the grid step.
 
-        Returns ``(refined_hz, grid_step_hz, asymmetry_db)``.  The asymmetry is how
-        far the three samples are from a locally parabolic dip (0 for a perfect
-        parabola); a large value means the refined frequency should not be trusted.
+        Returns ``(refined_hz, grid_step_hz, curvature_db_per_hz2)``.  The curvature is
+        the second derivative of the dB curve at the dip: it says how sharp the dip is
+        and therefore how far the vertex can move for a given uncertainty in |S11|.
+        (A parabola through three points has no residual, so no residual is reported.)
         NOTE: this is a *grid* refinement, not a physical uncertainty.
         """
         index = self.worst_match_index()
@@ -190,10 +191,8 @@ class S11Trace:
         delta = 0.5 * (y1 - y3) / curvature
         half_step = 0.5 * (f3 - f1)
         refined = f2 + delta * half_step
-        # Asymmetry of the three samples: exactly 0 for a locally parabolic dip,
-        # large when the curve is not parabolic and the vertex is unreliable.
-        asymmetry_db = abs((y3 - y2) - (y2 - y1))
-        return refined, self._grid_step_hz(), asymmetry_db
+        curvature_db_per_hz2 = curvature / (half_step * half_step) if half_step else float("nan")
+        return refined, self._grid_step_hz(), curvature_db_per_hz2
 
     def _grid_step_hz(self) -> float:
         if len(self.frequencies_hz) < 2:

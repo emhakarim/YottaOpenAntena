@@ -6,10 +6,16 @@ S11 traces that already exist and reports, per run:
 
 * the frequency of minimum |S11| (what the tuning loop chased),
 * the frequency of maximum Re(Zin) (the classic series-resonance indicator),
-* the frequency where Im(Zin) crosses zero from inductive to capacitive,
-* the analytic predictions (transmission-line and cavity models) for reference.
+* the first frequency where Im(Zin) crosses zero (either direction - for a
+  series resonator X passes through zero going from positive to negative as the
+  frequency rises through resonance, so the direction is reported, not assumed),
+* the analytic predictions for the geometry recorded in that run's project.json.
 
-No simulation is required - it works on stored s11.csv files.
+A machine-readable summary is written to ``runs/resonance_analysis.json`` so the
+numbers quoted in ``docs/verification.md`` are archived alongside the runs that
+produced them (review item S-4).  The geometry comes from each run's own
+``project.json`` rather than from constants (review item S-2), so this also works
+for the tutorial geometry.
 
 Usage:
     python scripts/analyze_resonance.py [run_dir ...]
@@ -17,77 +23,148 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]  # repository root (portable, no absolute paths)
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from openantenna.geometry.patch import resonant_frequency, resonant_frequency_cavity
+from openantenna.materials.library import get_material
+from openantenna.model.project import Project
 from openantenna.postproc.sparams import S11Trace
 
-DEFAULT_RUNS = ["patch_ptfe_v4", "gp_0p25", "gp_0p50", "gp_1p00", "tune_it3"]
-ER = 2.1
-H = 1.6e-3
-WIDTH = 0.049142
-SYNTH_LENGTH = 0.041378916081297096
+DEFAULT_RUNS = [
+    "patch_ptfe_v4",
+    "gp_0p25",
+    "gp_0p50",
+    "gp_1p00",
+    "tune_it3",
+    "anchor_generator_on_tutorial",
+]
 
 
-def crossing_zero(freqs, values) -> float | None:
-    """First frequency where a sampled sequence crosses zero (linear interp)."""
+def crossing_zero(freqs, values) -> tuple[float | None, str]:
+    """First sampled zero crossing, with its direction reported explicitly."""
     for i in range(1, len(values)):
         a, b = values[i - 1], values[i]
         if a == 0.0:
-            return freqs[i - 1]
-        if (a < 0 < b) or (a > 0 > b):
-            span = b - a
-            if span == 0:
-                return freqs[i]
-            return freqs[i - 1] + (0.0 - a) * (freqs[i] - freqs[i - 1]) / span
-    return None
+            return freqs[i - 1], "exact"
+        if a < 0.0 < b:
+            direction = "capacitive->inductive"
+        elif a > 0.0 > b:
+            direction = "inductive->capacitive"
+        else:
+            continue
+        span = b - a
+        if span == 0:
+            return freqs[i], direction
+        return freqs[i - 1] + (0.0 - a) * (freqs[i] - freqs[i - 1]) / span, direction
+    return None, "none"
 
 
-def analyse(run_dir: Path) -> None:
+def geometry_from(run_dir: Path) -> dict | None:
+    """Read the run's own project.json and the material it names."""
+    project_file = run_dir / "project.json"
+    if not project_file.exists():
+        return None
+    try:
+        project = Project.from_json(project_file.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    layer = (project.substrate.dielectric_layers() or project.substrate.layers)[0]
+    try:
+        epsilon_r = get_material(layer.material).epsilon_r
+    except KeyError:
+        epsilon_r = None
+    return {
+        "material": layer.material,
+        "epsilon_r": epsilon_r,
+        "height_m": layer.thickness_m,
+        "width_m": project.patch.width_m,
+        "length_m": project.patch.length_m,
+        "center_hz": project.sweep.center_hz,
+    }
+
+
+def analyse(run_dir: Path) -> dict | None:
     csv_path = run_dir / "s11.csv"
     if not csv_path.exists():
-        print(f"{run_dir.name:<14} no s11.csv")
-        return
+        print(f"{run_dir.name:<34} no s11.csv")
+        return None
     trace = S11Trace.from_csv(csv_path)
     freqs = trace.frequencies_hz
     zin = trace.impedance_ohm()
 
     min_index = trace.worst_match_index()
-    f_min = freqs[min_index]
-    f_max_r = freqs[max(range(len(zin)), key=lambda i: zin[i].real)]
-    f_x_zero = crossing_zero(freqs, [z.imag for z in zin])
+    max_r_index = max(range(len(zin)), key=lambda i: zin[i].real)
+    x_zero, x_direction = crossing_zero(freqs, [z.imag for z in zin])
 
-    tl = resonant_frequency(ER, H, WIDTH, SYNTH_LENGTH)
-    cavity = resonant_frequency_cavity(ER, H, WIDTH, SYNTH_LENGTH)
+    record = {
+        "run": run_dir.name,
+        "s11_min_hz": freqs[min_index],
+        "s11_min_db": trace.db()[min_index],
+        "vswr_at_min": trace.vswr()[min_index],
+        "max_re_z_hz": freqs[max_r_index],
+        "max_re_z_ohm": zin[max_r_index].real,
+        "im_z_zero_hz": x_zero,
+        "im_z_zero_direction": x_direction,
+        "r_at_s11_min_ohm": zin[min_index].real,
+        "x_at_s11_min_ohm": zin[min_index].imag,
+    }
 
-    print(f"{run_dir.name:<14} |S11|min {f_min/1e9:.4f} GHz | maxReZ {f_max_r/1e9:.4f} GHz "
-          f"| ImZ=0 {('%.4f GHz' % (f_x_zero/1e9)) if f_x_zero else 'none'}")
+    geometry = geometry_from(run_dir)
+    if geometry and geometry["epsilon_r"] and geometry["width_m"] and geometry["length_m"]:
+        record["geometry"] = geometry
+        record["analytic_transmission_line_hz"] = resonant_frequency(
+            geometry["epsilon_r"], geometry["height_m"], geometry["width_m"], geometry["length_m"]
+        )
+        record["analytic_cavity_hz"] = resonant_frequency_cavity(
+            geometry["epsilon_r"], geometry["height_m"], geometry["width_m"], geometry["length_m"]
+        )
+
     print(
-        f"{'':<14} peak Re(Z) = {max(z.real for z in zin):.1f} ohm "
-        f"| R at |S11|min = {zin[min_index].real:.1f} ohm "
-        f"| X at |S11|min = {zin[min_index].imag:+.1f} ohm"
+        f"{run_dir.name:<34} |S11|min {record['s11_min_hz']/1e9:.4f} GHz | "
+        f"maxReZ {record['max_re_z_hz']/1e9:.4f} GHz | ImZ=0 "
+        f"{('%.4f GHz' % (x_zero/1e9)) if x_zero else 'none'} ({x_direction})"
     )
-    print(
-        f"{'':<14} analytic: TL {tl/1e9:.4f} GHz, cavity {cavity/1e9:.4f} GHz "
-        f"(lower bound for any valid eps_eff)"
-    )
+    if "analytic_cavity_hz" in record:
+        print(
+            f"{'':<34} analytic: TL {record['analytic_transmission_line_hz']/1e9:.4f} GHz, "
+            f"cavity {record['analytic_cavity_hz']/1e9:.4f} GHz"
+        )
+    return record
 
 
 def main() -> int:
     names = sys.argv[1:] or DEFAULT_RUNS
-    print("models for the synthesis geometry (W = 49.143 mm, L = 41.379 mm, PTFE 1.6 mm):")
-    analyse_dir = ROOT / "runs"
+    runs_dir = ROOT / "runs"
+    records = []
     for name in names:
-        analyse(analyse_dir / name)
+        record = analyse(runs_dir / name)
+        if record:
+            records.append(record)
         print()
-    print(
-        "Reading: if max Re(Z) sits well above the |S11| minimum, the minimum is a\n"
-        "feed/matching artefact and the tuning loop chased the wrong feature."
+    out = runs_dir / "resonance_analysis.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(
+            {
+                "runs": records,
+                "note": (
+                    "If max Re(Z) coincides with the |S11| minimum and Im(Z) crosses zero "
+                    "next to it, the minimum is the series resonance of the patch, not a "
+                    "feed artefact."
+                ),
+            },
+            indent=2,
+            default=str,
+        )
+        + "\n",
+        encoding="utf-8",
     )
+    print(f"summary written to {out}")
     return 0
 
 

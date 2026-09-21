@@ -52,12 +52,13 @@ class TestResonanceRefinement(unittest.TestCase):
         trace = S11Trace(
             frequencies, [complex(10.0 ** (db / 20.0), 0.0) for db in magnitudes_db]
         )
-        refined, grid_step, asymmetry = trace.refine_resonance()
+        refined, grid_step, curvature = trace.refine_resonance()
         # the raw grid minimum is 2.470 GHz (0.11 % away); the fit must do better
         self.assertAlmostEqual(refined / 1e9, 2.4673, places=6)
         self.assertLess(abs(refined - true_minimum) / true_minimum, 1e-6)
         self.assertAlmostEqual(grid_step, step, places=3)
-        self.assertLess(asymmetry, 1e-9)  # a pure parabola is symmetric
+        # second derivative of the dB dip: 2*depth/width^2
+        self.assertAlmostEqual(curvature, 2.0 * depth / width ** 2, delta=abs(curvature) * 0.01)
 
     def test_refinement_is_reported_in_parsed_results(self):
         rows = ["freq_hz,s11_re,s11_im"]
@@ -73,7 +74,7 @@ class TestResonanceRefinement(unittest.TestCase):
             parsed = OpenEMSSolver().parse_results(tmp)
         self.assertAlmostEqual(parsed["resonance_refined_hz"] / 1e9, 2.4673, places=6)
         self.assertAlmostEqual(parsed["resonance_grid_step_hz"], 10.0e6, places=1)
-        self.assertIn("resonance_fit_asymmetry_db", parsed)
+        self.assertIn("resonance_curvature_db_per_hz2", parsed)
 
 
 class TestTouchstoneReferenceImpedance(unittest.TestCase):

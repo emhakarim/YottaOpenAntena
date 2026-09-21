@@ -682,7 +682,7 @@ class OpenEMSSolver(SolverAdapter):
 
         trace = S11Trace(frequencies, [complex(r, i) for r, i in zip(reals, imags)])
         bands = trace.bandwidth_below(-10.0)
-        refined_hz, grid_step_hz, fit_residual_db = trace.refine_resonance()
+        refined_hz, grid_step_hz, dip_curvature = trace.refine_resonance()
         # Convergence: a run that hit the timestep cap has not settled, and the
         # resonance minimum can still move (review item N-02).
         log_text = ""
@@ -717,7 +717,7 @@ class OpenEMSSolver(SolverAdapter):
             "resonance_hz": trace.resonance_hz(),
             "resonance_refined_hz": refined_hz,
             "resonance_grid_step_hz": grid_step_hz,
-            "resonance_fit_asymmetry_db": fit_residual_db,
+            "resonance_curvature_db_per_hz2": dip_curvature,
             "worst_match_db": trace.worst_match_db(),
             "bands_below_minus10db": [
                 {"f_start_hz": a, "f_stop_hz": b, "bandwidth_hz": c} for a, b, c in bands
