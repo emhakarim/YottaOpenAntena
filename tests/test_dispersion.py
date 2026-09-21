@@ -102,6 +102,31 @@ class TestDebyeFit(unittest.TestCase):
         self.assertIn("tau_s", payload["params"])
 
 
+class TestLossSignConvention(unittest.TestCase):
+    def test_passive_material_has_negative_imaginary_part(self):
+        """Mutation guard T-3: the sign of tan delta must not flip.
+
+        With the eps = eps' - j*eps'' convention, a passive lossy material must have
+        a NEGATIVE imaginary part and a POSITIVE loss tangent.
+        """
+        from openantenna.materials.library import Material, complex_relative_permittivity
+
+        lossy = Material(name="lossy", epsilon_r=4.4, tan_delta=0.02)
+        eps = complex_relative_permittivity(lossy, 1.0e9)
+        self.assertLess(eps.imag, 0.0)
+        self.assertAlmostEqual(-eps.imag / eps.real, 0.02, places=12)
+
+        lossless = Material(name="lossless", epsilon_r=4.4, tan_delta=0.0)
+        self.assertEqual(complex_relative_permittivity(lossless, 1.0e9).imag, 0.0)
+
+    def test_conduction_loss_has_the_same_sign(self):
+        from openantenna.materials.library import Material, complex_relative_permittivity
+
+        conductor = Material(name="c", epsilon_r=1.0, conductivity_s_per_m=5.8e7, kind="conductor")
+        eps = complex_relative_permittivity(conductor, 1.0e9)
+        self.assertLess(eps.imag, 0.0)
+
+
 class TestMaterialsWithDispersion(unittest.TestCase):
     def test_dispersive_material_ignores_the_static_epsilon(self):
         material = Material(

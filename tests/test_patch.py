@@ -69,6 +69,29 @@ class TestSynthesis(unittest.TestCase):
         design = patch.synthesize_patch(F0, 20.0, H)
         self.assertTrue(any("eps_r" in w or "high" in w.lower() for w in design.warnings))
 
+    def test_delta_length_locks_the_0_412_constant(self):
+        """Mutation guard T-1: the 0.412 fringe constant must not drift.
+
+        Computed by hand: dL = 0.412*h*((ee+0.3)(W/h+0.264))/((ee-0.258)(W/h+0.8))
+        for eps_eff = 3.0, h = 1.0 mm, W/h = 10.
+        """
+        h, w, ee = 1.0e-3, 10.0e-3, 3.0
+        expected = 0.412 * h * ((ee + 0.3) * (w / h + 0.264)) / ((ee - 0.258) * (w / h + 0.8))
+        self.assertAlmostEqual(patch.delta_length(h, ee, w), expected, places=12)
+
+    def test_narrow_line_correction_changes_the_result(self):
+        """Mutation guard T-2: the W/h < 1 term must actually be applied.
+
+        Wide-line value plus the Hammerstad narrow-line term 0.5*(eps_r-1)*0.04*(1-W/h)^2
+        must reproduce the returned value exactly.
+        """
+        eps_r, h, w = 4.0, 2.0e-3, 0.5e-3  # W/h = 0.25 < 1
+        ratio = h / w
+        wide_line = 0.5 * (eps_r + 1.0) + 0.5 * (eps_r - 1.0) * (1.0 + 12.0 * ratio) ** -0.5
+        expected = wide_line + 0.5 * (eps_r - 1.0) * 0.04 * (1.0 - w / h) ** 2
+        self.assertAlmostEqual(patch.effective_permittivity(eps_r, h, w), expected, places=12)
+        self.assertGreater(patch.effective_permittivity(eps_r, h, w), wide_line)
+
     def test_summary_mentions_the_dimensions(self):
         text = patch.synthesize_patch(F0, ER, H).summary()
         self.assertIn("patch W x L", text)
