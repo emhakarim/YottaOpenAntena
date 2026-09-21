@@ -250,6 +250,24 @@ to solver settings. Remaining structural candidates: the ground-plane footprint
 (the tutorial uses 60 x 60 mm; our single-margin knob produces 64 x 56 mm for this
 patch), the feed realisation, and mesh-line placement details.
 
+## Generalisation: is the construction bias a constant factor?
+
+| Geometry | Cavity prediction | Measured (our generator) | Deviation vs cavity |
+|---|---|---|---|
+| 2.45 GHz, PTFE (eps_r 2.1), h 1.6 mm | 2.4007 GHz | 2.28095 GHz | **-4.99 %** |
+| tutorial geometry (eps_r 3.38), 40 x 32 mm, h 1.524 mm | 2.4363 GHz | 2.380 GHz | **-2.31 %** |
+
+Two different geometries give two different deviations, so the construction bias is
+**not a single constant factor**: it depends on the geometry (and, from the
+ground-plane test, on the copper footprint as well).  The practical consequence:
+**per-design tuning is the required workflow**, not a one-off calibration constant.
+That workflow already exists and converged in three FDTD runs
+(`scripts/auto_tune.py`).
+
+The remaining points of the generalisation sweep (5.8 GHz on eps_r 2.2 and eps_r 4.4)
+were interrupted by a gateway restart mid-run and are being re-run; only the PTFE
+point above is recorded so far.
+
 ## Test suite
 
 ```

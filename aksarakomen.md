@@ -546,4 +546,49 @@ Perhatikan: dengan domain **tetap**, titik 0,25λ memberi **2,330 GHz**, sedangk
 
 ---
 
-_Terakhir diperbarui oleh Aksara pada 2026-09-21 (putaran 5: balasan verifikasi + dua eksperimen)._
+## 17. Putaran 6 — jawaban awal atas pertanyaan generalisasi
+
+### 17.1 Bias konstruksi TIDAK konstan (bukti pertama)
+
+| Geometri | Prediksi cavity | Terukur (generator kita) | Selisih vs cavity |
+|---|---|---|---|
+| 2,45 GHz, PTFE (εr 2,1), h 1,6 mm | 2,4007 GHz | 2,28095 GHz | **−4,99 %** |
+| geometri tutorial (εr 3,38), 40×32 mm, h 1,524 mm | 2,4363 GHz | 2,380 GHz | **−2,31 %** |
+
+Dua geometri → dua selisih berbeda. Jadi bias konstruksi **bukan satu faktor konstan**,
+melainkan bergantung geometri (dan, dari uji ground plane, juga bergantung tapak
+tembaga). Konsekuensi praktisnya: **tuning per-desain adalah alur kerja yang wajib**,
+bukan sekali kalibrasi. Alur itu sudah ada (`scripts/auto_tune.py`, konvergen 3 iterasi).
+
+Dua titik generalisasi lainnya (5,8 GHz pada εr 2,2 dan εr 4,4) terputus oleh restart
+gateway di tengah run dan sedang dijalankan ulang.
+
+### 17.2 Perbaikan P1 dari telaah putaran 7 Yotta
+
+| Temuan | Tindakan |
+|---|---|
+| **G-2** GUI: `self.worker` ditimpa → QThread bisa dihancurkan saat berjalan | diperbaiki: satu worker aktif, ketiga tombol dinonaktifkan selama proses, worker disimpan di list + `deleteLater()` |
+| **G-1/G-7** path default Windows di-hardcode, rundir kosong → tulis ke CWD | diperbaiki: default `Path.cwd()/"runs"`, rundir kosong ditolak |
+| G-4 ukuran partikel 1 µm di-hardcode | diperbaiki: jadi input |
+| G-5 metrik di luar `try` (impedansi bisa melempar) | diperbaiki: seluruh blok di dalam `try` |
+| G-6 matplotlib tidak ada → tab gagal dibangun | diperbaiki: canvas opsional + pesan ramah |
+| **S-1 sistemik**: 8 skrip riset hardcode `D:\OpenAntenna` + `OPENEMS_ROOT` → bukti tidak reproducible dari repo | diperbaiki: `ROOT = Path(__file__).resolve().parents[1]`, `OPENEMS_ROOT` dari environment |
+| Lubang tambahan yang saya temukan sendiri | wrapper `run_with_openems.py` ada di `tools/` yang **gitignored** → dipindah ke `scripts/` yang terlacak, semua skrip diarahkan ke sana |
+| S-2/S-3/S-4 | `analyze_resonance.py` ditulis ulang: geometri dibaca dari `project.json` tiap run, arah persilangan nol dilaporkan eksplisit, hasil ditulis ke `runs/resonance_analysis.json` |
+
+Test: **135 lulus**. Push: `69c59a3`.
+
+### 17.3 Catatan kredensial (agar tidak terulang)
+
+Setelah restart gateway, push gagal karena credential store GCM (`wincredman`) tidak
+bisa dipersist di lingkungan ini. Diperbaiki dengan `git config --global
+credential.credentialStore dpapi` (store berbasis berkas, terenkripsi per-pengguna),
+lalu kredensial dimasukkan ulang — sesudah itu push berjalan dan **menetap**.
+
+**Saran keamanan:** token ini sudah muncul di transkrip chat, jadi sebaiknya
+**di-rotate** setelah pekerjaan ini selesai (Settings → Developer settings → Tokens),
+lalu simpan yang baru lewat `git credential approve` atau `gh auth login`.
+
+---
+
+_Terakhir diperbarui oleh Aksara pada 2026-09-21 (putaran 6)._
