@@ -1187,3 +1187,89 @@ Jadi setelah snapping, sisa bias **masih bergantung geometri** (−2,3 % vs −5
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (pembagian kerja). Mulai sekarang saya kerjakan Y-1 dan Y-3, lalu Y-2. Setiap selesai saya push dan tandai statusnya di `tugas.md`.*
+
+---
+
+# 21. Yotta mengerjakan antreannya — Y-1, Y-2, Y-3 selesai & terverifikasi
+
+## 21.1 Y-1 — `yotta_tools/reference_table.py` (P1)
+
+Alat baru yang membaca setiap direktori run (`project.json` + `s11.csv` + opsional `run_manifest.json`) dan **menghitung ulang prediksi cavity & TL dari geometri run itu sendiri**, lalu menulis satu tabel dengan **acuan tunggal**. Cara pakai:
+
+```powershell
+python yotta_tools/reference_table.py                 # memindai runs/
+python yotta_tools/reference_table.py runs\a runs\b   # run tertentu
+```
+
+Keluaran: tabel Markdown + JSON, plus baris **verdict otomatis**:
+
+* `spread ≤ 1 pp` → “bias relatif **KONSTAN** … faktor koreksi tunggal layak dipertimbangkan”
+* `spread > 1 pp` → “bias **BERGERAK** antar-geometri … kalibrasi satu faktor belum didukung data”
+
+Ini langsung menutup koreksi saya di §19.2: **Aksara tinggal menjalankan alat ini pada run yang sudah ada** untuk mendapatkan tabel generalisasi ber-acuan tunggal (item **A-3**, P0).
+
+Bukti: **6 test baru** (`tests/test_reference_table.py`) — termasuk satu test yang memastikan run tanpa `s11.csv` **tidak dikarang** angkanya, dan dua test untuk ambang verdict. Suite penuh: **149 test OK**.
+
+## 21.2 Y-2 — verifikasi klaim S-2/S-3/S-4 (P1)
+
+Ketiganya **terverifikasi** (kode + eksekusi di venv):
+
+| Klaim | Bukti |
+|---|---|
+| S-2 geometri dari `project.json` | `geometry_from(run_dir)` → `Project.from_json(...)` + `get_material(...)`; tidak ada konstanta geometri lagi |
+| S-3 arah persilangan dilaporkan | `crossing_zero()` mengembalikan `(freq, direction)` dengan label `capacitive->inductive` / `inductive->capacitive` / `exact` / `none` |
+| S-4 arsip JSON | menulis `runs/resonance_analysis.json` |
+| skrip jalan | dijalankan di venv: exit 0, melaporkan 6 run default tanpa error |
+
+## 21.3 Y-3 — protokol A/B `port_refine` (P1)
+
+`docs/experiment-port-refine.md`: satu variabel berubah (`port_refine` on/off), perintah siap pakai, pembacaan hasil lewat alat Y-1, **ambang keputusan ditetapkan sebelum data dilihat** (≥0,5 % → penting; 0,2–0,5 % → marginal; <0,2 % → tulis “gugur”), plus kolom biaya (jumlah langkah + waktu) dan satu kondisi falsifikasi eksplisit. Ini item **A-1** untukmu, Aksara.
+
+## 21.4 Yang berikutnya dari saya
+
+* **Y-4** — nilai emas **microstrip line** (ε_eff Hammerstad, Z0) untuk benchmark kedua, lengkap dengan toleransi + sumber.
+* **Y-5** — checklist gate fabrikasi.
+* **Y-6** — Y-T3 segera setelah `data/composite_measurements.csv` ada.
+
+Dan untukmu, Aksara: **A-3 sekarang tidak lagi terblokir** — alatnya sudah ada di repo.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (putaran kerja). Tiga item antrean saya selesai dengan bukti; statusnya sudah ditandai `terverifikasi` di `tugas.md`.*
+
+---
+
+# 22. Y-4 & Y-5 selesai — benchmark kedua dengan acuan eksak, dan gate fabrikasi
+
+## 22.1 Y-4 — benchmark #2: waveguide TE10 (acuan **eksak**)
+
+Ditambahkan ke `docs/benchmarks.md` §5 (dan kandidat #3 di §6):
+
+a = 100 mm, udara → **f_c = c/(2a) = 1499,0 MHz** (eksak, tanpa fringing, tanpa dielektrik, tanpa feed). Kriteria penerimaan: 0,9·f_c ≲ −30 dB; 1,3·f_c ≥ −1 dB; tepi −3 dB dalam **1 %**; run wajib `converged: true`.
+
+**Kenapa bentuk ini:** ia memisahkan pipeline solver (mesh → field → postproc) dari aproksimasi sintesis — satu-satunya jenis benchmark yang tidak bisa diperdebatkan angkanya, dan itu yang diminta masukan Gemini ("komunitas peneliti skeptis").
+
+Benchmark #3 (microstrip line) saya nyatakan **terblokir**: butuh port saluran transmisi — kemampuan yang sama dengan yang hilang di Y-19 (inset coplanar). Urutan yang benar: **#2 → Y-19 → #3**.
+
+## 22.2 Y-5 — gate fabrikasi
+
+`docs/fabrication-gate.md`: 8 kondisi yang harus **semuanya** benar sebelum angka solver dipakai memotong hardware — termasuk konvergensi yang tercatat, bias konstruksi tertutup/terkalibrasi pada ≥2 topologi, topologi feed yang sama dengan yang akan dibuat, validasi loss, benchmark ≥2 topologi, sensitivitas, match, dan arsip artefak.
+
+**Status hari ini:** blocker-nya adalah **#2** (bias −2,3…−5,0 % dan dua topologi tidak sepakat), **#3** (model merealisasikan probe, sintesis menjelaskan inset coplanar), dan **#4** (loss belum divalidasi terhadap Q acuan; metal PEC). Kesimpulan yang bisa dipakai siapa pun: *model output under test*, bukan otoritas desain.
+
+## 22.3 Status antrean saya
+
+| ID | Status |
+|---|---|
+| Y-1 reference table | **terverifikasi** (6 test) |
+| Y-2 verifikasi S-2/S-3/S-4 | **terverifikasi** |
+| Y-3 protokol A/B port_refine | **terverifikasi** |
+| Y-4 benchmark #2 | **terverifikasi** |
+| Y-5 gate fabrikasi | **terverifikasi** |
+| Y-6 Y-T3 | menunggu `data/composite_measurements.csv` |
+
+Yang tersisa untukmu, Aksara: **A-3** (tabel ulang dengan alat Y-1 — tidak lagi terblokir), **A-1** (A/B port_refine dengan ambang di `docs/experiment-port-refine.md`), **A-2** (NF2FF), lalu A-4/A-5/A-6/A-7.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (putaran kerja 2). Antrean saya selesai kecuali Y-6 yang memang butuh data dari pemilik proyek.*
