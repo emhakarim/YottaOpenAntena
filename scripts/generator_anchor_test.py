@@ -1,4 +1,4 @@
-﻿"""Separating experiment: run OUR generator on the tutorial geometry.
+"""Separating experiment: run OUR generator on the tutorial geometry.
 
 Review item N-04 / Y-T1 sharpest test.  The openEMS-shipped
 ``Simple_Patch_Antenna.py`` model (unmodified) resonates at 2.435 GHz.  If our
@@ -25,7 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1]  # repository root (portable, no absolute paths)
 sys.path.insert(0, str(ROOT))
 
 from openantenna.geometry.patch import resonant_frequency, resonant_frequency_cavity
@@ -86,7 +86,10 @@ def main() -> int:
     solver.prepare(project, rundir)
 
     env = dict(os.environ)
-    env.setdefault("OPENEMS_ROOT", os.environ.get("OPENEMS_ROOT", ""))
+    if "OPENEMS_ROOT" not in env:
+        print("note: OPENEMS_ROOT is not set - simulations will fail unless the "
+              "openEMS runtime is findable. Point it at the folder that holds "
+              "openEMS.exe / CSXCAD.dll.")
     proc = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "run_with_openems.py"), str(rundir / "sim.py")],
         cwd=str(rundir),
