@@ -132,6 +132,8 @@ MESH_SUBSTRATE_CELLS = $MESH_SUBSTRATE_CELLS
 PORT_REFINE = $PORT_REFINE   # refine the mesh around the lumped port (review item A4)
 MESH_SMOOTHING = $MESH_SMOOTHING
 METAL_EDGE_SNAPPING = $METAL_EDGE_SNAPPING
+NF2FF_ENABLED = $NF2FF_ENABLED
+NF2FF_FREQS = $NF2FF_FREQS
 PML_CELLS = $PML_CELLS
 BOUNDARY_MODE = "$BOUNDARY_MODE"
 AIRBOX_LAMBDA = $AIRBOX_LAMBDA      # air margin around the structure, per side
@@ -267,6 +269,15 @@ CSX.AddMaterial("air").AddBox(
     [-DOM_X, -DOM_Y, DOM_Z_BOT], [DOM_X, DOM_Y, DOM_Z_TOP], priority=0
 )
 
+# Near-to-far-field recording box.  It auto-adapts to the grid and to the
+# boundaries.  The transformation happens after the run, so it costs recording
+# memory but must not change the near-field solution - check that with a
+# differential run (same S11 with and without).
+nf2ff = None
+if NF2FF_ENABLED:
+    nf2ff = FDTD.CreateNF2FFBox(name="nf2ff")
+    print("NF2FF: recording box created (far field computed after the run)")
+
 # Structure edges are added as explicit mesh lines so that the substrate,
 # patch and feed land exactly on cell boundaries; the free-space regions then
 # get a coarser staircase which SmoothMeshLines refines.
@@ -339,6 +350,46 @@ def main():
         )
     print("wrote", out_path)
 
+    if nf2ff is not None:
+        # --- far field -------------------------------------------------------
+        far_freqs = np.linspace(F_MIN, F_MAX, NF2FF_FREQS)
+        theta_deg = np.arange(0.0, 181.0, 2.0)
+        phi_deg = np.arange(0.0, 361.0, 5.0)
+        print(
+            "NF2FF: computing the far field on a %dx%d grid at %d frequencies"
+            % (len(theta_deg), len(phi_deg), len(far_freqs))
+        )
+        res = nf2ff.CalcNF2FF(sim_path, far_freqs, theta_deg, phi_deg, outfile="nf2ff.h5")
+
+        # Accepted power from the port: P_acc = 0.5*(|uf_inc|^2 - |uf_ref|^2)/Z0.
+        # This is what separates radiation efficiency from total efficiency.
+        p_acc = 0.5 * (np.abs(port.uf_inc) ** 2 - np.abs(port.uf_ref) ** 2) / FEED_Z0
+
+        summary_path = os.path.join(HERE, "nf2ff_summary.csv")
+        with open(summary_path, "w", encoding="utf-8") as handle:
+            handle.write("freq_hz,directivity_lin,directivity_dbi,prad_w,p_acc_w,eta_rad")
+            for n, frequency in enumerate(res.freq):
+                d = float(res.Dmax[n])
+                prad = float(res.Prad[n])
+                accepted = float(p_acc[n]) if n < len(p_acc) else float("nan")
+                eta = prad / accepted if accepted > 0 else float("nan")
+                handle.write(
+                    "\n%.6e,%.6e,%.6e,%.9e,%.9e,%.9e"
+                    % (frequency, d, 10.0 * np.log10(max(d, 1e-12)), prad, accepted, eta)
+                )
+        print("NF2FF: wrote", summary_path)
+
+        # Radiation pattern at the frequency closest to the design centre.
+        idx = int(np.argmin(np.abs(np.array(res.freq) - F0)))
+        pattern_path = os.path.join(HERE, "nf2ff_pattern.csv")
+        e_norm = res.E_norm[idx]
+        with open(pattern_path, "w", encoding="utf-8") as handle:
+            handle.write("theta_deg,phi_deg,e_norm\n")
+            for i, theta in enumerate(np.rad2deg(res.theta)):
+                for j, phi in enumerate(np.rad2deg(res.phi)):
+                    handle.write("%.3f,%.3f,%.9e\n" % (theta, phi, e_norm[i, j]))
+        print("NF2FF: wrote %s (pattern at %.4f GHz)" % (pattern_path, res.freq[idx] / 1e9))
+
 
 if __name__ == "__main__":
     main()
@@ -366,6 +417,8 @@ class OpenEMSSolver(SolverAdapter):
         pml_cells: int = 8,
         mesh_smoothing_ratio: float = 1.4,
         metal_edge_snapping: bool = True,
+        nf2ff: bool = True,
+        nf2ff_frequencies: int = 5,
         port_refine: bool = True,
         max_timesteps: int = 400000,
         end_criteria: float = 1e-4,
@@ -400,6 +453,10 @@ class OpenEMSSolver(SolverAdapter):
         self.pml_cells = int(pml_cells)
         self.mesh_smoothing_ratio = float(mesh_smoothing_ratio)
         self.metal_edge_snapping = bool(metal_edge_snapping)
+        if nf2ff_frequencies < 1:
+            raise ValueError("nf2ff_frequencies must be >= 1")
+        self.nf2ff = bool(nf2ff)
+        self.nf2ff_frequencies = int(nf2ff_frequencies)
         self.port_refine = bool(port_refine)
         self.max_timesteps = int(max_timesteps)
         self.end_criteria = float(end_criteria)
@@ -576,6 +633,8 @@ class OpenEMSSolver(SolverAdapter):
             MESH_SUBSTRATE_CELLS=self.substrate_cells,
             MESH_SMOOTHING=fmt(self.mesh_smoothing_ratio),
             METAL_EDGE_SNAPPING="True" if self.metal_edge_snapping else "False",
+            NF2FF_ENABLED="True" if self.nf2ff else "False",
+            NF2FF_FREQS=self.nf2ff_frequencies,
             PORT_REFINE="True" if self.port_refine else "False",
             PML_CELLS=self.pml_cells,
             BOUNDARY_MODE=self.boundary,
@@ -631,6 +690,8 @@ class OpenEMSSolver(SolverAdapter):
             "pml_cells": self.pml_cells,
             "mesh_smoothing_ratio": self.mesh_smoothing_ratio,
             "metal_edge_snapping": self.metal_edge_snapping,
+            "nf2ff": self.nf2ff,
+            "nf2ff_frequencies": self.nf2ff_frequencies,
             "max_timesteps": self.max_timesteps,
             "end_criteria": self.end_criteria,
             "mesh": {
@@ -755,6 +816,19 @@ class OpenEMSSolver(SolverAdapter):
                 else "end criteria reached before the timestep cap"
             )
         )
+
+        # Far-field data is optional: it exists only when the NF2FF box was enabled.
+        # Radiation efficiency from the solver is the quantity that lets the loss
+        # model be validated at all (review item A-2).
+        farfield_data = None
+        farfield_summary = run_path / "nf2ff_summary.csv"
+        if farfield_summary.exists():
+            try:
+                from ..postproc.farfield import read_summary
+
+                farfield_data = [point.to_dict() for point in read_summary(farfield_summary)]
+            except Exception as exc:
+                farfield_data = {"error": f"{type(exc).__name__}: {exc}"}
         return {
             "solver": self.name,
             "frequencies_hz": trace.frequencies_hz,
@@ -773,6 +847,7 @@ class OpenEMSSolver(SolverAdapter):
             "converged": converged,
             "convergence_note": convergence_note,
             "timesteps": iterations,
+            "farfield": farfield_data,
             "source": str(csv_path),
             "verified": False,
         }

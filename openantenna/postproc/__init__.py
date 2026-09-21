@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from .farfield import (
+    FarFieldPoint,
+    directivity_from_pattern_grid,
+    read_pattern,
+    read_summary,
+    summary_text,
+)
 from .patterns import (
     array_pattern_product,
     dipole_element_pattern,
@@ -20,4 +27,9 @@ __all__ = [
     "directivity_from_pattern",
     "efficiency_budget",
     "gain_dbi",
+    "FarFieldPoint",
+    "read_summary",
+    "read_pattern",
+    "directivity_from_pattern_grid",
+    "summary_text",
 ]

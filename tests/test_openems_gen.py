@@ -150,6 +150,36 @@ class TestScriptGeneration(unittest.TestCase):
         with self.assertRaises(ValueError):
             OpenEMSSolver(ground_margin_lambda=0.0)
 
+    def test_construction_knobs_are_reachable_without_editing_source(self):
+        """A-7: the A/B knobs (port refinement, edge snapping, NF2FF) and the
+        far-field recorder must be controllable from outside the package."""
+        off = OpenEMSSolver(port_refine=False, metal_edge_snapping=False, nf2ff=False)
+        script = off.render_script(make_project())
+        self.assertIn("PORT_REFINE = False", script)
+        self.assertIn("METAL_EDGE_SNAPPING = False", script)
+        self.assertIn("NF2FF_ENABLED = False", script)
+        self.assertIn("NF2FF_FREQS = ", script)
+
+        on = OpenEMSSolver(nf2ff=True, nf2ff_frequencies=7)
+        manifest_script = on.render_script(make_project())
+        self.assertIn("NF2FF_ENABLED = True", manifest_script)
+        self.assertIn("NF2FF_FREQS = 7", manifest_script)
+        # the far-field block writes a summary and a pattern for our own reader
+        self.assertIn("nf2ff_summary.csv", manifest_script)
+        self.assertIn("nf2ff_pattern.csv", manifest_script)
+        self.assertIn("eta_rad", manifest_script)
+
+    def test_nf2ff_frequency_count_is_validated(self):
+        with self.assertRaises(ValueError):
+            OpenEMSSolver(nf2ff_frequencies=0)
+
+    def test_nf2ff_setting_is_recorded_in_the_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rundir = OpenEMSSolver(nf2ff=False).prepare(make_project(), tmp)
+            manifest = json.loads((rundir / "run_manifest.json").read_text(encoding="utf-8"))
+        self.assertFalse(manifest["nf2ff"])
+        self.assertIn("nf2ff_frequencies", manifest)
+
     def test_unknown_material_is_rejected(self):
         project = make_project(material="unobtainium")
         with self.assertRaises(ValueError):

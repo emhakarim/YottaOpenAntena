@@ -151,7 +151,13 @@ def run_case(spec: dict, port_refine: bool) -> dict:
 
 def main() -> int:
     wanted = sys.argv[1:] or ["tutorial", "ptfe245"]
+    if len(wanted) == 1 and "," in wanted[0]:
+        # accept both "a b" and "a,b" so a launcher cannot silently pass one bad key
+        wanted = [item.strip() for item in wanted[0].split(",") if item.strip()]
     specs = {"tutorial": TUTORIAL, "ptfe245": PTFE}
+    unknown = [key for key in wanted if key not in specs]
+    if unknown:
+        raise SystemExit(f"unknown geometry key(s): {unknown}; known: {sorted(specs)}")
     records = []
     for key in wanted:
         for flag in (True, False):

@@ -273,6 +273,9 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
         boundary=args.boundary,
         pml_cells=args.pml_cells,
         mesh_smoothing_ratio=args.smoothing,
+        port_refine=args.port_refine,
+        metal_edge_snapping=args.edge_snapping,
+        nf2ff=args.nf2ff,
         max_timesteps=args.max_timesteps,
         end_criteria=args.end_criteria,
     )
@@ -292,6 +295,10 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
         f"boundary         : {solver.boundary}"
         + (f" ({solver.pml_cells} cells)" if solver.boundary == "PML" else "")
         + f", smoothing {solver.mesh_smoothing_ratio:g}"
+    )
+    print(
+        f"construction     : port_refine={solver.port_refine}, "
+        f"edge_snapping={solver.metal_edge_snapping}, nf2ff={solver.nf2ff}"
     )
     print(f"run directory    : {prepared}")
     print(f"generated        : {solver.script_name}, {solver.project_name}, run_manifest.json")
@@ -328,6 +335,14 @@ def cmd_sweep_run(args: argparse.Namespace) -> int:
             "substrate_cells": args.substrate_cells,
             "loss_model": args.loss_model,
             "ground_margin_lambda": args.ground_margin_lambda,
+            "boundary": args.boundary,
+            "pml_cells": args.pml_cells,
+            "mesh_smoothing_ratio": args.smoothing,
+            "port_refine": args.port_refine,
+            "metal_edge_snapping": args.edge_snapping,
+            "nf2ff": args.nf2ff,
+            "max_timesteps": args.max_timesteps,
+            "end_criteria": args.end_criteria,
         },
         store_path=args.store or None,
         stop_on_error=args.stop_on_error,
@@ -482,6 +497,27 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="E",
         help="stop when the residual energy falls below this level (default 1e-4)",
     )
+    p.add_argument(
+        "--port-refine",
+        dest="port_refine",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="refine the mesh around the lumped port (review item A4/A-7)",
+    )
+    p.add_argument(
+        "--edge-snapping",
+        dest="edge_snapping",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="snap metal edges onto the mesh with AddEdges2Grid (A-7); turning it off reproduces the -4.31 %% baseline",
+    )
+    p.add_argument(
+        "--nf2ff",
+        dest="nf2ff",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="record a near-to-far-field box and dump directivity + radiation efficiency (A-2)",
+    )
     p.add_argument("--out", required=True, help="run directory to write into")
     p.set_defaults(handler=cmd_gen_openems)
 
@@ -530,6 +566,29 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.25,
         metavar="L",
         help="ground-plane margin per side in lambda0 (review item N-01)",
+    )
+    p.add_argument("--boundary", choices=("PML", "MUR"), default="PML")
+    p.add_argument("--pml-cells", type=int, default=8, metavar="N")
+    p.add_argument("--smoothing", type=float, default=1.4, metavar="R")
+    p.add_argument("--max-timesteps", type=int, default=400000, metavar="N")
+    p.add_argument("--end-criteria", type=float, default=1e-4, metavar="E")
+    p.add_argument(
+        "--port-refine",
+        dest="port_refine",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    p.add_argument(
+        "--edge-snapping",
+        dest="edge_snapping",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    p.add_argument(
+        "--nf2ff",
+        dest="nf2ff",
+        action=argparse.BooleanOptionalAction,
+        default=True,
     )
     p.add_argument(
         "--stop-on-error", action="store_true", help="abort the sweep at the first failure"
