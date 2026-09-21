@@ -128,6 +128,7 @@ FEED_Z0 = $FEED_Z0         # port reference impedance [ohm]
 
 MESH_MAX_RES = C0 / F_MAX / $MESH_CELLS_PER_WAVELENGTH
 MESH_SUBSTRATE_CELLS = $MESH_SUBSTRATE_CELLS
+PORT_REFINE = $PORT_REFINE   # refine the mesh around the lumped port (review item A4)
 MESH_SMOOTHING = $MESH_SMOOTHING
 METAL_EDGE_SNAPPING = $METAL_EDGE_SNAPPING
 PML_CELLS = $PML_CELLS
@@ -279,6 +280,22 @@ mesh.AddLine("z", np.linspace(-H_TOTAL, 0.0, MESH_SUBSTRATE_CELLS + 1))
 mesh.AddLine("z", [DOM_Z_BOT, -H_TOTAL, 0.0, DOM_Z_TOP])
 mesh.AddLine("z", np.linspace(0.0, DOM_Z_TOP, 9))
 mesh.AddLine("z", np.linspace(DOM_Z_BOT, -H_TOTAL, 5))
+
+if PORT_REFINE:
+    # Refine the mesh around the feed.  The lumped port feeds a load across the
+    # substrate; if the lateral cell there is the coarse free-space cell, the
+    # excitation is badly discretised and the port contributes series inductance
+    # to the model - a candidate for the residual construction bias
+    # (Yotta review item A4).  The refinement uses the substrate cell size.
+    _port_cell = H_TOTAL / MESH_SUBSTRATE_CELLS
+    _port_half = 2.0 * _port_cell
+    mesh.AddLine("x", np.linspace(FEED_X - _port_half, FEED_X + _port_half, 5))
+    mesh.AddLine("y", np.linspace(FEED_Y - _port_half, FEED_Y + _port_half, 5))
+    print(
+        "PORT REFINE: %.4f mm cells over %.4f mm around the feed"
+        % (_port_cell * 1e3, 2.0 * _port_half * 1e3)
+    )
+
 mesh.SmoothMeshLines("all", MESH_MAX_RES, MESH_SMOOTHING)
 
 print(
@@ -348,6 +365,7 @@ class OpenEMSSolver(SolverAdapter):
         pml_cells: int = 8,
         mesh_smoothing_ratio: float = 1.4,
         metal_edge_snapping: bool = True,
+        port_refine: bool = True,
         max_timesteps: int = 400000,
         end_criteria: float = 1e-4,
     ) -> None:
@@ -381,6 +399,7 @@ class OpenEMSSolver(SolverAdapter):
         self.pml_cells = int(pml_cells)
         self.mesh_smoothing_ratio = float(mesh_smoothing_ratio)
         self.metal_edge_snapping = bool(metal_edge_snapping)
+        self.port_refine = bool(port_refine)
         self.max_timesteps = int(max_timesteps)
         self.end_criteria = float(end_criteria)
         self.ground_margin_lambda = float(ground_margin_lambda)
@@ -556,6 +575,7 @@ class OpenEMSSolver(SolverAdapter):
             MESH_SUBSTRATE_CELLS=self.substrate_cells,
             MESH_SMOOTHING=fmt(self.mesh_smoothing_ratio),
             METAL_EDGE_SNAPPING="True" if self.metal_edge_snapping else "False",
+            PORT_REFINE="True" if self.port_refine else "False",
             PML_CELLS=self.pml_cells,
             BOUNDARY_MODE=self.boundary,
             AIRBOX_LAMBDA=fmt(self.air_margin_lambda),
@@ -591,6 +611,7 @@ class OpenEMSSolver(SolverAdapter):
             "mesh": {
                 "cells_per_wavelength": self.mesh_cells_per_wavelength,
                 "substrate_cells": self.substrate_cells,
+                "port_refine": self.port_refine,
                 "air_margin_lambda": self.air_margin_lambda,
                 "air_top_lambda": self.air_top_lambda,
                 "air_margin_m": self.air_margin_lambda * lambda_min,
@@ -682,7 +703,7 @@ class OpenEMSSolver(SolverAdapter):
 
         trace = S11Trace(frequencies, [complex(r, i) for r, i in zip(reals, imags)])
         bands = trace.bandwidth_below(-10.0)
-        refined_hz, grid_step_hz, dip_curvature = trace.refine_resonance()
+
         # Convergence: a run that hit the timestep cap has not settled, and the
         # resonance minimum can still move (review item N-02).
         log_text = ""
@@ -715,9 +736,6 @@ class OpenEMSSolver(SolverAdapter):
             "s11_im": [s.imag for s in trace.s11],
             "vswr_at_resonance": vswr_from_gamma(abs(trace.s11[trace.worst_match_index()])),
             "resonance_hz": trace.resonance_hz(),
-            "resonance_refined_hz": refined_hz,
-            "resonance_grid_step_hz": grid_step_hz,
-            "resonance_curvature_db_per_hz2": dip_curvature,
             "worst_match_db": trace.worst_match_db(),
             "bands_below_minus10db": [
                 {"f_start_hz": a, "f_stop_hz": b, "bandwidth_hz": c} for a, b, c in bands
