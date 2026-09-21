@@ -1273,3 +1273,38 @@ Yang tersisa untukmu, Aksara: **A-3** (tabel ulang dengan alat Y-1 — tidak lag
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (putaran kerja 2). Antrean saya selesai kecuali Y-6 yang memang butuh data dari pemilik proyek.*
+
+---
+
+# 23. Y-6 (Y-T3) — data literatur: apa yang berhasil, apa yang tidak, dan analisis inversi
+
+## 23.1 Yang berhasil
+
+Saya mencari paper **open access/terbuka** untuk komposit polymer–ceramic terukur dan mendapat **6 kandidat** dengan angka terukur (εr, vf, tan δ, frekuensi) beserta sumbernya — semuanya ditulis di `data/composite_measurements_candidates.md` (C1–C6).
+
+## 23.2 Yang **tidak** berhasil (jujur)
+
+Provider pencarian yang kupakai mengembalikan **URL tingkat domain** (tanpa path), sehingga halaman artikelnya **tidak bisa saya buka** — artinya angka tadi berasal dari **potongan (snippet)**, bukan teks penuh. Karena itu saya **tidak** langsung menulis `data/composite_measurements.csv` yang resmi: yang belum ada adalah **εr filler** untuk hampir semua baris (tanpa itu mixing rule tidak bisa dihitung).
+
+## 23.3 Yang bisa dihitung tanpa εr filler: analisis inversi
+
+Alih-alih menebak, saya balik pertanyaannya: **εr filler berapa yang dibutuhkan tiap model agar cocok dengan pengukuran itu?** (inversi numerik `materials.mixing`, matriks = PTFE dari library proyek):
+
+| Kasus | Lichtenecker | Maxwell-Garnett | Bruggeman | Batas atas Wiener |
+|---|---|---|---|---|
+| C1: PTFE/CaTiO₃, vf 0,50, terukur **12** | εf = **68,6** | **tanpa solusi** (MG jenuh ≈ 8,4 di vf = 0,5) | εf = **34,0** | εf ≥ **21,9** |
+| C2: PTFE/(TiO₂+CaTiO₃), vf 0,46, terukur **7,42** | εf = **32,7** | εf = **1332** | εf = **20,4** | εf ≥ **13,7** |
+
+Tiga temuan yang layak disimpan:
+
+1. **εr filler yang disiratkan antar-model berbeda 2–40×.** Jadi keluaran jujur untuk studi komposit adalah **pita** (proyek sudah menyediakan `spread`), bukan satu angka — kini terbukti pada data terukur.
+2. **C1 berada di luar jangkauan Maxwell-Garnett**: pada vf = 0,5, MG jenuh ≈ εm·(1+2vf)/(1−vf) ≈ 8,4, jadi pengukuran 12 mustahil dihasilkan oleh inklusi bola yang renggang — tanda khas **aglomerasi/klaster** (sejalan dengan peringatan perkolasi & kontras tinggi yang sudah ada di kode).
+3. **C1 menuntut εf ≥ 21,9 supaya masuk batas Wiener** — i.e. pengukuran itu hanya sah untuk filler ≥ ~10× permittivitas matriks.
+
+## 23.4 Yang saya butuhkan untuk menuntaskan Y-T3
+
+Beri **DOI/URL/PDF** untuk 2–4 paper di daftar kandidat (C1–C4 cukup). Nanti saya buka teks penuhnya, ambil εr filler + εr matriks yang dipakai penulis, tulis `data/composite_measurements.csv`, lalu jalankan `yotta_tools/mixing_validation.py`. Alternatif: tandai Y-T3 ditunda — tidak ada item lain yang bergantung padanya.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (pencarian literatur + inversi). Tidak ada angka di atas yang berasal dari ingatan: semuanya dari potongan bersumber, dan yang derivatif dihitung dengan kode proyek sendiri.*
