@@ -814,3 +814,86 @@ Ini kini bukan sekadar kerapian: `verification.md` **bertentangan dengan dirinya
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (pembaruan putaran 5). Ringkas: N-02/A5/sweep-runner tuntas, N-01 gugur (arah saya salah), dan yang terpenting — **bias konstruksi −4,3 % kini terukur**, sehingga offset 7,8 % terurai menjadi 2 % prediktor + 4,3 % konstruksi + ~1 % sisa. Urutan kerja yang saya minta: benahi konstruksi → uji generalisasi pada geometri kedua → baru tuning; plus satu uji ground plane yang bersih dari perancu.*
+
+---
+
+# 14. Bantuan konkret untuk Aksara (sambil ia mengerjakan hal lain)
+
+Semua angka di bawah saya hitung dengan kode snapshot `ab4e472` — bisa langsung dipakai, tidak perlu dihitung ulang.
+
+## 14.1 Audit mutasi kode baru — status celah test
+
+| Mutasi (di **kode**, bukan docstring) | Hasil |
+|---|---|
+| koefisien dL `0.412` → `0.312` (T-1) | **TERTANGKAP** — `test_balanis_example_14_1_golden_values` → **T-1 TERTUTUP** ✅ |
+| pencatatan ke store sqlite di `sweep/runner.py` dimatikan | **TERTANGKAP** — 2 test `test_sweep_runner` → jalur stub memuat store, bagus ✅ |
+| koreksi narrow-line `0.04` → `0.0` (T-2) | **LOLOS** → masih celah |
+| tanda `apparent_tan_delta` dibalik (T-3) | **LOLOS** → masih celah |
+| validasi `SweepAxis.values` dikosongkan | **LOLOS** → celah baru |
+| default `end_criteria` `1e-4` → `1e-2` | **LOLOS** → celah baru |
+
+**Empat test kecil yang menutup semuanya** (siap ditempel):
+
+```python
+# T-2: patok nilainya, jangan hanya rentang lebar
+e = patch.effective_permittivity(2.2, 1e-3, 0.5e-3)      # W/h = 0.5
+self.assertAlmostEqual(e, 1.837, delta=0.002)            # 1.827 tanpa koreksi -> akan gagal
+
+# T-3: patok konvensi tanda (akar dari Issue 4 / Y-01)
+self.assertGreater(dispersion.apparent_tan_delta(complex(2.1, -1e-3)), 0.0)
+self.assertLess(dispersion.debye_eps(1e9, 2.1, 0.4, 1e-8).imag, 0.0)
+
+# M11: validasi axis kosong harus tetap ada
+with self.assertRaises(ValueError):
+    SweepAxis("substrate.layers.0.thickness_m", ())
+
+# M13: default adapter adalah kontrak, bukan detail internal
+s = OpenEMSSolver()
+self.assertEqual(s.end_criteria, 1e-4); self.assertEqual(s.pml_cells, 8)
+```
+
+## 14.2 Tiga eksperimen siap jalan (angka sudah dihitung)
+
+### A. Uji ground plane **bersih dari perancu** (menutup 13.3)
+Masalah: `DOM = GROUND/2 + air·λ_min`, jadi memperbesar ground mengubah domain+mesh sekaligus. Solusinya: **samakan domain untuk ketiga run** dengan mengatur pasangan parameter ini (DOM_X ≈ **168,3 mm**, DOM_Y ≈ **164,4 mm** di ketiganya):
+
+| Run | `--ground-margin-lambda` | `--air-margin-lambda` | GROUND_X |
+|---|---|---|---|
+| G1 | 0.25 | **1.063** | 110,3 mm |
+| G2 | 0.50 | **0.776** | 171,5 mm |
+| G3 | 1.00 | **0.201** | 293,9 mm |
+
+Verifikasi wajib sebelum menyimpulkan: di `run_manifest.json`, `air_margin_m + ground/2` harus sama untuk ketiganya. Kalau tren 2,260/2,220/2,150 GHz tetap muncul dengan domain identik, efek ground plane itu nyata.
+
+### B. Uji generalisasi bias konstruksi pada geometri kedua (menutup 13.4)
+Jalankan eksperimen pemisah (generator kita pada geometri acuan) untuk dua geometri ini:
+
+| Geometri | W | L | ε_eff | cavity | TL | **Prediksi FDTD kita jika bias tetap −4,3 %** |
+|---|---|---|---|---|---|---|
+| 5,8 GHz, PTFE, h = 1,6 mm | 20,759 mm | 16,839 mm | 1,9464 | 5,5839 GHz | 5,8000 GHz | **5,3438 GHz** |
+| 2,45 GHz, FR-4 (εr 4,4), h = 1,6 mm | 37,234 mm | 28,809 mm | 4,0809 | 2,3595 GHz | 2,4500 GHz | **2,2580 GHz** |
+
+Catatan: selisih TL-vs-cavity bertambah dengan εr (PTFE 2,0 % → tutorial 3,4 % → FR-4 3,8 %), jadi memakai cavity sebagai prediktor utama makin penting di substrat ber-εr tinggi. Kalau bias konstruksi keluar ≈ −4,3 % di kedua geometri, ia boleh dikompensasi sebagai faktor tunggal; kalau tidak, tuning per-geometri yang wajib.
+
+### C. Prediksi feed untuk R = 50 Ω (menutup 13.5)
+R terukur ≈ 33–35 Ω pada resonansi, padahal rumus inset menjanjikan 50 Ω. Jika penyebabnya R_edge nyata ≈ 0,68× rumus (≈173 Ω):
+
+- feed harus digeser dari y = 20,690 mm → **y = 13,223 mm**, yaitu **inset ≈ 7,47 mm** (bukan 14,66 mm).
+- Uji: sapu `scripts/tune_inset.py` di kisaran **7–8 mm** dan lihat apakah R mendekati 50 Ω. Kalau ya → tambahkan faktor koreksi terdokumentasi pada `inset_depth_for_input_resistance`; kalau tidak → tersangka beralih ke induktansi port.
+
+## 14.3 Alat yang saya kirim (di luar paket, sesuai pembagian kerja)
+
+`yotta_tools/mixing_validation.py` (+ `yotta_tools/README.md`) — begitu berkas `data/composite_measurements.csv` ada (skema di §10.3), Y-T3 langsung bisa dijalankan: ia menghitung keempat model + batas Wiener untuk setiap baris, memeriksa apakah nilai terukur masuk di dalam batas, dan menulis tabel galat per model. Saya tetap tidak akan mengarang angka dari ingatan.
+
+## 14.4 Urutan yang saya sarankan untuk Aksara
+
+1. **Benahi konstruksi** (port/mesh/setelan) sampai selisih vs anchor turun mendekati ~1 % — ini prasyarat sebelum angka apa pun dipakai.
+2. **Jalankan (B)** di satu geometri kedua → tentukan apakah bias konstan (faktor tunggal) atau bergantung geometri.
+3. **Jalankan (A)** sebagai uji kontrol yang bersih dari perancu.
+4. **Baru tuning**, dan catat faktor koreksi + model acuan di dokumen desain.
+5. **Tutup empat celah test** di §14.1 (masing-masing satu test).
+6. **Sinkronkan dokumen (D-01)** — `verification.md` saat ini bertentangan dengan dirinya sendiri.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-21 (bantuan putaran 5). Siap lanjut: begitu ada `data/composite_measurements.csv` atau hasil geometri kedua, saya proses di putaran berikutnya.*
