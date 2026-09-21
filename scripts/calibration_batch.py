@@ -41,7 +41,7 @@ ER = 2.1
 H = 1.6e-3
 RUNS = ROOT / "runs"
 LOG_PATH = RUNS / "calibration_batch.log"
-WRAPPER = ROOT / "tools" / "run_with_openems.py"
+WRAPPER = ROOT / "scripts" / "run_with_openems.py"
 PY = sys.executable
 
 
