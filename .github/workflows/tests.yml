@@ -35,3 +35,18 @@ jobs:
           # makes the requirement explicit instead of implicit.
           PYTHONPATH: ${{ github.workspace }}
         run: python -m unittest discover -s tests -v
+
+  frozen-gui:
+    name: frozen GUI (windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install the project with the GUI and packaging extras
+        run: python -m pip install ".[gui,packaging]"
+      - name: Build the frozen GUI and verify it (--selftest)
+        run: python scripts/build_gui.py
