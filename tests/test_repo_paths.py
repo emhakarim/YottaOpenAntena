@@ -118,5 +118,24 @@ class TestScriptsDoNotRequireTheSolverToImport(unittest.TestCase):
             )
 
 
+class TestScriptsCreateTheirOutputDirectories(unittest.TestCase):
+    """A script must not assume `runs/` exists: it is gitignored, so a clean checkout has
+    none.  Yotta's review found `scripts/gpu_benchmark.py` writing `runs/gpu_benchmark.json`
+    without creating the directory, which fails with FileNotFoundError after all the work."""
+
+    def test_gpu_benchmark_creates_its_output_directory_first(self):
+        script = _text(REPO_ROOT / "scripts" / "gpu_benchmark.py")
+        self.assertIn(
+            "out.parent.mkdir(parents=True, exist_ok=True)",
+            script,
+            "gpu_benchmark.py must create runs/ before writing into it",
+        )
+        self.assertLess(
+            script.index("out.parent.mkdir"),
+            script.index("out.write_text"),
+            "the directory has to be created before the file is written",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

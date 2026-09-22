@@ -41,8 +41,10 @@
 | **A-3** | Tabel generalisasi **ulang** memakai alat Y-1 (acuan tunggal = cavity), bukan campur acuan | **P0 (keputusan)** | Menentukan: kalibrasi sekali vs tuning per-geometri | tabel ber-acuan tunggal + pernyataan eksplisit kesimpulannya | belum |
 | **A-4** | Perbaiki `docs/verification.md` §generalisation bila hasil A-3 bertentangan dengan klaim "bias konstan −4,1…−5,0 %" | P1 | Klaim yang salah lebih berbahaya daripada tidak ada klaim | dokumen sesuai hasil A-3 | belum |
 | **A-5** | Selesaikan uji ground plane bebas perancu (titik 1,00 λ yang tadi masih berjalan) + ulangi dengan `port_refine` default baru | P2 | Baseline bergeser setelah snapping; tren ground plane harus diukur ulang pada baseline baru | 3 titik, domain tetap, dilaporkan di `docs/verification.md` | belum |
-| **A-6** | Pakai `tugas.md` sebagai papan status (jangan hanya di `aksarakomen.md`) | P2 | Supaya pembagian kerja terlihat satu tempat | status di tabel ini diperbarui tiap push | belum |
+| **A-6** | Pakai `tugas.md` sebagai papan status (jangan hanya di `aksarakomen.md`) | P2 | Supaya pembagian kerja terlihat satu tempat | status di tabel ini diperbarui tiap push | **terverifikasi** — papan diperbarui di beberapa commit (A-8/A-9, §3d) |
 | **A-7** | Ekspos `port_refine` (dan `metal_edge_snapping`) ke CLI/GUI sehingga A/B bisa satu perintah | P2 | Mengurangi kesalahan manual saat A/B | flag CLI + kontrol GUI + test | belum |
+| **A-8** | **Jalur GPU**: kernel FDTD 2-D OpenCL (`openantenna/gpu/`) + validasi analitik + benchmark | P1 | Permintaan pemilik: manfaatkan GPU yang ada, termasuk VGA murah. openEMS CPU-only, jadi satu-satunya jalan adalah kernel sendiri | test yang gagal bila fisika kernel dirusak, test **skip bersih** tanpa OpenCL, benchmark terdokumentasi + `docs/gpu.md` | **jalan (tervalidasi)** — cavity 0,031 % vs analitik; ~290 MCells/s vs numpy 12–15 MCells/s (**baseline numpy**, belum sepadan vs openEMS); `docs/gpu.md` |
+| **A-9** | **Progress bar + `progress.json`**: output solver di-*stream* (`-u`) dan bar di konsol + tab Simulate GUI | P1 | Dua run PTFE berjalan ~107 menit tanpa progres yang bisa dilihat: itu kesalahan setup saya, bukan solver, dan membuat "85 menit" tak bisa dibedakan dari "menggantung" | parser diuji terhadap log nyata, `progress.json` tiap update, label cap eksplisit | **terverifikasi** — 233 test hijau; demo pada log tutorial: "6.0% of the 400,000-step cap ... cap is an upper bound, not the finish line" |
 
 ## 2b. Pembagian ulang — 2026-09-22, setelah openEMS terpasang di mesin Yotta
 Alasan: openEMS 0.37.0-rc2 + Python 3.13 + venv solver kini **jalan di komputer Yotta**, jadi pekerjaan yang butuh run tidak lagi harus lewat Aksara. Yang tetap milik Aksara: **perubahan di paket `openantenna/`** dan keputusan desain.
@@ -113,3 +115,42 @@ Konteks dari papan: pasangan A-1 (PTFE 2,45 GHz) dan validasi loss **dihentikan 
 
 *Dibuat oleh **Yotta** — 2026-09-21. Silakan Aksara menambahkan/mengubah barisnya; kalau ada
 item yang menurutmu salah pemilik, pindahkan dan tulis alasannya di baris itu.*
+
+## 3d. Catatan Aksara — 2026-09-22 (CI, nec2, benchmark #2, dan koreksi proses)
+
+**Kegagalan CI pada `0712a10` — dibaca dari log Actions, bukan dugaan.** Kedua job **ubuntu
+gagal**, kedua job **windows lolos**. Penyebabnya satu test NEC2 yang mengeksekusi launcher
+`fake_nec2.bat`; di Linux file `.bat` bukan executable:
+
+    PermissionError: [Errno 13] Permission denied: '/tmp/.../fake_nec2.bat'
+    Ran 226 tests -> FAILED (errors=1, skipped=9)
+
+**Yotta sudah memperbaiki helper itu secara paralel di upstream** (`.bat` di Windows, `sh` +
+`chmod` di POSIX). Saya sempat menambahkan test kedua untuk hal yang sama: mubazir, dan
+menghasilkan **dua push merah** (`d67021e`, `ef8b58a`). Sudah dihapus; **`39b58ac` hijau**
+(diverifikasi lewat API Actions: `conclusion=success`). Pelajaran: periksa upstream dulu
+sebelum menambah test untuk sesuatu yang mungkin sudah ditutup di sana.
+
+**nec2 di mesin Aksara: belum terpasang.** Tidak ada `nec2c.exe` di mesin, dan tidak ada
+kompilator C (`gcc`/`clang`/`cl` tidak ada). Jadi seluruh verifikasi adapter NEC2 di sini
+memakai mesin **palsu**; eksekusi nyata hanya di mesin Yotta. Rencana: unduh toolchain
+portabel WinLibs (GitHub releases terjangkau, HTTP 200) lalu bangun `KJ7LNW/nec2c`.
+
+**Benchmark #2 (TE10) — dua cacat skrip sudah diperbaiki, tetapi masih terblokir.**
+Perbaikan: (a) port z-arah + `edges2grid="xy"` -> `AddRectWaveGuidePort` TE10; (b) dinding PEC
+1 mm di **dalam** guide -> batas PEC domain, supaya acuan 1499,0 MHz benar-benar cocok dengan
+geometri (sebelumnya lebar efektif 98 mm = f_c 1529,6 MHz, yaitu +2,0 % dari acuan yang
+toleransinya sendiri hanya 1 %). Bukti kausal: error `CalcVoltageIntegral` 4 -> 0 dan energi
+medan 0,00e+00 -> terisi. Kegagalan yang tersisa bersifat reprodusibel:
+`FileNotFoundError: .../openems_run/port_ut_2` (probe modal tidak merekam) dan run menyentuh
+cap 200.000 langkah tanpa memenuhi EndCriteria. Rujukan resmi
+`tools/openEMS/python/Tutorials/Rect_WaveGuide.py`: bidang port perlu diberi **garis mesh
+eksplisit**. Karena **R-4 sekarang milik Yotta**, saya serahkan temuan ini kepadanya.
+
+**Bug `runs/` pada `gpu_benchmark.py` (temuan Yotta di §3) sudah saya perbaiki**: direktori
+keluaran dibuat sebelum ditulis, jadi skrip tidak lagi gagal pada checkout bersih.
+
+**Koreksi proses (permintaan pemilik):** urutan kerja saya salah — saya push dulu, baru beres.
+Urutan yang sekarang saya pakai: **tarik → samakan → verifikasi identik → baru push**. Tidak
+memakai `git pull -X theirs` (mem-buang perubahan lokal tanpa suara), dan memeriksa status CI
+setelah push.

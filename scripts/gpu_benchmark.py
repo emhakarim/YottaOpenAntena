@@ -96,6 +96,9 @@ def main() -> int:
     print("  " + json.dumps(validation, default=str))
 
     out = ROOT / "runs" / "gpu_benchmark.json"
+    # The runs/ directory may not exist on a clean checkout (review findingÂ§3):
+    # without this the script dies with FileNotFoundError after doing all the work.
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps(
             {
