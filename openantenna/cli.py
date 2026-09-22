@@ -295,6 +295,63 @@ def cmd_wire(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_plot(args: argparse.Namespace) -> int:
+    """Plot a stored run's |S11| and VSWR from s11.csv - pure post-processing, no solver."""
+    from .postproc.sparams import S11Trace
+
+    run_dir = Path(args.run)
+    csv_path = run_dir / (args.csv or "s11.csv")
+    if not csv_path.is_file():
+        print(f"error: {csv_path} not found (give a run directory that contains s11.csv)", file=sys.stderr)
+        return EXIT_ERROR
+    try:
+        trace = S11Trace.from_csv(csv_path)
+    except Exception as exc:
+        print(f"error: cannot read {csv_path.name}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    try:
+        import matplotlib
+        matplotlib.use("Agg")  # headless: a plot must not need a display
+        import matplotlib.pyplot as plt
+    except Exception as exc:
+        print(
+            f"error: plotting needs matplotlib ({type(exc).__name__}: {exc}); "
+            "install it with 'pip install matplotlib'",
+            file=sys.stderr,
+        )
+        return EXIT_ERROR
+
+    index = trace.worst_match_index()
+    resonance_hz = trace.frequencies_hz[index]
+    db = trace.db()
+    vswr = trace.vswr()
+    out = Path(args.out)
+
+    fig, axes = plt.subplots(2, 1, figsize=(7.0, 5.0), tight_layout=True, sharex=True)
+    axes[0].plot([f / 1e9 for f in trace.frequencies_hz], db, "k-", lw=1.5)
+    axes[0].axhline(-10.0, color="crimson", ls="--", lw=1.0)
+    axes[0].axvline(resonance_hz / 1e9, color="steelblue", ls=":", lw=1.0)
+    axes[0].set_ylabel("|S11| [dB]")
+    axes[0].grid(True, alpha=0.3)
+    axes[0].set_title(
+        f"{run_dir.name}: resonance {resonance_hz / 1e9:.4f} GHz, {db[index]:.2f} dB"
+    )
+    axes[1].plot([f / 1e9 for f in trace.frequencies_hz], vswr, "b-", lw=1.5)
+    axes[1].axvline(resonance_hz / 1e9, color="steelblue", ls=":", lw=1.0)
+    axes[1].set_xlabel("frequency [GHz]")
+    axes[1].set_ylabel("VSWR")
+    axes[1].grid(True, alpha=0.3)
+    fig.savefig(out, dpi=args.dpi)
+    plt.close(fig)
+
+    print(f"resonance   : {resonance_hz / 1e9:.4f} GHz")
+    print(f"|S11|       : {db[index]:.2f} dB   VSWR {vswr[index]:.3f}")
+    print(f"points      : {len(trace.frequencies_hz)}")
+    print(f"written     : {out}")
+    return EXIT_OK
+
+
 def cmd_gen_openems(args: argparse.Namespace) -> int:
     _resolve_sweep(args)
     project = _base_project(args)
@@ -480,6 +537,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--binary", default=None, help="explicit NEC2 engine path (else NEC2_BIN, then PATH)")
     p.add_argument("--timeout-s", type=float, default=120.0)
     p.set_defaults(handler=cmd_wire)
+
+    p = sub.add_parser("plot", help="plot a stored run's |S11| and VSWR from s11.csv (no solver needed)")
+    p.add_argument("--run", required=True, help="run directory that contains the S11 data")
+    p.add_argument("--csv", default=None, help="alternative file name inside the run directory")
+    p.add_argument("--out", default="s11_plot.png", help="output PNG path")
+    p.add_argument("--dpi", type=int, default=150)
+    p.set_defaults(handler=cmd_plot)
 
     p = sub.add_parser("gen-openems", help="write an openEMS model script (does not run it)")
     _add_design_arguments(p)
