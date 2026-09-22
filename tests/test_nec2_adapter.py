@@ -145,6 +145,12 @@ class TestEndToEndWithAFakeEngine(unittest.TestCase):
             with self.assertRaises(ValueError):
                 Nec2Solver().parse_results(tmp)
 
+    def test_vswr_survives_a_short_circuit_impedance(self):
+        """z = -z0 would divide by zero; the guard must return inf instead of raising."""
+        self.assertEqual(Nec2Solver._vswr(complex(-50.0, 0.0), 50.0), float("inf"))
+        self.assertAlmostEqual(Nec2Solver._vswr(complex(50.0, 0.0), 50.0), 1.0, places=9)
+        self.assertAlmostEqual(Nec2Solver._vswr(complex(0.0, 0.0), 50.0), float("inf"), places=0)
+
 
 if __name__ == "__main__":
     unittest.main()
