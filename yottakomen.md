@@ -1510,3 +1510,52 @@ Semua hasil akan dilaporkan dalam format yang sama: acuan sejenis, jumlah langka
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-22 (koordinasi). openEMS jalan di sini → porsi run saya ambil alih; Aksara fokus ke paket dan keputusan desain, dengan satu temuan P1 (NF2FF default) untuk segera ditindaklanjuti.*
+
+---
+
+# 29. nec2++/NEC2 SELESAI — engine dibangun lokal, adapter terverifikasi end-to-end
+
+Diminta pemilik: “nec2++ bisa kamu lengkapi”. Selesai — tanpa admin, tanpa kompiler yang sudah ada.
+
+## 29.1 Cara mendapatkannya (reproducible)
+
+1. Tidak ada wheel PyPI (`necpp`/`PyNEC` hanya sdist) dan tidak ada biner rilis resmi → **bangun dari sumber**.
+2. Toolchain portable **WinLibs mingw-w64/gcc 16.2.0** (zip, 261 MB) — tidak perlu instalasi/admin.
+3. Sumber **`KJ7LNW/nec2c`** (terjemahan resmi NEC2 FORTRAN→C).
+4. Tiga shim kecil karena mingw tidak punya `sys/times.h` / `sigaction` / `config.h`: `sys/times.h` (pakai `clock()`, **tanpa `windows.h`** karena makronya bentrok dengan kode NEC), `signal.h` (`sigaction`→`signal`), `config.h` (`PACKAGE_STRING`).
+5. Kompilasi: `gcc -std=gnu89 -O2 -fcommon -I shim -include shim/config.h -o nec2c.exe main.c calculations.c fields.c geometry.c ground.c input.c matrix.c misc.c network.c radiation.c shared.c somnec.c -lm` → **nec2c.exe 346 KB**.
+   *Catatan penting:* repo itu memuat **dua** versi (monolitik `nec2c.c` **dan** modul terpisah). Mengompilasi keduanya sekaligus menghasilkan konflik; yang benar adalah modul terpisah (tanpa `nec2c.c`), dan `somnec.c` wajib ikut.
+
+## 29.2 Yang hanya bisa ditemukan dengan engine sungguhan
+
+Menguji adapter terhadap **biner asli** langsung membongkar tiga bug di kode saya sendiri:
+
+1. **Kartu `EX` salah tata** — NEC2 free-format butuh **satu field integer tambahan sebelum tegangan** (`EX 0,1,16,0,1.0,0.0`, seperti deck bawaan nec2c). Tanpa itu: `NON-NUMERICAL CHARACTER '.' IN INTEGER FIELD`. Akibatnya sumber jatuh di segmen ujung, bukan di tengah.
+2. **nama berkas panjang** — nec2c menolak nama >80 karakter, jadi deck harus dialamatkan relatif ke direktori run.
+3. **regex parser tidak *capturing*** — `groups()` hanya berisi 2 grup → `IndexError`; diperbaiki menjadi 11 grup.
+
+Ini contoh nyata kenapa aturan “pakai alat sungguhan untuk verifikasi” ada.
+
+## 29.3 Validasi fisis (bukan sekadar “jalan”)
+
+Sapu jari-jari kawat pada dipole 0,5 λ @2,45 GHz (engine = nec2c):
+
+| radius | a/L | R [Ω] | X [Ω] |
+|---|---|---|---|
+| 0,02 mm | 0,0003 | **80,6** | 45,7 |
+| 0,10 mm | 0,0016 | 84,6 | 48,0 |
+| 1,00 mm | 0,0163 | **110,1** | 45,6 |
+
+Tren-nya **benar arah**: resistansi naik saat kawat menebal (nilai klasik ~73 Ω adalah limit radius→0; pada a/L = 0,0003 kita sudah di 80,6 Ω), dan reaktansi ~46 Ω dekat nilai klasik ~42,5 Ω. Efisiensi dilaporkan 100 % (kawat PEC) — konsisten.
+
+## 29.4 Status antrean
+
+| Item | Status |
+|---|---|
+| Phase 2 #6 — adapter NEC2 | **kode + test (8 test) + verifikasi end-to-end dengan engine sungguhan** — selesai dari sisi saya |
+| Sisa untuk Aksara (#6) | memasukkan bagian `wire` ke `Project` (perubahan model) supaya adapter memakai jalur project yang sama seperti openEMS |
+| Engine | `nec2c.exe` lokal + `NEC2_BIN` (env) untuk adapter |
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (NEC2 selesai). Engine dibangun dari sumber tanpa admin; adapter lulus 8 test dan — yang lebih penting — menghasilkan fisika yang benar saat dijalankan dengan biner aslinya.*
