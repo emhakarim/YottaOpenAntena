@@ -73,10 +73,14 @@ reporting of what is and is not verified.
 Done so far: four-tab window (material/composite, design, simulate, results); a worker
 thread so simulations do not block the event loop; offscreen smoke tests; a solver
 progress bar driven by the solver's own timestep lines (plus `progress.json` per run); a
-to-scale array preview beside the array-factor plot; run provenance and the far-field cut
-in the results tab; project save/load through the neutral model JSON; a sensitivity plot
-of the mixing models against the Wiener bounds; and a sequential batch queue with per-case
-progress. Not done: 3-D viewer (needs PyVista - a dependency decision), packaging.
+to-scale array preview beside the array-factor plot **and a 3-D preview of the same
+model** (plain matplotlib, no new dependency; PyVista remains an option for the owner to
+decide); run provenance and the far-field cut in the results tab plus an **A/B overlay**
+comparing two runs on one panel with the resonance shift in MHz and %; project save/load
+through the neutral model JSON; a sensitivity plot of the mixing models against the
+Wiener bounds; and a sequential batch queue with per-case progress. Not done: packaging
+(PyInstaller); a stacked-dielectric stackup editor is blocked until the Phase 1 generator
+supports more than one dielectric layer (it currently refuses, honestly).
 
 ## Phase 4 â€” depth and packaging
 

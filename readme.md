@@ -78,13 +78,19 @@ deploy. It is a thin client of the same functions the CLI calls.
 python -m openantenna.gui
 ```
 
-Four tabs: **Material & composite** (library + mixing rules with their validity
-warnings), **Design** (patch synthesis, array layout, array-factor plot),
-**Simulate** (mesh and loss settings, generate, run in a worker thread),
-**Results** (load a run directory, plot S11, read the metrics).
+Four tabs: **Material & composite** (library, mixing rules with their validity warnings,
+and a sensitivity plot against the Wiener bounds), **Design** (patch synthesis, array
+layout, 2-D or 3-D preview, array-factor plot, project save/load as JSON), **Simulate**
+(mesh and loss settings, the three A/B knobs, generate, run in a worker thread with a
+solver-driven progress bar, and a sequential batch queue), **Results** (load a run
+directory: S11 metrics, the run's own provenance, the far-field cut, and an A/B overlay of
+a second run with the resonance shift).
 
-Status: the window builds and is covered by an offscreen smoke test, but it has
-not yet been used for real work — no 3-D viewer, no live solver log.
+Status: used for real work on this project's own runs - batch queue, A/B overlays and
+project round-trips are covered by offscreen tests. Deliberate limits (no modal dialogs
+on automated paths, the 3-D preview is matplotlib rather than PyVista, stacked dielectrics
+are refused because the Phase 1 generator only supports one) are documented in
+[`docs/gui.md`](docs/gui.md).
 
 ## GPU path (optional, experimental)
 
