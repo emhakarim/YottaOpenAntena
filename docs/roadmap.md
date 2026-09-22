@@ -1,5 +1,13 @@
 ﻿# Roadmap
 
+> **Phase 1 (headless core) is closed as of 2026-09-22.**  The measured accuracy record
+> is in [`calibration.md`](calibration.md); the verification log is in
+> [`verification.md`](verification.md).  Three items were carried into Phase 2 because
+> they cannot be closed without external input: absolute loss validation (needs a
+> reference with a known Q or a measurement), accuracy beyond the characterised 2-5 %
+> model bias, and the CLI plotting convenience.  NF2FF landed early and is already in
+> the generator.
+
 ## Phase 1 â€” headless core (current)
 
 Goal: a scriptable, dependency-free core that can design a patch, lay out an

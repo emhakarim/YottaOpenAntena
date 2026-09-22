@@ -1,6 +1,6 @@
-# OpenAntenna Studio
+﻿# OpenAntenna Studio
 
-An open-source antenna analysis and design toolkit — a free alternative in
+An open-source antenna analysis and design toolkit â€” a free alternative in
 spirit to commercial full-wave packages, built as a modern front-end over
 established open-source solvers.
 
@@ -10,7 +10,7 @@ established open-source solvers.
 
 | | |
 |---|---|
-| **Is** | A neutral parametric design model, a composite-material explorer (mixing rules, dispersion fitting, sensitivity), analytic element/array geometry synthesis, an openEMS model generator and result parser, a sweep engine and a result store — all scriptable from one CLI. |
+| **Is** | A neutral parametric design model, a composite-material explorer (mixing rules, dispersion fitting, sensitivity), analytic element/array geometry synthesis, an openEMS model generator and result parser, a sweep engine and a result store â€” all scriptable from one CLI. |
 | **Is not (yet)** | A GUI, a verified EM solver, an impedance-matching engine, a ready-to-fabricate design authority. |
 
 Phase 1 deliberately runs on the **Python standard library only**. There is no
@@ -84,14 +84,14 @@ warnings), **Design** (patch synthesis, array layout, array-factor plot),
 **Results** (load a run directory, plot S11, read the metrics).
 
 Status: the window builds and is covered by an offscreen smoke test, but it has
-not yet been used for real work — no 3-D viewer, no live solver log.
+not yet been used for real work â€” no 3-D viewer, no live solver log.
 
 ## Project notes
 
-* [`aksarakomen.md`](aksarakomen.md) — working notes from the developing agent
+* [`aksarakomen.md`](aksarakomen.md) â€” working notes from the developing agent
   (Aksara), including every measurement, every fixed defect and the open
   calibration questions.
-* `yottakomen.md` — review notes from the evaluating agent (Yotta).
+* `yottakomen.md` â€” review notes from the evaluating agent (Yotta).
 
 ## Honesty rules this project follows
 
@@ -105,11 +105,12 @@ not yet been used for real work — no 3-D viewer, no live solver log.
 
 ## Documentation
 
-* [docs/architecture.md](docs/architecture.md) — layers, module map, data flow
-* [docs/materials.md](docs/materials.md) — built-in materials, mixing rules, validity limits
-* [docs/verification.md](docs/verification.md) — what has actually been verified, and how
-* [docs/licensing.md](docs/licensing.md) — MIT core, external GPL solvers, process boundary
-* [docs/roadmap.md](docs/roadmap.md) — phases and open work
+* [docs/calibration.md](docs/calibration.md) - measured accuracy, per-recipe bias, the tuning loop
+* [docs/architecture.md](docs/architecture.md) â€” layers, module map, data flow
+* [docs/materials.md](docs/materials.md) â€” built-in materials, mixing rules, validity limits
+* [docs/verification.md](docs/verification.md) â€” what has actually been verified, and how
+* [docs/licensing.md](docs/licensing.md) â€” MIT core, external GPL solvers, process boundary
+* [docs/roadmap.md](docs/roadmap.md) â€” phases and open work
 
 ## Licence
 
