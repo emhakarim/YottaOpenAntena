@@ -19,11 +19,11 @@ reporting of what is and is not verified.
 | Sweep engine (dry-run enumeration) | done |
 | sqlite result store | done (wired into `sweep run`) |
 | CLI | done |
-| Test suite | 180 tests, all passing (see docs/verification.md for the running count) |
+| Test suite | **305 tests, 2 skipped** (CI: `.github/workflows/tests.yml`; see docs/verification.md) |
 | Documentation | this set |
-| **Accuracy calibration of the generated model** | **open** - not "not started": it is blocked on machine time. Needs runs that converge (EndCriteria 1e-4, cap 400k), per `docs/convergence-policy.md` |
-| Dielectric loss in the generated solver model | **done** (2026-09-21, Phase 2 #1) - native Debye through `CSXCAD.CSProperties.CSPropDebyeMaterial`; 7 tests |
-| Result plotting (optional, needs matplotlib) | **done** - `openantenna plot` (commit `782efbd6`) |
+| **Accuracy calibration of the generated model** | **open** |
+| **Dielectric loss in the generated solver model** | **kappa done; native Debye done** (see docs/dispersive-substrates.md) |
+| Result plotting | done (`openantenna plot`, matplotlib optional) |
 
 ### Known open items in Phase 1
 
@@ -33,14 +33,18 @@ reporting of what is and is not verified.
    (boundary, PML depth, domain size, mesh grading) were eliminated as a class.
    The residual is attributed to structural differences - ground footprint, feed
    realisation, mesh-line placement. See `docs/verification.md`.
-2. **Dielectric loss is implemented but not validated in absolute terms.** The
-   generator maps the loss tangent onto an equivalent conductivity
-   (`--loss-model kappa` | `none`), exact at the sweep centre and drifting as 1/f;
-   the generated script prints the implied tan delta at the sweep edges. No
-   reference with a known Q has been used yet, so loss results are valid for
-   relative comparisons only.
-3. **One port only.** An NxM array is generated as geometry with a single port;
-   a corporate feed network and per-element ports are not modelled.
+2. **Dielectric loss: implemented (two ways), validation still open.** The generator can
+   map the loss tangent onto an equivalent conductivity (`--loss-model kappa`) or hand a
+   **dispersive single-pole Debye** material to the engine (`--loss-model debye`, see
+   `docs/dispersive-substrates.md`; an earlier claim that CSXCAD had no dispersive API was
+   wrong). A loss-verification batch against a reference with a known Q has not been run to
+   convergence yet, so loss numbers are still for relative comparisons only.
+3. **Feeds: per-element ports done, corporate network open.** `element_ports=True` creates
+   one lumped port per array element and dumps them all (`port_<n>.csv`), and
+   `yotta_tools/port_matrix.py` assembles the coupling S-matrix from one run per driven port
+   (see `docs/array-s-matrix.md`). A corporate feed network - one input driving every element
+   through printed lines - is **not** modelled; `element_ports` with a printed line is refused
+   until it exists (spec: `docs/corporate-feed.md`).
 4. **Generation-time contract is complete; runtime ergonomics are not.** Boundary
    type, PML cells, mesh density, smoothing ratio, air and ground margins, loss
    model, metal-edge snapping, timestep cap and end criteria are all knobs, they
@@ -50,18 +54,22 @@ reporting of what is and is not verified.
 
 ## Phase 2 â€” physics coverage
 
-* Dielectric-loss modelling (dispersive material from measured data / fitted
-  Debye parameters) and a loss-verification case.
+* Dielectric-loss modelling - **done**: native dispersive Debye substrate
+  (`--loss-model debye`) plus a banded-kappa fallback with a measured error
+  (`yotta_tools/loss_fit.py`). Loss *validation* to convergence is still open.
 * Accuracy calibration and a reference-case regression test against a published
-  or tutorial result.
-* Unit-cell / periodic boundary mode for infinite-array studies.
+  or tutorial result - **regression done** (waveguide TE10 benchmark passes; patch anchor
+  recorded), calibration waits on converged runs (see `docs/experiment-k1-verdict.md`).
+* Unit-cell / periodic boundary mode for infinite-array studies - **done** (PEC/PMC walls).
 * Finite 4x4 array with mutual-coupling extraction (S-matrix) and a coupling
-  report.
-* Feed network analysis with scikit-rf and a corporate-feed generator.
+  report - **ports + assembly done** (`element_ports`, `yotta_tools/port_matrix.py`);
+  the 4x4 run itself is queued (16 converged runs).
+* Feed network analysis with scikit-rf and a corporate-feed generator - **open**
+  (spec drafted in `docs/corporate-feed.md`).
 * Wire antennas via nec2++ with the same neutral model (second adapter, proving
-  the abstraction).
+  the abstraction) - **done** (adapter + a locally built nec2c engine).
 * Convergence reporting: flag runs that hit the timestep cap or miss the end
-  criteria.
+  criteria - **done** (table/CSV/JSON columns plus an unconverged counter).
 
 ## Phase 3 â€” desktop GUI (started)
 
