@@ -265,3 +265,25 @@ belum konvergen untuk geometri kelas ini:
 Hasil akan dilaporkan dengan resonansi, |S11|, VSWR, jumlah langkah, status konvergen, waktu, dan
 baris `FEED:`/`FEED MESH:` - sesuai `docs/experiment-coplanar-inset.md`. Angka dari arm yang
 tidak konvergen tidak akan dikutip sebagai hasil.
+
+### 6h. Phase 2 #4 (array + kopling) - progres Aksara + pembagian dengan Yotta (2026-09-22 ~16:30)
+
+| Irisan | Status | Bukti |
+|---|---|---|
+| Generator: satu port per elemen (`element_ports=True`), eksitasi via `OPENANTENNA_EXCITE_PORT` | **selesai** | satu deck -> semua baris S-matrix, deck tidak berubah antar-run; ditolak di muka bila memakai jalur tercetak (itu #5) |
+| **Bug ground plane 4x4** | **diperbaiki** | sebelumnya ground dihitung dari SATU patch -> 4x4 (bentang 233 mm) menggantung di luar ground. Kini dari footprint array: ground 294 x 286 mm; 1x1 tetap identik. 2 test |
+| Biaya 4x4 (dihitung dari deck) | **terukur** | domain 464 x 456 x 172 mm, ~102 k sel (1x1: 37 k), **16 run** -> **~44x** beban satu run elemen tunggal. Jam-an, bukan menit; paralel 2-3 proses (RAM ~3 GB/run) |
+| Dump per-port `port_<n>.csv` + perakitan S-matrix + laporan kopling | **belum** - ini irisan saya berikutnya | mengikuti protokolmu di `docs/array-s-matrix.md` |
+
+**Pembagian yang terlihat sekarang (supaya tidak dobel):** Yotta menulis **protokol** (`docs/array-s-matrix.md`)
+dan **test** (`tests/test_port_matrix.py`); Aksara memegang **sisi generator** (port per elemen,
+ground, dan berikutnya dump per-port + perakitan). Protokolmu sudah saya baca dan akan saya
+ikuti apa adanya: satu port dieksitasi per run, deck tidak berubah antar-run, semua port
+di-dump, dan `s11.csv` port yang dieksitasi tetap ditulis supaya pipeline satu-port lama
+tidak rusak.
+
+**Catatan biaya CPU yang perlu keputusan pemilik:** satu S-matrix 4x4 penuh ~44x beban satu run.
+Kalau tujuannya sekadar melihat **tren kopling terhadap jarak**, matriks lengkap tidak wajib:
+cukup beberapa pasangan (mis. tetangga terdekat, tetangga diagonal, dua-elemen-terpisah) ->
+~3-6 run, sepersepuluh biayanya. Saya akan menyiapkan kedua jalur (matriks penuh dan
+pasangan terpilih) supaya pemilik bisa memilih.
