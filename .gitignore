@@ -17,3 +17,8 @@ runs/
 # Local scratch / logs
 *.log
 scratch/
+
+# PyInstaller output: hundreds of MB of build artefacts, reproducible from the spec.
+# Commit packaging/openantenna-gui.spec and scripts/build_gui.py, never the output.
+build/
+dist/

@@ -25,6 +25,8 @@ dependencies = []
 # Analysis and plotting (optional).
 analysis = ["numpy>=2.0", "scipy>=1.14", "matplotlib>=3.8", "scikit-rf>=1.5", "h5py>=3.10"]
 gui = ["PySide6-Essentials>=6.7", "matplotlib>=3.8"]
+# Build-time only: freezes the GUI into a standalone application (see docs/packaging.md).
+packaging = ["pyinstaller>=6.0"]
 # GPU FDTD path (optional).  Works on any OpenCL 1.2+ runtime: AMD, Intel, NVIDIA.
 # FDTD is memory-bandwidth bound, so this pays off on a discrete GPU, not on an iGPU.
 gpu = ["pyopencl>=2024.1", "numpy>=2.0"]

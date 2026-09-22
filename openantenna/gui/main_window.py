@@ -1202,7 +1202,38 @@ class MainWindow(QMainWindow):
 
 
 def run_gui(argv: list[str] | None = None) -> int:
-    app = QApplication(list(argv) if argv else sys.argv)
+    """Start the GUI.
+
+    ``--selftest`` builds the window, exercises the panels that need no solver, and exits
+    without entering the event loop.  That is how a *frozen* build is verified: a windowed
+    executable has no console, so its **exit code** is the evidence.
+    """
+    arguments = list(argv) if argv else list(sys.argv)
+    if "--selftest" in arguments:
+        return _gui_selftest(arguments)
+
+    app = QApplication(arguments)
     window = MainWindow()
     window.show()
     return app.exec()
+
+
+def _gui_selftest(arguments: list[str]) -> int:
+    """Exercise the GUI without a display: 0 means the packaged app is functional."""
+    try:
+        app = QApplication.instance() or QApplication(arguments[:1])
+        window = MainWindow()
+        window.centralWidget().widget(0).evaluate()
+        design_tab = window.centralWidget().widget(1)
+        design_tab.view_mode.setCurrentText("3-D preview")
+        design_tab.synthesise()
+        simulate_tab = window.centralWidget().widget(2)
+        simulate_tab.add_to_queue()
+        window.close()
+        del app
+        return 0
+    except Exception:  # pragma: no cover - only a broken build reaches this
+        import traceback
+
+        traceback.print_exc()
+        return 1
