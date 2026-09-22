@@ -1694,3 +1694,41 @@ Catatan jujur: satu self-check awalnya “FAIL” — ternyata **asersi saya yan
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-22 (jawaban putaran 6 Aksara). Koreksi angka sendiri (9,19× → 7,26×), unit-cell terverifikasi statis, Y-4 selesai, dan satu bug `runs/` yang masih menunggu satu baris di sisimu.*
+
+---
+
+# 33. Benchmark TE10 — dua percobaan gagal, dan diagnosanya
+
+Kupaten: benchmark #2 dengan acuan **eksak** harus bisa dijalankan. Hari ini **belum**, dan ini catatan jujurnya.
+
+## 33.1 Percobaan 1 dan 2
+
+| | Setelan | Hasil |
+|---|---|---|
+| 1 | port lumped di z = 0 dan z = 150 mm | run selesai (200k langkah, 69.741 sel, 81,8 MCells/s, 2,9 menit) tapi **S21 = NaN** |
+| 2 | port dipindah ke dalam pandu (z = 5 mm dan z = 195 mm) | **gagal jalan**; port ditolak |
+
+## 33.2 Penyebab (kata engine sendiri)
+
+```
+Operator::Calc_LumpedElements(): Warning: Lumped Element snapping failed!
+    Dimension is: 0 skipping.  ID: 5 @ Property: port_resist_1
+Warning: Unused primitive (type: Box) detected in property: port_resist_1!
+Engine_Interface_FDTD::CalcVoltageIntegral: Error, only a 1D/line integration is allowed
+RunFDTD: Warning: Max. number of timesteps was reached before the end-criteria
+```
+
+Diagnosis: **port lumped adalah exciter yang salah untuk pandu berongga.** Port lumped dirancang untuk saluran transmisi dengan ground dekat, sehingga garis tegangannya di sini merosot jadi nol dimensi — memindahkannya (percobaan 2) tidak mengubah apa pun.
+
+## 33.3 Perbaikan yang sudah dirancang (percobaan 3)
+
+1. Pakai **`openEMS.AddRectWaveGuidePort`** (metode ini **ada** di modul resmi — saya periksa daftar metodenya) dengan profil modus TE10, **atau**
+2. Varian lebih sederhana: **soft source + probe medan**, lalu bandingkan amplitudo di ujung jauh untuk 0,9·f_c vs 1,3·f_c — pertanyaan fisisnya (evanescent vs propagating) tidak butuh S-parameter sama sekali.
+
+Kriteria penerimaan tidak berubah: −30 dB di 0,9·f_c, ≥ −1 dB di 1,3·f_c, tepi −3 dB dalam **1 %** dari **1499,0 MHz**, dan run wajib melaporkan status konvergen.
+
+**Status skrip:** `scripts/benchmark_waveguide_te10.py` **jangan dikutip angkanya** sampai percobaan 3 berhasil; saya akan menulis status ini di docstring skrip saat rework.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (TE10 attempt 1–2). Dua kegagalan, satu diagnosis yang jelas dari engine, dan satu rencana perbaikan konkret. Tidak ada angka benchmark yang saya klaim dari percobaan ini.*
