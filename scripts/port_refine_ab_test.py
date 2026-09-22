@@ -1,4 +1,4 @@
-﻿"""A/B test for the port-region mesh refinement (review item A4 / task A-1).
+"""A/B test for the port-region mesh refinement (review item A4 / task A-1).
 
 Yotta added ``port_refine=True``: the mesh is refined in a small box around the
 lumped port.  Refining near a feed is not automatically an improvement - it changes

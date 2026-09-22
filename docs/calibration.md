@@ -1,4 +1,4 @@
-﻿# Calibration record (Phase 1 close-out)
+# Calibration record (Phase 1 close-out)
 
 Everything in this file is measured on this machine with openEMS v0.37.0-rc2. Each
 number names **the reference it was measured against** and **the construction recipe

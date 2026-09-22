@@ -1,4 +1,4 @@
-﻿"""openEMS / CSXCAD adapter.
+"""openEMS / CSXCAD adapter.
 
 PHASE 1 SCOPE - READ THIS FIRST
 -------------------------------

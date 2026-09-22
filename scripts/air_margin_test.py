@@ -1,4 +1,4 @@
-﻿"""Air-domain / absorber-proximity test.
+"""Air-domain / absorber-proximity test.
 
 Remaining candidate for the 2.45 GHz patch model resonating at ~2.26 GHz after
 mesh refinement and feed loading were both eliminated.  The tutorial model that

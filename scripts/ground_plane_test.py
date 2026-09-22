@@ -1,4 +1,4 @@
-﻿"""Ground-plane size test (review item N-01).
+"""Ground-plane size test (review item N-01).
 
 The previous margin test enlarged the *domain / PML*, not the *ground plane*.  The
 ground plane is itself part of the radiating structure, and its margin has been a

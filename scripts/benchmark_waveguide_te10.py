@@ -1,4 +1,4 @@
-﻿"""Benchmark #2 â€” rectangular waveguide, TE10 cutoff (exact analytic reference).
+"""Benchmark #2 â€” rectangular waveguide, TE10 cutoff (exact analytic reference).
 
 Why this benchmark exists (see `docs/benchmarks.md` Â§5): the cutoff frequency of an
 air-filled rectangular waveguide has an EXACT closed form,

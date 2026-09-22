@@ -1,4 +1,4 @@
-﻿# Verification log
+# Verification log
 
 What has actually been executed, and what the outcome was. Status words follow a
 strict scale:
