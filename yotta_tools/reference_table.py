@@ -1,4 +1,4 @@
-"""Reference table for stored runs — every run judged against ONE kind of reference.
+﻿"""Reference table for stored runs — every run judged against ONE kind of reference.
 
 Why this tool exists (Yotta item Y-1): the generalisation table in the project
 notes compared three geometries against the *cavity model* but the tutorial
@@ -111,7 +111,16 @@ def collect(paths: list[Path]) -> list[dict]:
         else:
             candidates = sorted(p for p in path.iterdir() if p.is_dir()) if path.is_dir() else []
         for candidate in candidates:
-            record = load_run(candidate)
+            try:
+                record = load_run(candidate)
+            except Exception as exc:  # a broken run is a row, not a crash
+                records.append(
+                    {
+                        "run": candidate.name,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+                continue
             if record:
                 records.append(record)
     return records
