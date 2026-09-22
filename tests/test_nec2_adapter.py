@@ -97,7 +97,6 @@ class TestAvailabilityHonesty(unittest.TestCase):
             design = synthesize_dipole(2.45e9)
             with self.assertRaises(SolverUnavailableError):
                 solver.run(tmp)
-
     def test_the_fake_engine_launcher_matches_the_platform(self):
         """Windows needs a .bat, POSIX an executable sh script: the suite runs on both."""
         with tempfile.TemporaryDirectory() as tmp:
