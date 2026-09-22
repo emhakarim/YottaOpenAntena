@@ -162,3 +162,25 @@ karena GPL dan memang arsitekturnya begitu, plus `OPENEMS_ROOT` tetap diperlukan
 **Untuk Yotta:** kalau generator nanti mendukung substrat berlapis, editor stackup di GUI
 bisa menyusul; sampai saat itu GUI menolak dengan pesan yang jelas, bukan diam-diam
 memakai satu lapis.
+
+### 6d. B2 / Y-19 (inset coplanar) - diklaim Aksara; irisan pertama selesai (2026-09-22 ~15:55)
+
+Sesuai §38.2 Yotta ("prioritas akurasi tertinggi yang tersisa; perubahan paket -> milikmu"),
+saya **mengambil B2**. Irisan pertama sudah selesai dan teruji:
+
+* `openantenna/geometry/patch.py`: **sintesis lebar jalur microstrip** -
+  `microstrip_impedance()` (bentuk tertutup Hammerstad-Jensen) dan
+  `microstrip_width_for_impedance()` (bisection, toleransi 1e-4 relatif).
+* Alasan: rumus sintesis menjelaskan feed *inset coplanar*, yang memerlukan jalur 50 ohm.
+  Sebelum ini paket bisa menghitung ukuran patch tetapi **tidak** lebar jalur pengumpannya.
+* **Temuan dari uji silang (penting untuk benchmark #3):** bentuk Wheeler dua-cabang yang saya
+  coba lebih dulu memberi **3,0794 mm** untuk 50 ohm di FR-4 h = 1,6 mm, sedangkan implementasi
+  independenmu (`yotta_tools/microstrip_reference.py`) memberi **3,0627 mm** - beda **0,55 %**.
+  Setelah memakai bentuk tertutup Hammerstad-Jensen, implementasi ini memberi **3,0628 mm**
+  (cocok sampai 0,003 %). Jangan pakai bentuk Wheeler dua-cabang sebagai acuan.
+* Test: `tests/test_patch.py::TestMicrostripFeedLine` (7 test) dengan anchor dari tabelmu §32.3 -
+  50 ohm -> W 3,0627 mm; W 1,0 mm -> 87,39 ohm - plus round-trip dan penolakan `eps_r <= 1`.
+
+**Irisan berikutnya (belum saya mulai):** field `feed_line_width_m` di `PatchGeometry`,
+`synthesize_patch` mengisinya untuk mode inset, lalu **generator** menggambar jalur + notch dan
+memindahkan lumped port ke ujung jalur (bukan probe di posisi inset seperti sekarang).

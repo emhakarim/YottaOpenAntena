@@ -31,6 +31,9 @@ from typing import List
 C0 = 299792458.0  # speed of light in vacuum [m/s]
 
 
+#: vacuum wave impedance [ohm] - the constant the Hammerstad-Jensen form needs
+_Z0_VACUUM = 376.730313668
+
 def wavelength0(frequency_hz: float) -> float:
     """Free-space wavelength in metres."""
     if frequency_hz <= 0:
@@ -165,6 +168,68 @@ def estimate_fractional_bandwidth(
         * (height_m / lam0)
         * (width_m / length_m)
     )
+
+
+def microstrip_impedance(
+    epsilon_r: float, height_m: float, width_m: float
+) -> float:
+    """Characteristic impedance of a microstrip line [ohm], Hammerstad-Jensen.
+
+    Needed for review item Y-19 / B2: the synthesis formula describes a coplanar inset
+    feed, which requires a 50 ohm feed *line*, and until now the package could size a
+    patch but not the line feeding it.
+
+    Valid for ``0 < W/h <= 100`` and ``epsilon_r <= 128`` (the usual range of validity of
+    the closed form); outside it the value is still returned, because refusing would block
+    exploratory designs, but :func:`microstrip_width_for_impedance` checks the limits.
+    """
+    _validate_microstrip(epsilon_r, height_m)
+    if width_m <= 0:
+        raise ValueError("width_m must be > 0")
+    ratios = width_m / height_m
+    if ratios < 1.0:
+        # Wheeler/Hammerstad narrow-line form, the usual choice below W/h = 1
+        return _Z0_VACUUM / (2.0 * math.pi) * math.log(
+            8.0 / ratios + ratios / 4.0
+        ) / math.sqrt(effective_permittivity(epsilon_r, height_m, width_m))
+    # Hammerstad-Jensen closed form (the F1 expression).  The older two-branch Wheeler
+    # wide-line form gives 3.0794 mm for 50 ohm on FR-4 h = 1.6 mm, against 3.0627 mm from
+    # the independent implementation in yotta_tools/microstrip_reference.py and from the
+    # standard textbook value - a 0.55 % disagreement that this cross-check exposed.
+    f1 = 6.0 + (2.0 * math.pi - 6.0) * math.exp(-((30.666 / ratios) ** 0.7528))
+    return (
+        _Z0_VACUUM
+        / (2.0 * math.pi * math.sqrt(effective_permittivity(epsilon_r, height_m, width_m)))
+        * math.log(f1 / ratios + math.sqrt(1.0 + (2.0 / ratios) ** 2))
+    )
+
+
+def microstrip_width_for_impedance(
+    epsilon_r: float, height_m: float, target_ohm: float = 50.0
+) -> float:
+    """Feed-line width [m] that gives ``target_ohm`` on this substrate.
+
+    Bisection on :func:`microstrip_impedance`, which is monotonically decreasing in width:
+    no closed-form inversion is needed and the tolerance is explicit (1e-4 relative).
+    """
+    _validate_microstrip(epsilon_r, height_m)
+    if not 0.0 < target_ohm < 400.0:
+        raise ValueError("target_ohm must be between 0 and 400 (a microstrip range)")
+    low = height_m * 1e-3
+    high = height_m * 1e3
+    if microstrip_impedance(epsilon_r, height_m, low) < target_ohm:
+        return low
+    if microstrip_impedance(epsilon_r, height_m, high) > target_ohm:
+        return high
+    for _ in range(200):
+        middle = 0.5 * (low + high)
+        if microstrip_impedance(epsilon_r, height_m, middle) > target_ohm:
+            low = middle
+        else:
+            high = middle
+        if high - low < 1e-4 * high:
+            break
+    return 0.5 * (low + high)
 
 
 def inset_depth_for_input_resistance(

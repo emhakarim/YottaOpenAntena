@@ -172,5 +172,46 @@ class TestFeedHelpers(unittest.TestCase):
         self.assertGreater(small[0], 0.05)
 
 
+class TestMicrostripFeedLine(unittest.TestCase):
+    """B2 / Y-19: the patch synthesis describes a coplanar inset, which needs a feed line.
+
+    The anchors are the values published by the independent implementation in
+    ``yotta_tools/microstrip_reference.py`` (Yotta, §32.3): FR-4 (eps_r 4.4, h 1.6 mm) needs
+    **W = 3.0627 mm** for 50 ohm, and W = 1.0 mm gives **87.39 ohm**.  Two different codes
+    agreeing on a closed form is the cross-check; that tool stays independent of this one.
+    """
+
+    def test_matches_the_independent_implementation_at_fifty_ohm(self):
+        width = patch.microstrip_width_for_impedance(4.4, 1.6e-3, 50.0)
+        self.assertAlmostEqual(width * 1e3, 3.0627, delta=0.002)
+
+    def test_matches_the_independent_implementation_at_high_impedance(self):
+        impedance = patch.microstrip_impedance(4.4, 1.6e-3, 1.0e-3)
+        self.assertAlmostEqual(impedance, 87.39, delta=0.05)
+
+    def test_effective_permittivity_matches_the_published_value(self):
+        self.assertAlmostEqual(patch.effective_permittivity(4.4, 1.6e-3, 3.0e-3), 3.3249, places=3)
+
+    def test_width_and_impedance_round_trip(self):
+        for epsilon_r, height_mm, target in ((2.1, 1.6, 50.0), (4.4, 1.6, 75.0), (9.8, 0.635, 50.0)):
+            with self.subTest(eps_r=epsilon_r, target=target):
+                width = patch.microstrip_width_for_impedance(epsilon_r, height_mm * 1e-3, target)
+                back = patch.microstrip_impedance(epsilon_r, height_mm * 1e-3, width)
+                self.assertAlmostEqual(back, target, delta=0.05)
+
+    def test_impedance_falls_as_the_line_widens(self):
+        narrow = patch.microstrip_impedance(4.4, 1.6e-3, 0.5e-3)
+        wide = patch.microstrip_impedance(4.4, 1.6e-3, 5.0e-3)
+        self.assertGreater(narrow, wide)
+
+    def test_limits_are_rejected_instead_of_guessed(self):
+        with self.assertRaises(ValueError):
+            patch.microstrip_impedance(1.0, 1.6e-3, 3.0e-3)  # eps_r <= 1 is not a dielectric
+        with self.assertRaises(ValueError):
+            patch.microstrip_width_for_impedance(4.4, 1.6e-3, 1000.0)  # not a microstrip range
+        with self.assertRaises(ValueError):
+            patch.microstrip_impedance(4.4, 1.6e-3, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
