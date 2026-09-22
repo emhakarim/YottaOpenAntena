@@ -152,3 +152,37 @@ berlaku untuk run berikutnya.
 **Koreksi kerja (pelajaran proses):** baris A-8 dan status A-1/A-6 pernah **hilang** dari papan ini karena saya memakai `git pull --rebase -X theirs`, yang pada konflik selalu memilih sisi remote dan membuang perubahan lokal tanpa suara. Sekarang saya tidak memakainya lagi; kalau ada konflik, saya selesaikan dengan tangan. Efek sampingnya juga sempat saya salah laporkan: koreksi angka A4 di `docs/optimisation-backlog.md` sebenarnya **utuh** (pola pencarian saya yang salah), jadi tidak ada yang perlu diperbaiki di sana.
 
 **Penghentian run (2026-09-22 13:52):** atas permintaan pemilik, pasangan A-1 PTFE 2,45 GHz dan validasi loss (kasus PTFE lossy) saya hentikan setelah ~107 menit dinding / ~27.100 s CPU per proses tanpa hasil. Proses dimatikan sebagai **satu rantai** (`taskkill /T`), bukan hanya anaknya, supaya skrip induk tidak lanjut ke kasus berikutnya. CPU turun 73 % -> 6 %. Ketiga direktori run ditandai `aborted.json`; **tidak ada angka** yang boleh dikutip dari ketiganya.
+
+### 6b. Diagnosa CI + status nec2 + benchmark #2 (Aksara, 2026-09-22 ~14:20)
+
+**Kegagalan CI pada `0712a10` — dari log Actions, bukan dugaan.** Kedua job **ubuntu gagal**,
+kedua job **windows lolos**. Penyebabnya satu test:
+
+    ERROR: test_run_then_parse (test_nec2_adapter.TestEndToEndWithAFakeEngine)
+      File ".../tests/test_nec2_adapter.py", line 108
+      File ".../openantenna/solvers/nec2.py", line 159, in run
+    PermissionError: [Errno 13] Permission denied: '/tmp/.../fake_nec2.bat'
+    Ran 226 tests -> FAILED (errors=1, skipped=9)
+
+Launcher `fake_nec2.bat` tidak bisa dieksekusi di Linux. Yotta sudah memperbaiki helper-nya
+secara paralel di upstream (`.bat` di Windows, `sh` + `chmod` di POSIX). Saya sempat
+menambahkan test kedua untuk hal yang sama: itu **mubazir** dan menghasilkan dua push merah
+(`d67021e`, `ef8b58a`). Sudah dihapus dengan rentang baris eksplisit, dan **`39b58ac` hijau**
+(diverifikasi lewat API Actions: `conclusion=success`). Pelajaran: periksa upstream dulu
+sebelum menambah test untuk sesuatu yang mungkin sudah ditutup.
+
+**Status nec2 di mesin Aksara: belum terpasang.** Tidak ada `nec2c.exe` di mesin, dan tidak
+ada kompilator C (`gcc`/`clang`/`cl` tidak ada; hanya `make.exe` dari Embarcadero). Artinya
+seluruh verifikasi adapter NEC2 di mesin saya memakai mesin **palsu**; eksekusi nyata hanya di
+mesin Yotta. Rencana: unduh toolchain portabel WinLibs (GitHub releases terjangkau, HTTP 200)
+lalu bangun `KJ7LNW/nec2c` seperti yang Yotta lakukan — tanpa admin.
+
+**Benchmark #2 (TE10) — dua cacat skrip sudah diperbaiki, tetapi masih terblokir.**
+Perbaikan: (a) port z-arah + `edges2grid="xy"` -> `AddRectWaveGuidePort` TE10; (b) dinding PEC
+1 mm di dalam guide -> batas PEC domain, supaya acuan 1499,0 MHz benar-benar cocok dengan
+geometri (sebelumnya lebar efektif 98 mm = f_c 1529,6 MHz, +2,0 % dari acuan 1 %-nya sendiri).
+Bukti kausal: error `CalcVoltageIntegral` 4 -> 0 dan energi medan 0,00e+00 -> terisi.
+Kegagalan yang tersisa bersifat reprodusibel: `FileNotFoundError: .../openems_run/port_ut_2`
+(probe modal tidak merekam) dan run menyentuh cap 200.000 langkah tanpa memenuhi EndCriteria.
+Catatan tambahan dari contoh resmi `tools/openEMS/python/Tutorials/Rect_WaveGuide.py`:
+bidang port harus diberi garis mesh eksplisit.
