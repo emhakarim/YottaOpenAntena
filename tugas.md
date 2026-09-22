@@ -36,17 +36,15 @@
 
 | ID | Item | Prio | Kenapa | Kriteria selesai | Status |
 |---|---|---|---|---|---|
-| **A-1** | A/B `port_refine` **on/off** pada geometri tutorial **dan** patch PTFE 2,45 GHz (geometri, mesh, margin lain identik) | P1 | A4 menyasar sisa bias; tanpa A/B kita tidak tahu apakah bergerak | 4 angka: resonansi/\\|S11\\|/VSWR + status konvergen, untuk kedua geometri | **jalan** — tutorial selesai: ON 2,35036 GHz (VSWR 1,054, 24180 langkah) vs OFF 2,36397 GHz (VSWR 1,025, 27328 langkah) => efek ~0,58 %, arahnya menjauh dari cavity; pasangan PTFE 2,45 GHz sedang berjalan (mulai 12:05) |
+| **A-1** | A/B `port_refine` **on/off** pada geometri tutorial **dan** patch PTFE 2,45 GHz (geometri, mesh, margin lain identik) | P1 | A4 menyasar sisa bias; tanpa A/B kita tidak tahu apakah bergerak | 4 angka: resonansi/\\|S11\\|/VSWR + status konvergen, untuk kedua geometri | belum |
 | **A-2** | **NF2FF**: kotak near-to-far-field di generator + dump far-field + pembacaannya di `postproc/` | P1 | Celah nyata (masukan Gemini #3): tanpa ini pola/gain dari solver tidak bisa diverifikasi | differential run: S11 **tidak berubah**; pola bisa dibaca & dibandingkan dengan `patterns.py` | **jalan (terverifikasi statis oleh Yotta)** — `CreateNF2FFBox` dibuat **setelah** mesh (ada test orde), bounds eksplisit, manifest mencatat `nf2ff`/`nf2ff_frequencies`, menulis `nf2ff_summary.csv` + `nf2ff_pattern.csv`, knob A/B teruji; **belum** dijalankan end-to-end |
 | **A-3** | Tabel generalisasi **ulang** memakai alat Y-1 (acuan tunggal = cavity), bukan campur acuan | **P0 (keputusan)** | Menentukan: kalibrasi sekali vs tuning per-geometri | tabel ber-acuan tunggal + pernyataan eksplisit kesimpulannya | belum |
 | **A-4** | Perbaiki `docs/verification.md` §generalisation bila hasil A-3 bertentangan dengan klaim "bias konstan −4,1…−5,0 %" | P1 | Klaim yang salah lebih berbahaya daripada tidak ada klaim | dokumen sesuai hasil A-3 | belum |
 | **A-5** | Selesaikan uji ground plane bebas perancu (titik 1,00 λ yang tadi masih berjalan) + ulangi dengan `port_refine` default baru | P2 | Baseline bergeser setelah snapping; tren ground plane harus diukur ulang pada baseline baru | 3 titik, domain tetap, dilaporkan di `docs/verification.md` | belum |
-| **A-6** | Pakai `tugas.md` sebagai papan status (jangan hanya di `aksarakomen.md`) | P2 | Supaya pembagian kerja terlihat satu tempat | status di tabel ini diperbarui tiap push | **terverifikasi** — papan ini diperbarui bersamaan dengan §21 (jalur GPU); buktinya commit ini |
+| **A-6** | Pakai `tugas.md` sebagai papan status (jangan hanya di `aksarakomen.md`) | P2 | Supaya pembagian kerja terlihat satu tempat | status di tabel ini diperbarui tiap push | belum |
 | **A-7** | Ekspos `port_refine` (dan `metal_edge_snapping`) ke CLI/GUI sehingga A/B bisa satu perintah | P2 | Mengurangi kesalahan manual saat A/B | flag CLI + kontrol GUI + test | belum |
-| **A-8** | **Jalur GPU**: kernel FDTD 2-D OpenCL (`openantenna/gpu/`) + validasi analitik + benchmark | P1 | Permintaan user: manfaatkan GPU yang ada, termasuk VGA murah. openEMS CPU-only, jadi satu-satunya jalan adalah kernel sendiri | test yang gagal bila fisika kernel dirusak, test **skip bersih** tanpa OpenCL, benchmark GPU vs CPU terdokumentasi + `docs/gpu.md` | **jalan (tervalidasi)** — galat cavity 0,031 % vs analitik; ~293 MCells/s vs numpy 12,3 MCells/s (**baseline numpy**, belum sepadan vs openEMS); 3 test; `docs/gpu.md` |
 
 ## 2b. Pembagian ulang — 2026-09-22, setelah openEMS terpasang di mesin Yotta
-
 Alasan: openEMS 0.37.0-rc2 + Python 3.13 + venv solver kini **jalan di komputer Yotta**, jadi pekerjaan yang butuh run tidak lagi harus lewat Aksara. Yang tetap milik Aksara: **perubahan di paket `openantenna/`** dan keputusan desain.
 
 | ID | Item | Pemilik (baru) | Alasan |
@@ -63,6 +61,19 @@ Alasan: openEMS 0.37.0-rc2 + Python 3.13 + venv solver kini **jalan di komputer 
 | **R-10** (= A-6) | Pakai `tugas.md` ini sebagai papan status tiap push | Aksara | supaya pembagian terlihat satu tempat |
 
 **Sudah selesai dan tidak perlu dikerjakan ulang:** A-2 (NF2FF di generator — terverifikasi statis oleh Yotta), A-4 (perbaikan klaim menunggu hasil R-2), Phase 2 #7 (pelaporan konvergensi — selesai, 5 test), Phase 2 #6 fondasi (model kawat, 10 test).
+
+## 3. Verifikasi Yotta putaran 2026-09-22 siang (jawaban §20.5 dan §21.6 Aksara)
+
+| Permintaan Aksara | Hasil verifikasi Yotta |
+|---|---|
+| Tinjau semantik **unit-cell** (§20.3) | **terverifikasi (statis)**: `ELEMENTS = [[0.0, 0.0]]` (tepat satu elemen), `DOM_X = GROUND_X / 2.0` di mode UNIT_CELL, dan BC `["PEC","PEC","PMC","PMC","PML_n","PML_n"]` — konsisten dengan urutan 6 BC openEMS (xmin,xmax,ymin,ymax,zmin,zmax) dan memang tidak ada batas periodik di API Python-nya (saya konfirmasi dari daftar metode modul). Fisika *run*-nya belum saya uji |
+| Tinjau klaim **GPU** (`docs/gpu.md`) | **jalur GPU lulus di mesin ini**: pyopencl 2026.1.4 → NVIDIA CUDA → GTX 1650; **3/3 test lulus**; cavity 2,120515 GHz vs analitik 2,119853 GHz = **0,031 %** |
+| Jalankan `tests.test_gpu_fdtd` di mesinku | **dijalankan, lulus 3/3** (bukan skip) |
+| Angka rasio GPU/CPU | **KOREKSI:** setelah perbaikan `queue.finish()`, rasio = **7,26×** (bukan 9,19× yang saya laporkan di §31 — angka saya terkena bug timing asinkron yang sama). Cavity tetap 0,031 % |
+| Prioritas jalur GPU (§21.6 Q3) | **Setuju dengan pilihanmu: perbandingan sepadan vs openEMS lebih dulu.** “Cepat dari numpy” tidak menjawab pertanyaan proyek; “berapa kali vs openEMS pada model yang sama” baru menjawab |
+| **Y-4** nilai acuan microstrip (yang menghambat benchmark-mu) | **SELESAI & sudah dipush**: `yotta_tools/microstrip_reference.py` — ε_eff + Z0 closed-form implementasi independen (terverifikasi identik dengan milik paket: selisih **0,00e+00**), inversi lebar 50 Ω (round-trip **2,8e-14 Ω**), plus 4 self-check yang semuanya PASS. Nilai siap pakai: FR-4 εr 4,4 / h 1,6 mm → W 3,0627 mm untuk 50 Ω, ε_eff 3,3249 |
+| Bug `runs/` pada `gpu_benchmark.py` (§31) | **masih ada** di commit terbaru: skrip tetap menulis `runs/gpu_benchmark.json` tanpa membuat direktorinya → `FileNotFoundError` pada checkout bersih. Perlu satu baris `out.parent.mkdir(parents=True, exist_ok=True)` |
+| Tandai #7 (pelaporan konvergensi) `terverifikasi` | **terverifikasi**: 5 test-nya lulus di suite gabungan (total **195 test OK**) |
 
 ## 3. Ditunda — dengan alasan (bukan dilupakan)
 
