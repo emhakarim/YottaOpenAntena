@@ -381,5 +381,67 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_results_tab_overlays_a_second_run_and_reports_the_shift(self):
+        """An A/B overlay: both curves on one panel plus the resonance shift in numbers."""
+        import tempfile
+        from pathlib import Path
+
+        window = self._window()
+        results_tab = window.centralWidget().widget(3)
+        with tempfile.TemporaryDirectory() as tmp:
+            run_a = Path(tmp) / "a"
+            run_b = Path(tmp) / "b"
+            run_a.mkdir()
+            run_b.mkdir()
+            (run_a / "s11.csv").write_text(
+                "freq_hz,s11_re,s11_im\n"
+                "2.40e9,-0.30,0.10\n2.45e9,-0.02,0.01\n2.50e9,-0.35,0.12\n",
+                encoding="utf-8",
+            )
+            (run_b / "s11.csv").write_text(
+                "freq_hz,s11_re,s11_im\n"
+                "2.40e9,-0.20,0.05\n2.475e9,-0.02,0.01\n2.55e9,-0.25,0.09\n",
+                encoding="utf-8",
+            )
+            results_tab.path.setText(str(run_a))
+            results_tab.compare_path.setText(str(run_b))
+            results_tab.load()
+            text = results_tab.metrics.toPlainText()
+            if results_tab.figure is not None:
+                labels = [line.get_label() for line in results_tab.figure.axes[0].lines]
+                # A's curve, the -10 dB threshold line, and B's overlay
+                self.assertIn("B", labels, labels)
+                self.assertGreaterEqual(len(labels), 3)
+            results_tab.clear_compare()
+            self.assertEqual(results_tab.compare_path.text(), "")
+
+        self.assertIn("A/B compare", text)
+        self.assertIn("shift", text)
+        window.close()
+
+    def test_loading_a_stacked_substrate_warns_instead_of_collapsing_it(self):
+        """The generator refuses >1 dielectric layer, so the GUI must say so on load."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        window = self._window()
+        design_tab = window.centralWidget().widget(1)
+        data = design_tab.current_project().to_dict()
+        data["substrate"]["layers"] = [
+            {"material": "PTFE", "thickness_m": 0.0008, "role": "dielectric"},
+            {"material": "FR4", "thickness_m": 0.0008, "role": "dielectric"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "stacked.json"
+            target.write_text(json.dumps(data), encoding="utf-8")
+            design_tab.load_project(str(target))
+            text = design_tab.summary.toPlainText()
+
+        self.assertIn("2 dielectric layers", text)
+        self.assertIn("effective-medium", text)
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()

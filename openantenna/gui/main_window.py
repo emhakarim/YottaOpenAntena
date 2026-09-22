@@ -382,6 +382,9 @@ class DesignTab(QWidget):
         except Exception as exc:
             self.summary.append(f"load failed: {type(exc).__name__}: {exc}")
             return
+        dielectric_layers = [
+            entry for entry in project.substrate.layers if entry.role == "dielectric"
+        ]
         # A material that is not in the combo (e.g. a run-specific name such as
         # "ab-ptfe245") is left alone rather than silently replaced by the first entry.
         if self.material.findText(layer.material) >= 0:
@@ -395,6 +398,15 @@ class DesignTab(QWidget):
         self.synthesise()
         # after synthesise(), which rewrites the panel: the note must survive it
         self.summary.append(f"loaded project: {source}")
+        if len(dielectric_layers) > 1:
+            # Honest limitation, verified against the generator: it raises
+            # "supports a single dielectric layer" rather than silently using one layer, so
+            # the GUI must say that it can only edit one of them.
+            self.summary.append(
+                f"note: this file has {len(dielectric_layers)} dielectric layers; the GUI "
+                "edits a single layer and the openEMS generator refuses a stacked "
+                "dielectric (use an effective-medium eps_r first)."
+            )
 
     def synthesise(self) -> None:
         frequency = self.frequency.value() * 1e9
@@ -774,6 +786,21 @@ class ResultsTab(QWidget):
         row.addWidget(load)
         layout.addLayout(row)
 
+        # An A/B overlay: this project is full of on/off experiments (port_refine, air
+        # margin, materials) and seeing them one at a time hides exactly the question
+        # being asked - did the change move the resonance?
+        compare_row = QHBoxLayout()
+        self.compare_path = QLineEdit()
+        self.compare_path.setPlaceholderText("optional: a second run directory to overlay (B)")
+        compare_browse = QPushButton("Compare with ...")
+        compare_browse.clicked.connect(self.pick_compare)
+        compare_clear = QPushButton("Clear B")
+        compare_clear.clicked.connect(self.clear_compare)
+        compare_row.addWidget(self.compare_path)
+        compare_row.addWidget(compare_browse)
+        compare_row.addWidget(compare_clear)
+        layout.addLayout(compare_row)
+
         self.metrics = QTextEdit()
         self.metrics.setReadOnly(True)
         self.metrics.setMaximumHeight(150)
@@ -791,6 +818,51 @@ class ResultsTab(QWidget):
         chosen = QFileDialog.getExistingDirectory(self, "Choose a run directory")
         if chosen:
             self.path.setText(chosen)
+
+    def pick_compare(self) -> None:
+        chosen = QFileDialog.getExistingDirectory(self, "Choose the second run directory")
+        if chosen:
+            self.compare_path.setText(chosen)
+
+    def clear_compare(self) -> None:
+        self.compare_path.clear()
+
+    @staticmethod
+    def _summarise(trace: S11Trace) -> dict:
+        """The numbers an A/B comparison needs, as numbers rather than as text."""
+        index = trace.worst_match_index()
+        return {
+            "resonance_hz": float(trace.frequencies_hz[index]),
+            "worst_db": float(trace.db()[index]),
+            "vswr": float(trace.vswr()[index]),
+            "fractional": trace.fractional_bandwidth(-10.0),
+        }
+
+    def _comparison_lines(self, csv_a: Path, csv_b: Path) -> list[str]:
+        """Metric-vs-metric between run A and run B, with the shift called out."""
+        summary_a = self._summarise(S11Trace.from_csv(csv_a))
+        summary_b = self._summarise(S11Trace.from_csv(csv_b))
+        shift_hz = summary_b["resonance_hz"] - summary_a["resonance_hz"]
+        shift_pct = 100.0 * shift_hz / summary_a["resonance_hz"]
+        lines = [
+            "",
+            "A/B compare (A = the run above, B = the overlay)",
+            f"  resonance  A {summary_a['resonance_hz'] / 1e9:.4f} GHz   "
+            f"B {summary_b['resonance_hz'] / 1e9:.4f} GHz   "
+            f"shift {shift_hz / 1e6:+.1f} MHz ({shift_pct:+.3f} %)",
+            f"  |S11|      A {summary_a['worst_db']:.2f} dB   B {summary_b['worst_db']:.2f} dB",
+            f"  VSWR       A {summary_a['vswr']:.3f}   B {summary_b['vswr']:.3f}",
+        ]
+        if summary_a["fractional"] and summary_b["fractional"]:
+            lines.append(
+                f"  -10 dB BW  A {summary_a['fractional'] * 100:.2f} %   "
+                f"B {summary_b['fractional'] * 100:.2f} %"
+            )
+        lines.append(
+            "  Both curves are model output; a shift only means something if the two runs "
+            "differ in one variable."
+        )
+        return lines
 
     def _notify(self, message: str) -> None:
         """Report a load failure **without blocking**.
@@ -836,6 +908,15 @@ class ResultsTab(QWidget):
             lines.extend(
                 self._run_details(candidate if candidate.is_dir() else candidate.parent)
             )
+            compare = self.compare_path.text().strip()
+            if compare:
+                compare_trace_path = Path(compare)
+                csv_b = (
+                    compare_trace_path / "s11.csv"
+                    if compare_trace_path.is_dir()
+                    else compare_trace_path
+                )
+                lines.extend(self._comparison_lines(csv_path, csv_b))
             lines.append("")
             lines.append(
                 "Model output, not a measurement. See run_manifest.json for the mesh and "
@@ -863,6 +944,23 @@ class ResultsTab(QWidget):
         # A run with NF2FF enabled carries a far-field cut too; showing both in one place
         # is the point of a "results" tab (previously the far-field was invisible unless
         # the user opened the CSV by hand).
+        compare = self.compare_path.text().strip()
+        if compare:
+            try:
+                other = S11Trace.from_csv(
+                    Path(compare) / "s11.csv" if Path(compare).is_dir() else Path(compare)
+                )
+                axes.plot(
+                    [f / 1e9 for f in other.frequencies_hz],
+                    other.db(),
+                    linestyle="--",
+                    linewidth=1.0,
+                    label="B",
+                )
+                axes.legend(fontsize=7)
+            except Exception as exc:  # the A panel must survive a bad B path
+                self.metrics.append(f"\nB could not be plotted: {type(exc).__name__}: {exc}")
+
         pattern = self._pattern_cut(candidate if candidate.is_dir() else candidate.parent)
         if pattern is not None:
             theta_deg, gain_db, phi_deg = pattern
