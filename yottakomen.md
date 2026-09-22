@@ -1442,3 +1442,38 @@ Semuanya saya tandai jelas sebagai **kode + test statis**; angka yang butuh open
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-22 (Phase 2 mulai). Satu item Phase 2 tertutup dengan bukti (167 test); tiga item berikutnya saya ajukan dengan pembagian yang jelas.*
+
+---
+
+# 27. Phase 2 #6 dimulai — model kawat netral, dan daftar tool yang dibutuhkan
+
+## 27.1 Selesai: `openantenna/geometry/wire.py` + 10 test
+
+Fondasi untuk adapter solver kedua (nec2++), yaitu item yang membuktikan abstraksi “model netral → beberapa solver”.
+
+* `WireDesign` untuk **dipole yang dicatu di tengah** dan **monopole di atas ground plane**, dengan penjaga yang nyata: asumsi kawat tipis (r/L ≤ 0,05), jumlah segmen **ganjil** untuk dipole yang dicatu di tengah (konvensi NEC: pusat segmen harus jatuh di titik catu), feed gap = satu segmen, dan validasi panjang/radius/gap.
+* `length_factor` diperlakukan sebagai **input, bukan klaim fisis** — shortening end-effect tidak dihitung; kalau tidak 0,5 λ, objek mencatat peringatan eksplisit.
+* Modul ini **tidak** memprediksi impedansi atau gain — catatan itu juga muncul di `summary()` supaya tidak ada yang salah membaca.
+* Referensi analitik diambil dari paket sendiri (directivity dipole λ/2 = 1,6409, nilai emas yang sudah ada) — tidak ada angka dari ingatan.
+
+**Bukti:** 10 test baru (`tests/test_wire.py`); suite **177 test OK** (dari 167). Salah satu test-ku gagal di percobaan pertama (round-trip tidak membawa `warnings`) — saya perbaiki `from_dict` sampai round-trip benar-benar lossless, bukan melemahkan test-nya.
+
+## 27.2 Berikutnya di #6 — adapter `nec2.py`
+
+Rencana: `openantenna/solvers/nec2.py` dengan kontrak adapter yang sama seperti openEMS — render deck NEC (`GW`/`GE`/`EX`/`FR`/`EN`), `prepare` menulis deck, `run` memanggil biner lewat **proses terpisah**, `parse_results` membaca keluaran (impedansi, gain). Test-nya memakai **stub keluaran NEC**, jadi bisa diverifikasi tanpa nec2++ terpasang.
+
+## 27.3 Tool yang saya butuhkan (jawaban langsung)
+
+| Tool | Untuk apa | Bisa saya pasang sendiri? | Status |
+|---|---|---|---|
+| **scikit-rf** | Phase 2 #5 (analisis feed network) | **ya** (pip) | **sudah terpasang** — 2.1.0 |
+| matplotlib, PySide6, pytest, python-docx | GUI, plot, test, laporan DOCX | ya | sudah terpasang |
+| **openEMS + CSXCAD** (zip rilis Windows + wheel yang cocok, lalu set `OPENEMS_ROOT`) | **menjalankan simulasi** — kalau ini ada di mesin ini, saya bisa memverifikasi sendiri semua angka solver, termasuk menutup 3 blocker gate fabrikasi | tidak (butuh unduhan rilis; saya tidak bisa mengunduh biner tanpa tautan resmi) | **belum** |
+| **nec2++ / nec2c** (biner Windows) | menjalankan adapter #6 sungguhan | tidak (butuh build atau unduhan biner) | **belum** |
+| Berkas paper C1/C3/C7 (PDF/screenshot/angka + sitasi) | Y-T3 validasi material | — | menunggu |
+
+**Yang paling mengubah keadaan:** openEMS. Selama ia tidak ada di sini, setiap angka solver harus lewat Aksara — dan itu membuat saya tidak bisa menutup blocker #2/#3/#4 pada gate fabrikasi sendiri.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (Phase 2 #6 fondasi). Model kawat + 10 test; 177 test OK; berikutnya adapter nec2++ dengan stub keluaran NEC.*
