@@ -529,8 +529,22 @@ def main():
             % (len(ELEMENT_PORTS_OBJS), EXCITE_PORT)
         )
 
-    port.CalcPort(sim_path, freqs, FEED_Z0)
-    s11 = port.uf_ref / port.uf_inc
+    # The port object that carries s11.csv must be resolved per branch: with element ports the
+    # single-port variable below is never bound, and the unconditional use of it here is what
+    # killed the B2 `probe` arms AFTER a full 400k-step FDTD (UnboundLocalError, 3230 s per arm,
+    # no s11.csv).  Text tests cannot see an unbound local - only running the deck can - so the
+    # guard below is deliberately explicit about which port is being read.
+    if ELEMENT_PORTS:
+        if not 1 <= EXCITE_PORT <= len(ELEMENT_PORTS_OBJS):
+            raise SystemExit(
+                "OPENANTENNA_EXCITE_PORT=%d is outside 1..%d"
+                % (EXCITE_PORT, len(ELEMENT_PORTS_OBJS))
+            )
+        _s11_port = ELEMENT_PORTS_OBJS[EXCITE_PORT - 1]
+    else:
+        _s11_port = port
+    _s11_port.CalcPort(sim_path, freqs, FEED_Z0)
+    s11 = _s11_port.uf_ref / _s11_port.uf_inc
 
     out_path = os.path.join(HERE, "s11.csv")
     with open(out_path, "w", encoding="utf-8") as handle:
