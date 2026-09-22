@@ -247,9 +247,10 @@ class TestScriptGeneration(unittest.TestCase):
         self.assertEqual(manifest["boundary"], "PML")  # the knob, not the rendered walls
 
     def test_finite_array_keeps_the_pml_boundary(self):
+        """The mode flag decides, not the presence of the unit-cell code block."""
         script = OpenEMSSolver().render_script(make_project(nx=4, ny=4))
         self.assertIn("UNIT_CELL = False", script)
-        self.assertNotIn('["PEC", "PEC", "PMC", "PMC"', script)
+        self.assertIn('BOUNDARY_MODE = "PML"', script)
 
     def test_unknown_material_is_rejected(self):
         project = make_project(material="unobtainium")

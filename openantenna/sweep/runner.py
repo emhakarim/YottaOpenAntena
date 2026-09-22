@@ -39,33 +39,54 @@ class SweepRunSummary:
     def ok(self) -> bool:
         return self.failed == 0 and self.completed == self.job_count
 
+    @property
+    def unconverged(self) -> int:
+        """Jobs whose solver run did not reach the end criteria.
+
+        A resonance from such a job cannot support a claim, so the count travels with
+        the summary instead of stopping at ``parse_results`` (Phase-2 item #7).
+        Jobs that failed outright are counted in ``failed``, not here.
+        """
+        return sum(1 for entry in self.results if entry.get("converged") is False)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "out_dir": str(self.out_dir),
             "job_count": self.job_count,
             "completed": self.completed,
             "failed": self.failed,
+            "unconverged": self.unconverged,
             "store_path": self.store_path,
             "results": self.results,
         }
 
     def table(self) -> str:
         lines = [
-            f"{'job':<44}{'resonance [GHz]':>16}{'|S11| [dB]':>12}{'VSWR':>8}"
+            f"{'job':<40}{'resonance [GHz]':>16}{'|S11| [dB]':>12}{'VSWR':>8}{'conv':>7}"
         ]
-        lines.append("-" * 80)
+        lines.append("-" * 83)
         for entry in self.results:
             resonance = entry.get("resonance_hz")
             match = entry.get("worst_match_db")
             vswr = entry.get("vswr")
+            converged = entry.get("converged")
+            label = "yes" if converged is True else ("NO" if converged is False else "-")
             lines.append(
-                f"{entry['job_id'][:43]:<44}"
+                f"{entry['job_id'][:39]:<40}"
                 f"{(resonance / 1e9 if resonance else float('nan')):>16.4f}"
                 f"{(match if match is not None else float('nan')):>12.2f}"
                 f"{(vswr if vswr is not None else float('nan')):>8.3f}"
+                f"{label:>7}"
             )
-        lines.append("-" * 80)
+        lines.append("-" * 83)
         lines.append(f"completed {self.completed}/{self.job_count}, failed {self.failed}")
+        if self.unconverged:
+            lines.append("")
+            lines.append(
+                f"WARNING: {self.unconverged} job(s) did not reach the end criteria "
+                "(timestep cap hit, or no solver log to judge from)."
+            )
+            lines.append("Their resonance values must NOT be quoted as results.")
         return "\n".join(lines)
 
 
@@ -125,6 +146,9 @@ def run_sweep(
                         "worst_match_db": parsed.get("worst_match_db"),
                         "vswr": parsed.get("vswr_at_resonance"),
                         "fractional_bandwidth": parsed.get("fractional_bandwidth"),
+                        # The convergence flag must travel with the number (item #7).
+                        "converged": parsed.get("converged"),
+                        "convergence_note": parsed.get("convergence_note"),
                     }
                 )
                 summary.completed += 1
@@ -160,7 +184,7 @@ def run_sweep(
     with (root / "sweep_results.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(
-            ["job_id", "overrides", "resonance_hz", "worst_match_db", "vswr", "error"]
+            ["job_id", "overrides", "resonance_hz", "worst_match_db", "vswr", "converged", "error"]
         )
         for entry in summary.results:
             writer.writerow(
@@ -170,6 +194,7 @@ def run_sweep(
                     entry.get("resonance_hz", ""),
                     entry.get("worst_match_db", ""),
                     entry.get("vswr", ""),
+                    entry.get("converged", ""),
                     entry.get("error", ""),
                 ]
             )
