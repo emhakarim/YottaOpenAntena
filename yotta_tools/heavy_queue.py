@@ -73,6 +73,25 @@ JOBS: List[Dict[str, object]] = [
         "hours": 8.0,
         "summary": "runs/array2/smatrix_summary.json",
     },
+    # B2 rerun: the package fix (896e10f5) resolved the unbound s11 port that killed the
+    # probe arms after a full FDTD.  Two settings, same two arms, per docs/convergence-policy.md;
+    # the earlier attempt burned 3230 s per probe arm and never wrote s11.csv.
+    {
+        "name": "b2e3",
+        "what": "B2 rerun (feed coplanar probe vs line), EndCriteria 1e-3",
+        "cmd": [PY, str(REPO / "scripts" / "b2_coplanar_ab_test.py"),
+                "--run", "--end-criteria", "1e-3", "--out", "runs_b2/b2_e3"],
+        "hours": 6.0,
+        "summary": "runs_b2/b2_e3",
+    },
+    {
+        "name": "b2e4",
+        "what": "B2 rerun (feed coplanar probe vs line), EndCriteria 1e-4 / cap 400k",
+        "cmd": [PY, str(REPO / "scripts" / "b2_coplanar_ab_test.py"),
+                "--run", "--end-criteria", "1e-4", "--out", "runs_b2/b2_e4"],
+        "hours": 6.0,
+        "summary": "runs_b2/b2_e4",
+    },
 ]
 
 
