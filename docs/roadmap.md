@@ -70,9 +70,13 @@ reporting of what is and is not verified.
 * Composite explorer UI: mixing-rule spread, warnings, sensitivity sweeps.
 * Batch/sweep UI over the existing sweep engine.
 
-Done so far: four-tab window (material/composite, design, simulate, results), a
-worker thread so simulations do not block the event loop, and an offscreen smoke
-test. Not done: 3-D viewer, live solver log, batch UI, packaging.
+Done so far: four-tab window (material/composite, design, simulate, results); a worker
+thread so simulations do not block the event loop; offscreen smoke tests; a solver
+progress bar driven by the solver's own timestep lines (plus `progress.json` per run); a
+to-scale array preview beside the array-factor plot; run provenance and the far-field cut
+in the results tab; project save/load through the neutral model JSON; a sensitivity plot
+of the mixing models against the Wiener bounds; and a sequential batch queue with per-case
+progress. Not done: 3-D viewer (needs PyVista - a dependency decision), packaging.
 
 ## Phase 4 â€” depth and packaging
 

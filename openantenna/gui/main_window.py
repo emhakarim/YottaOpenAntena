@@ -64,7 +64,7 @@ from ..model.project import (
 )
 from ..postproc.sparams import S11Trace
 from ..solvers.openems import OpenEMSSolver
-from .worker import GenerateWorker, SimulateWorker
+from .worker import GenerateWorker, QueueWorker, SimulateWorker, _case_dirname
 
 
 def _plot_canvas():
@@ -520,6 +520,7 @@ class SimulateTab(QWidget):
         self.loss_model.addItems(["kappa", "none"])
         self.rundir = QLineEdit(str(Path.cwd() / "runs" / "gui_run"))
         self._workers: list = []
+        self._queue: list = []
         browse = QPushButton("Browse ...")
         browse.clicked.connect(self.pick_directory)
         form.addRow("mesh cells / wavelength", self.mesh_cells)
@@ -567,6 +568,27 @@ class SimulateTab(QWidget):
             "%p% of the step cap (a run usually stops earlier, on energy)"
         )
         layout.addWidget(self.progress_bar)
+
+        queue_group = QGroupBox("Batch queue (runs in order, one case at a time)")
+        queue_layout = QVBoxLayout(queue_group)
+        self.queue_table = QTableWidget(0, 3)
+        self.queue_table.setHorizontalHeaderLabels(["case", "frequency [GHz]", "run directory"])
+        self.queue_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.queue_table.setMaximumHeight(130)
+        queue_layout.addWidget(self.queue_table)
+        queue_row = QHBoxLayout()
+        self.queue_add = QPushButton("Add current design")
+        self.queue_add.clicked.connect(self.add_to_queue)
+        self.queue_remove = QPushButton("Remove selected")
+        self.queue_remove.clicked.connect(self.remove_selected)
+        self.queue_clear = QPushButton("Clear")
+        self.queue_clear.clicked.connect(self.clear_queue)
+        self.queue_run = QPushButton("Run queue")
+        self.queue_run.clicked.connect(self.run_queue)
+        for widget in (self.queue_add, self.queue_remove, self.queue_clear, self.queue_run):
+            queue_row.addWidget(widget)
+        queue_layout.addLayout(queue_row)
+        layout.addWidget(queue_group)
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
@@ -626,6 +648,63 @@ class SimulateTab(QWidget):
 
         worker.finished.connect(_cleanup)
         worker.start()
+
+    def add_to_queue(self) -> None:
+        """Queue the design as it is right now (a snapshot, not a live link)."""
+        project = self.design_tab.current_project()
+        index = len(self._queue)
+        label = f"queue{index + 1:02d}"
+        self._queue.append((label, project))
+        centre_ghz = 0.5 * (project.sweep.start_hz + project.sweep.stop_hz) / 1e9
+        row = self.queue_table.rowCount()
+        self.queue_table.insertRow(row)
+        cells = (
+            label,
+            f"{centre_ghz:.4f}",
+            str(Path(self.rundir.text()) / _case_dirname(index, label)),
+        )
+        for column, text in enumerate(cells):
+            self.queue_table.setItem(row, column, QTableWidgetItem(text))
+
+    def remove_selected(self) -> None:
+        rows = sorted({i.row() for i in self.queue_table.selectedIndexes()}, reverse=True)
+        for row in rows:
+            self.queue_table.removeRow(row)
+            del self._queue[row]
+
+    def clear_queue(self) -> None:
+        self.queue_table.setRowCount(0)
+        self._queue.clear()
+
+    def run_queue(self) -> None:
+        if not self._queue:
+            self.log.append("queue is empty")
+            return
+        if not self._begin_work():
+            return
+        self.log.append(f"running {len(self._queue)} queued case(s), one at a time ...")
+        self.progress_bar.setValue(0)
+        worker = QueueWorker(
+            list(self._queue), Path(self.rundir.text()), **self._solver_kwargs()
+        )
+        worker.progress.connect(self.log.append)
+        worker.progress_value.connect(self.progress_bar.setValue)
+        worker.case_started.connect(
+            lambda index, label: self.log.append(f"case {index + 1}: {label}")
+        )
+        worker.done.connect(self._queue_finished)
+        worker.failed.connect(self._failed)
+        self._track(worker)
+
+    def _queue_finished(self, payload: list) -> None:
+        for entry in payload:
+            results = entry["results"]
+            self.log.append(
+                f"{entry['label']}: resonance {results['resonance_hz'] / 1e9:.4f} GHz, "
+                f"|S11| {results['worst_match_db']:.2f} dB, "
+                f"VSWR {results['vswr_at_resonance']:.3f}"
+            )
+        self.log.append(f"queue finished: {len(payload)} case(s)")
 
     def generate(self) -> None:
         if not self._begin_work():

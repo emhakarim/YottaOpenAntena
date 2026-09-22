@@ -39,6 +39,70 @@ class GenerateWorker(QThread):
         self.done.emit(str(prepared))
 
 
+class QueueWorker(QThread):
+    """Run several prepared designs one after another, reporting per case.
+
+    Sequential on purpose: the solver itself is already multithreaded, so two concurrent
+    FDTD runs on this laptop fight over the same cores and memory bandwidth (measured:
+    each got ~5 of 16 threads and the pair took longer than either alone).  A batch is
+    about throughput of *results*, not of CPU.
+    """
+
+    case_started = Signal(int, str)
+    progress = Signal(str)
+    progress_value = Signal(int)
+    done = Signal(list)
+    failed = Signal(str)
+
+    def __init__(self, cases: list, base_rundir: Path, **solver_kwargs: Any) -> None:
+        super().__init__()
+        self.cases = list(cases)
+        self.base_rundir = Path(base_rundir)
+        self.solver_kwargs = solver_kwargs
+        self._cap_steps: int | None = None
+        self._updates = 0
+
+    def _on_progress(self, snapshot: SolverProgress) -> None:
+        self._updates += 1
+        cap = self._cap_steps
+        if cap and snapshot.timestep:
+            self.progress_value.emit(min(100, int(round(100.0 * snapshot.timestep / cap))))
+        if self._updates % 10 == 1:
+            self.progress.emit(format_bar(snapshot, cap))
+
+    def run(self) -> None:  # noqa: D102 - Qt entry point
+        results: list[dict] = []
+        try:
+            solver = OpenEMSSolver(**self.solver_kwargs)
+            self._cap_steps = getattr(solver, "max_timesteps", None)
+            status = solver.available()
+            if not status.available:
+                raise SolverUnavailableError(status.detail)
+            for index, (label, project) in enumerate(self.cases):
+                self.case_started.emit(index, label)
+                rundir = self.base_rundir / _case_dirname(index, label)
+                prepared = solver.prepare(project, rundir)
+                self.progress.emit(f"[{index + 1}/{len(self.cases)}] {label}: {prepared}")
+                run = solver.run(prepared, on_progress=self._on_progress)
+                if run.status != "ok":
+                    raise RuntimeError(
+                        f"case '{label}' failed (code {run.returncode}); log tail:\n"
+                        f"{run.log[-1500:]}"
+                    )
+                parsed = solver.parse_results(prepared)
+                results.append({"label": label, "rundir": str(prepared), "results": parsed})
+        except Exception as exc:
+            self.failed.emit(f"{type(exc).__name__}: {exc}")
+            return
+        self.done.emit(results)
+
+
+def _case_dirname(index: int, label: str) -> str:
+    """A filesystem-safe, order-preserving directory name for one queued case."""
+    safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in label).strip("_")
+    return f"case{index + 1:02d}_{safe or 'case'}"
+
+
 class SimulateWorker(QThread):
     """Prepare, run and parse one simulation."""
 

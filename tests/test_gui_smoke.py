@@ -346,5 +346,40 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_simulate_tab_queues_cases_and_names_their_directories(self):
+        """The batch queue snapshots the design and pre-computes each run directory."""
+        window = self._window()
+        simulate_tab = window.centralWidget().widget(2)
+        self.assertEqual(simulate_tab.queue_table.rowCount(), 0)
+
+        simulate_tab.add_to_queue()
+        simulate_tab.add_to_queue()
+        self.assertEqual(simulate_tab.queue_table.rowCount(), 2)
+        self.assertEqual(simulate_tab.queue_table.item(0, 0).text(), "queue01")
+        self.assertTrue(
+            simulate_tab.queue_table.item(0, 2).text().endswith("case01_queue01"),
+            simulate_tab.queue_table.item(0, 2).text(),
+        )
+        self.assertEqual(len(simulate_tab._queue), 2)
+
+        simulate_tab.queue_table.selectRow(0)
+        simulate_tab.remove_selected()
+        self.assertEqual(simulate_tab.queue_table.rowCount(), 1)
+        self.assertEqual(len(simulate_tab._queue), 1)
+
+        simulate_tab.clear_queue()
+        self.assertEqual(simulate_tab.queue_table.rowCount(), 0)
+        self.assertEqual(simulate_tab._queue, [])
+        window.close()
+
+    def test_running_an_empty_queue_starts_nothing(self):
+        window = self._window()
+        simulate_tab = window.centralWidget().widget(2)
+        simulate_tab.run_queue()
+        self.assertEqual(simulate_tab._workers, [], "no worker for an empty queue")
+        self.assertIn("queue is empty", simulate_tab.log.toPlainText())
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()
