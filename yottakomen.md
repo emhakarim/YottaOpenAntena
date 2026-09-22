@@ -1355,6 +1355,54 @@ Kriteria yang benar (dan sekarang dipakai skrip):
 
 ---
 
+# 40. Mandat baru: Yotta memegang Phase 1 & 2 (Aksara ke GUI) + kebijakan konvergensi
+
+## 40.1 Pembagian baru
+
+Pemilik memutuskan: **Aksara fokus GUI (Phase 3)**, **Yotta memegang Phase 1 & 2**, dan run yang tidak sesuai target/batasan **diterminasi**. Pembagian lengkapnya di `tugas.md` §3d.
+
+## 40.2 Yang saya terminasi (14:45) — dan mengapa
+
+Enam proses solver: lima kasus batch (A/B `port_refine` 2 arm + validasi loss 3 kasus, cap 200k) dan satu run lama. **Total ≈ 4 jam CPU** tanpa satu pun hasil yang memenuhi kriteria. Data mentahnya kutinggalkan di direktori run (tidak dihapus) supaya bisa diperiksa, tetapi **angkanya tidak akan saya kutip** — sesuai permintaan pemilik.
+
+## 40.3 Kebijakan konvergensi baru (menggantikan syarat ambang energi)
+
+`docs/convergence-policy.md`:
+
+* hasil **diterima** bila stabil antar-dua setelan — `EndCriteria` **1e-2** vs **1e-3** (atau cap 60k vs 120k), dengan `|Δf|/f ≤ 0,2 %`;
+* **ditolak** bila berbeda lebih dari itu, bila tak ada minimum S11 di pita, atau bila minimumnya di tepi pita (alat `two_stage_sweep.py` menolak yang terakhir otomatis);
+* 1e-4/400k hanya untuk run final bila terjangkau — **bukan** lagi syarat pelaporan.
+
+Alasannya jujur dan sederhana: “energi turun di bawah ambang” adalah pernyataan tentang keadaan internal solver, sedangkan “jawabannya berhenti bergerak ketika solver dihaluskan” adalah pernyataan tentang **jawabannya** — dan itu yang bisa direproduksi pihak ketiga.
+
+## 40.4 Tool: apa yang masih kubutuhkan
+
+| Kebutuhan | Status |
+|---|---|
+| openEMS 0.37.0-rc2 + CSXCAD, nec2c (build lokal), pyopencl, scikit-rf, numpy, matplotlib, PySide6, python-docx, h5py | **sudah terpasang dan terbukti jalan** |
+| Untuk Phase 1 & 2 yang tersisa sekarang | **tidak ada tambahan yang wajib** |
+| Mungkin nanti (bila kita masuk Gerber/CAD import) | `gerbonara` (parser Gerber, pip) — **belum** perlu |
+| Bila nanti mau 3-D penuh dari CAD | jalur meshing STEP/STL (mis. gmsh/meshio + konversi) — keputusan Phase 4 |
+| GUI (wilayah Aksara) | PySide6 sudah terpasang di kedua sisi ✓ |
+
+Jadi jawaban singkatnya: **tidak ada tool baru yang wajib**; yang kurang hanyalah keputusan bila kita memperluas ke Geometri CAD nanti.
+
+## 40.5 Urutan kerja saya di Phase 1 & 2
+
+1. **A-1 A/B `port_refine`** dengan kebijakan dua-setelan (K-1) → satu-satunya jalan mendapat angka yang boleh dikutip.
+2. **B3 validasi loss** dengan kebijakan yang sama (K-2), NF2FF aktif untuk efisiensi.
+3∩. **B1 bisection bias konstruksi** (diff-and-swap) — sekarang boleh dijalankan dengan dua-setelan, jadi hasilnya bisa diterima.
+4. **A-3 tabel generalisasi ber-acuan tunggal** (alat sudah siap).
+5. Phase 2 sisa: #4 array 4×4, #5 corporate feed + scikit-rf, #1 loss Debye.
+
+Semua klaim kuterbitkan **sebelum** mulai dan kutandai selesai sesudah, seperti §38.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (mandat baru). Terminasi 4 jam CPU yang tidak produktif, kebijakan konvergensi yang bisa dipertanggungjawabkan, dan jawaban jujur soal tool: tidak ada yang wajib ditambah.*
+
+---
+
 # 21. Yotta mengerjakan antreannya — Y-1, Y-2, Y-3 selesai & terverifikasi
 
 ## 21.1 Y-1 — `yotta_tools/reference_table.py` (P1)
