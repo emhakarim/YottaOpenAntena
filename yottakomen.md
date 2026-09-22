@@ -1400,3 +1400,45 @@ Kesimpulan: **A-2 terverifikasi pada tingkat statis** (kode + test + manifest). 
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-22 (verifikasi A-2). NF2FF: lulus pada bukti statis; dua langkah yang tersisa adalah run end-to-end dan pencatatan perubahan default margin udara.*
+
+---
+
+# 26. Phase 2 — apa yang bisa saya kerjakan, dan satu increment yang sudah selesai
+
+## 26.1 Pembagian Phase 2 (7 item roadmap)
+
+| # | Item Phase 2 | Tanpa solver (Yotta) | Dengan solver (Aksara) |
+|---|---|---|---|
+| 1 | Loss dielektrik dari data terukur / parameter Debye + kasus verifikasi | **kode**: `loss-model debye` dari `material.dispersion` (memakai `fit_debye_1pole` yang sudah ada) | verifikasi absolut terhadap Q acuan |
+| 2 | Kalibrasi akurasi + test regresi kasus acuan | **test nilai emas & tabel acuan** (sebagian sudah) | run kalibrasi |
+| 3 | Unit-cell / periodic boundary | **knob** `boundary="periodic"` + emisi skrip + test statis | verifikasi bahwa openEMS menerimanya |
+| 4 | Array 4×4 + ekstraksi kopling (matriks S) | parsing/analisis | **run** (butuh solver) |
+| 5 | Analisis feed network + generator corporate feed (scikit-rf) | **ya sebagian** (skrf dapat dipasang) | validasi model |
+| 6 | Antena kawat via nec2++ — **adapter kedua, membuktikan abstraksi** | **ya**: kode adapter + test dengan stub keluaran NEC | menjalankan nec2++ sungguhan |
+| 7 | Pelaporan konvergensi | **SELESAI hari ini** (§26.2) | — |
+
+## 26.2 Yang saya selesaikan hari ini — Phase 2 #7
+
+**Celah nyata yang saya temukan:** `parse_results` sudah menghitung `converged` + `convergence_note`, tetapi nilainya **tidak diteruskan** ke hasil sweep, tabel, CSV, maupun JSON. Akibatnya resonansi dari run yang menyentuh batas langkah **tetap bisa dikutip** — persis yang dilarang oleh aturan pelaporan kita sendiri.
+
+**Yang saya ubah** (`openantenna/sweep/runner.py`):
+
+* flag `converged` + `convergence_note` diteruskan ke **setiap entri job**;
+* penghitung **`unconverged`** di ringkasan (dan di `sweep_results.json`);
+* kolom `conv` di tabel + baris **`WARNING: … must NOT be quoted as results`**;
+* kolom `converged` di `sweep_results.csv`.
+
+**Bukti:** **5 test baru** (`tests/test_convergence_reporting.py`, memakai stub adapter — tanpa solver) menutup: flag per job, penghitung di ringkasan, peringatan di tabel, kolom CSV, dan JSON. Suite: **167 test OK** (dari 162).
+
+## 26.3 Rencana saya berikutnya (urutan yang saya usulkan)
+
+1. **#6 adapter nec2++** — saya tulis adapter kedua (render/prepare/run/parse) + test dengan stub keluaran NEC; ini item yang membuktikan abstraksi “model netral → beberapa solver”. Dijalankan sungguhan oleh Aksara.
+2. **#1 loss Debye** dari `material.dispersion` (bukan κ), karena itu yang diminta roadmap (“dispersive material from measured data / fitted Debye parameters”).
+3. **#3 knob boundary periodik** untuk studi unit-cell.
+4. **#5** generator corporate feed + analisis scikit-rf.
+
+Semuanya saya tandai jelas sebagai **kode + test statis**; angka yang butuh openEMS tetap milik Aksara — saya tidak akan mengklaim hasil yang tidak saya jalankan.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (Phase 2 mulai). Satu item Phase 2 tertutup dengan bukti (167 test); tiga item berikutnya saya ajukan dengan pembagian yang jelas.*
