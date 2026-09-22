@@ -282,7 +282,7 @@ constant may be quoted, and every deviation in this file must name its reference
 
 ```
 python -m unittest discover -s tests
-Ran 128 tests in 3.6s
+Ran 180 tests in 13.7s
 OK
 ```
 

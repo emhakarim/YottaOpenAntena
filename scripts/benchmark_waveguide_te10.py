@@ -1,12 +1,12 @@
-"""Benchmark #2 — rectangular waveguide, TE10 cutoff (exact analytic reference).
+﻿"""Benchmark #2 â€” rectangular waveguide, TE10 cutoff (exact analytic reference).
 
-Why this benchmark exists (see `docs/benchmarks.md` §5): the cutoff frequency of an
+Why this benchmark exists (see `docs/benchmarks.md` Â§5): the cutoff frequency of an
 air-filled rectangular waveguide has an EXACT closed form,
 
     f_c = c / (2a)          a = broad dimension
 
 so it tests the solver + mesh + post-processing pipeline against a number nobody can
-argue about — no fringing, no feed geometry, no dielectric.  A second, independent
+argue about â€” no fringing, no feed geometry, no dielectric.  A second, independent
 topology is exactly what the benchmark gap needs.
 
 Model: a = 100 mm, b = 50 mm, length 200 mm, air filled.
@@ -36,19 +36,24 @@ from pathlib import Path
 
 import numpy as np
 
-if os.name == "nt":
-    _root = os.environ.get("OPENEMS_ROOT")
-    if _root and os.path.isdir(_root):
-        os.add_dll_directory(_root)
-        os.environ["PATH"] = _root + os.pathsep + os.environ.get("PATH", "")
-    else:
-        sys.exit(
-            "ERROR: OPENEMS_ROOT must point at the folder holding openEMS.exe / CSXCAD.dll"
-        )
+def _register_openems() -> None:
+    """Register the native DLLs, then import the solver inside ``main()``.
 
-from CSXCAD import ContinuousStructure
-from openEMS import openEMS
-from openEMS.physical_constants import C0
+    Both steps are deferred on purpose: this module must import cleanly on a machine
+    without openEMS, which ``tests/test_repo_paths.py::test_modules_import_cleanly``
+    enforces.  (Caught in review: the first version called ``sys.exit`` at import.)
+    """
+    if os.name == "nt":
+        root = os.environ.get("OPENEMS_ROOT", "")
+        if not root or not os.path.isdir(root):
+            raise SystemExit(
+                "ERROR: OPENEMS_ROOT must point at the folder holding openEMS.exe / CSXCAD.dll"
+            )
+        os.add_dll_directory(root)
+        os.environ["PATH"] = root + os.pathsep + os.environ.get("PATH", "")
+
+
+C0 = 299792458.0  # vacuum speed of light [m/s], the same value the solver reports
 
 A = 100e-3          # broad dimension (x)  -> f_c = 1.499 GHz
 B = 50e-3           # narrow dimension (y)
@@ -61,6 +66,10 @@ END_CRITERIA = 1e-4
 
 
 def main() -> int:
+    _register_openems()
+    from CSXCAD import ContinuousStructure
+    from openEMS import openEMS
+
     out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("runs") / "benchmark_te10"
     out_dir.mkdir(parents=True, exist_ok=True)
 
