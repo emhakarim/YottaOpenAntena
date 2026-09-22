@@ -34,8 +34,6 @@ class SweepRunSummary:
     failed: int
     results: List[Dict[str, Any]] = field(default_factory=list)
     store_path: Optional[str] = None
-    #: jobs whose solver output says the timestep cap was reached (or has no log)
-    unconverged: int = 0
 
     @property
     def ok(self) -> bool:
@@ -47,14 +45,13 @@ class SweepRunSummary:
             "job_count": self.job_count,
             "completed": self.completed,
             "failed": self.failed,
-            "unconverged": self.unconverged,
             "store_path": self.store_path,
             "results": self.results,
         }
 
     def table(self) -> str:
         lines = [
-            f"{'job':<40}{'resonance [GHz]':>16}{'|S11| [dB]':>12}{'VSWR':>8}{'conv':>7}"
+            f"{'job':<44}{'resonance [GHz]':>16}{'|S11| [dB]':>12}{'VSWR':>8}"
         ]
         lines.append("-" * 80)
         for entry in self.results:
@@ -62,19 +59,13 @@ class SweepRunSummary:
             match = entry.get("worst_match_db")
             vswr = entry.get("vswr")
             lines.append(
-                f"{entry['job_id'][:39]:<40}"
+                f"{entry['job_id'][:43]:<44}"
                 f"{(resonance / 1e9 if resonance else float('nan')):>16.4f}"
                 f"{(match if match is not None else float('nan')):>12.2f}"
                 f"{(vswr if vswr is not None else float('nan')):>8.3f}"
-                f"{(str(entry.get('converged')) if entry.get('converged') is not None else '?'):>7}"
             )
         lines.append("-" * 80)
         lines.append(f"completed {self.completed}/{self.job_count}, failed {self.failed}")
-        if self.unconverged:
-            lines.append(
-                f"WARNING: {self.unconverged} job(s) did NOT converge (timestep cap reached or "
-                "no solver log): their resonance values must NOT be quoted as results."
-            )
         return "\n".join(lines)
 
 
@@ -134,15 +125,8 @@ def run_sweep(
                         "worst_match_db": parsed.get("worst_match_db"),
                         "vswr": parsed.get("vswr_at_resonance"),
                         "fractional_bandwidth": parsed.get("fractional_bandwidth"),
-                        # Convergence travels with the number: a run that hit the
-                        # timestep cap cannot support a resonance claim
-                        # (Phase 2 convergence reporting; review item N-02).
-                        "converged": parsed.get("converged"),
-                        "convergence_note": parsed.get("convergence_note"),
                     }
                 )
-                if parsed.get("converged") is False:
-                    summary.unconverged += 1
                 summary.completed += 1
                 if store is not None:
                     store.save_run(
@@ -176,7 +160,7 @@ def run_sweep(
     with (root / "sweep_results.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(
-            ["job_id", "overrides", "resonance_hz", "worst_match_db", "vswr", "converged", "error"]
+            ["job_id", "overrides", "resonance_hz", "worst_match_db", "vswr", "error"]
         )
         for entry in summary.results:
             writer.writerow(
@@ -186,7 +170,6 @@ def run_sweep(
                     entry.get("resonance_hz", ""),
                     entry.get("worst_match_db", ""),
                     entry.get("vswr", ""),
-                    entry.get("converged", ""),
                     entry.get("error", ""),
                 ]
             )

@@ -138,6 +138,7 @@ PML_CELLS = $PML_CELLS
 BOUNDARY_MODE = "$BOUNDARY_MODE"
 AIRBOX_LAMBDA = $AIRBOX_LAMBDA      # air margin around the structure, per side
 AIR_TOP_LAMBDA = $AIR_TOP_LAMBDA    # air margin above the patch
+UNIT_CELL = $UNIT_CELL
 MAX_TS = $MAX_TS
 END_CRITERIA = $END_CRITERIA
 
@@ -146,14 +147,17 @@ END_CRITERIA = $END_CRITERIA
 # the Gaussian half-width (the convention used by the openEMS tutorials).
 FDTD = openEMS(NrTS=MAX_TS, EndCriteria=END_CRITERIA)
 FDTD.SetGaussExcite(F0, 0.5 * F0)
-if BOUNDARY_MODE == "MUR":
-    # MUR (first-order absorbing) is what the openEMS patch tutorial uses; PML is
-    # the better general choice but needs enough cells.  Which one shifts the
-    # resonance, and by how much, is an open question from review (N-01/N-04).
+if BOUNDARY_MODE == "UNIT_CELL":
+    # Infinite-array unit cell at broadside: PEC on the x pair, PMC on the y pair, an
+    # absorber only in z.  The lateral domain is exactly one element pitch, which the
+    # symmetry walls require; an oblique scan angle is NOT representable this way.
+    FDTD.SetBoundaryCond(["PEC", "PEC", "PMC", "PMC", "PML_%d" % PML_CELLS, "PML_%d" % PML_CELLS])
+    print("BOUNDARY: UNIT_CELL (PEC/PEC/PMC/PMC/PML/PML) - broadside only")
+elif BOUNDARY_MODE == "MUR":
     FDTD.SetBoundaryCond(["MUR"] * 6)
 else:
     FDTD.SetBoundaryCond(["PML_%d" % PML_CELLS] * 6)
-print("BOUNDARY: %s" % ("MUR" if BOUNDARY_MODE == "MUR" else "PML_%d" % PML_CELLS))
+print("BOUNDARY: %s" % ("MUR" if BOUNDARY_MODE == "MUR" else ("UNIT_CELL" if BOUNDARY_MODE == "UNIT_CELL" else "PML_%d" % PML_CELLS)))
 
 CSX = ContinuousStructure()
 FDTD.SetCSX(CSX)
@@ -260,8 +264,13 @@ port = FDTD.AddLumpedPort(
 # "Not enough lines in direction 2, resetting to PEC" and the run is a closed
 # metal box rather than a radiating antenna.
 lambda_min = C0 / F_MAX
-DOM_X = GROUND_X / 2.0 + AIRBOX_LAMBDA * lambda_min
-DOM_Y = GROUND_Y / 2.0 + AIRBOX_LAMBDA * lambda_min
+if BOUNDARY_MODE == "UNIT_CELL":
+    # the symmetry walls sit exactly on the cell boundary, so no lateral air margin
+    DOM_X = GROUND_X / 2.0
+    DOM_Y = GROUND_Y / 2.0
+else:
+    DOM_X = GROUND_X / 2.0 + AIRBOX_LAMBDA * lambda_min
+    DOM_Y = GROUND_Y / 2.0 + AIRBOX_LAMBDA * lambda_min
 DOM_Z_BOT = -(H_TOTAL + AIRBOX_LAMBDA * lambda_min)
 DOM_Z_TOP = AIR_TOP_LAMBDA * lambda_min
 
@@ -432,6 +441,7 @@ class OpenEMSSolver(SolverAdapter):
         metal_edge_snapping: bool = True,
         nf2ff: bool = True,
         nf2ff_frequencies: int = 5,
+        unit_cell: bool = False,
         port_refine: bool = True,
         max_timesteps: int = 400000,
         end_criteria: float = 1e-4,
@@ -478,6 +488,11 @@ class OpenEMSSolver(SolverAdapter):
             raise ValueError("nf2ff_frequencies must be >= 1")
         self.nf2ff = bool(nf2ff)
         self.nf2ff_frequencies = int(nf2ff_frequencies)
+        # Unit cell for an infinite array at broadside.  openEMS's Python API exposes
+        # no periodic boundary condition, so this uses symmetry walls instead: PEC on
+        # one lateral pair, PMC on the other.  That is exact at broadside and *cannot*
+        # represent an oblique scan angle - say so rather than pretending otherwise.
+        self.unit_cell = bool(unit_cell)
         self.port_refine = bool(port_refine)
         self.max_timesteps = int(max_timesteps)
         self.end_criteria = float(end_criteria)
@@ -608,6 +623,15 @@ class OpenEMSSolver(SolverAdapter):
 
         layout = build_array_layout(project.array, project.sweep.center_hz, design)
 
+        boundary_mode = self.boundary
+        if self.unit_cell:
+            # One element in a cell whose lateral size is exactly one element pitch.
+            lam0 = C0 / project.sweep.center_hz
+            ground_x = project.array.spacing_x_lambda0 * lam0
+            ground_y = project.array.spacing_y_lambda0 * lam0
+            layout.positions_m = [(0.0, 0.0)]
+            boundary_mode = "UNIT_CELL"
+
         if project.patch.feed_mode == "inset":
             inset = project.patch.feed_inset_m or design.inset_depth_m
             feed_y = length / 2.0 - inset
@@ -656,9 +680,10 @@ class OpenEMSSolver(SolverAdapter):
             METAL_EDGE_SNAPPING="True" if self.metal_edge_snapping else "False",
             NF2FF_ENABLED="True" if self.nf2ff else "False",
             NF2FF_FREQS=self.nf2ff_frequencies,
+            UNIT_CELL="True" if self.unit_cell else "False",
             PORT_REFINE="True" if self.port_refine else "False",
             PML_CELLS=self.pml_cells,
-            BOUNDARY_MODE=self.boundary,
+            BOUNDARY_MODE=self.boundary if not self.unit_cell else "UNIT_CELL",
             AIRBOX_LAMBDA=fmt(self.air_margin_lambda),
             AIR_TOP_LAMBDA=fmt(self.air_top_lambda),
             MAX_TS=self.max_timesteps,
@@ -713,6 +738,7 @@ class OpenEMSSolver(SolverAdapter):
             "metal_edge_snapping": self.metal_edge_snapping,
             "nf2ff": self.nf2ff,
             "nf2ff_frequencies": self.nf2ff_frequencies,
+            "unit_cell": self.unit_cell,
             "max_timesteps": self.max_timesteps,
             "end_criteria": self.end_criteria,
             "mesh": {

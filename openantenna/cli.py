@@ -276,6 +276,7 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
         port_refine=args.port_refine,
         metal_edge_snapping=args.edge_snapping,
         nf2ff=args.nf2ff,
+        unit_cell=args.unit_cell,
         max_timesteps=args.max_timesteps,
         end_criteria=args.end_criteria,
     )
@@ -299,6 +300,7 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
     print(
         f"construction     : port_refine={solver.port_refine}, "
         f"edge_snapping={solver.metal_edge_snapping}, nf2ff={solver.nf2ff}"
+        + (", unit_cell=broadside" if solver.unit_cell else "")
     )
     print(f"run directory    : {prepared}")
     print(f"generated        : {solver.script_name}, {solver.project_name}, run_manifest.json")
@@ -517,6 +519,17 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="record a near-to-far-field box and dump directivity + radiation efficiency (A-2)",
+    )
+    p.add_argument(
+        "--unit-cell",
+        dest="unit_cell",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "model an infinite array as one unit cell at broadside (PEC/PMC symmetry "
+            "walls). openEMS exposes no periodic boundary, so oblique scan angles are "
+            "not representable this way"
+        ),
     )
     p.add_argument("--out", required=True, help="run directory to write into")
     p.set_defaults(handler=cmd_gen_openems)

@@ -223,6 +223,34 @@ class TestScriptGeneration(unittest.TestCase):
             solver.mesh_cells_per_wavelength * solver.air_margin_lambda, solver.pml_cells
         )
 
+    def test_unit_cell_uses_symmetry_walls_and_the_element_pitch(self):
+        """Phase 2: an infinite-array unit cell at broadside.
+
+        openEMS's Python API has no periodic boundary, so this is built from PEC/PMC
+        symmetry walls - which is exact at broadside and must be labelled as such.
+        """
+        script = OpenEMSSolver(unit_cell=True).render_script(make_project(nx=4, ny=4))
+        self.assertIn('["PEC", "PEC", "PMC", "PMC"', script)
+        self.assertIn("broadside only", script)
+        self.assertIn("UNIT_CELL = True", script)
+        line = next(row for row in script.splitlines() if row.startswith("ELEMENTS = "))
+        elements = ast.literal_eval(line.split("=", 1)[1].strip())
+        self.assertEqual(len(elements), 1, "a unit cell contains exactly one element")
+        # the lateral domain must be one element pitch, not ground + margin
+        self.assertIn("DOM_X = GROUND_X / 2.0", script)
+
+    def test_unit_cell_is_recorded_in_the_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rundir = OpenEMSSolver(unit_cell=True).prepare(make_project(nx=2, ny=2), tmp)
+            manifest = json.loads((rundir / "run_manifest.json").read_text(encoding="utf-8"))
+        self.assertTrue(manifest["unit_cell"])
+        self.assertEqual(manifest["boundary"], "PML")  # the knob, not the rendered walls
+
+    def test_finite_array_keeps_the_pml_boundary(self):
+        script = OpenEMSSolver().render_script(make_project(nx=4, ny=4))
+        self.assertIn("UNIT_CELL = False", script)
+        self.assertNotIn('["PEC", "PEC", "PMC", "PMC"', script)
+
     def test_unknown_material_is_rejected(self):
         project = make_project(material="unobtainium")
         with self.assertRaises(ValueError):
