@@ -252,6 +252,22 @@ class TestScriptGeneration(unittest.TestCase):
         self.assertIn("UNIT_CELL = False", script)
         self.assertIn('BOUNDARY_MODE = "PML"', script)
 
+    def test_thread_count_is_configurable_and_recorded(self):
+        """openEMS is CPU-only, so the thread count is the main solver-speed knob."""
+        solver = OpenEMSSolver(numthreads=8)
+        script = solver.render_script(make_project())
+        self.assertIn("NUM_THREADS = 8", script)
+        self.assertIn("numthreads=NUM_THREADS", script)
+        with tempfile.TemporaryDirectory() as tmp:
+            rundir = solver.prepare(make_project(), tmp)
+            manifest = json.loads((rundir / "run_manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["numthreads"], 8)
+
+    def test_auto_threads_is_the_default_and_negative_is_rejected(self):
+        self.assertEqual(OpenEMSSolver().numthreads, 0)  # 0 = let openEMS decide
+        with self.assertRaises(ValueError):
+            OpenEMSSolver(numthreads=-1)
+
     def test_unknown_material_is_rejected(self):
         project = make_project(material="unobtainium")
         with self.assertRaises(ValueError):

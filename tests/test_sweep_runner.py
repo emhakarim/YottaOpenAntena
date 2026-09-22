@@ -147,6 +147,40 @@ class TestRunSweep(unittest.TestCase):
                 )
             self.assertEqual(stub.prepared, [])
 
+    def test_parallel_jobs_give_the_same_results_in_a_stable_order(self):
+        """Sweeps can run jobs concurrently; the reporting order must not depend on
+        which worker finished first."""
+        axes = [SweepAxis.parse("substrate.layers.0.thickness_m=0.0016,0.0032,0.0010")]
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = run_sweep(
+                make_project(),
+                axes,
+                Path(tmp) / "out",
+                solver_factory=StubSolver,
+                max_workers=3,
+            )
+        self.assertEqual(summary.completed, 3)
+        self.assertEqual(summary.failed, 0)
+        # Deterministic *enumeration* order, not alphabetical order: the same job list
+        # every run regardless of which worker finished first.
+        from openantenna.sweep.engine import ParameterSweep
+
+        expected = [job.job_id for job in ParameterSweep(make_project(), axes).jobs()]
+        job_ids = [entry["job_id"] for entry in summary.results]
+        self.assertEqual(job_ids, expected)
+        for entry in summary.results:
+            self.assertIn("resonance_hz", entry)
+
+    def test_max_workers_is_validated(self):
+        with self.assertRaises(ValueError):
+            run_sweep(
+                make_project(),
+                [SweepAxis.parse("sweep.points=51,101")],
+                ".",
+                solver_factory=StubSolver,
+                max_workers=0,
+            )
+
     def test_csv_contains_one_row_per_job(self):
         axes = [SweepAxis.parse("patch.length_m=0.036,0.038")]
         with tempfile.TemporaryDirectory() as tmp:

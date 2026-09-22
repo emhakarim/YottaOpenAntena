@@ -132,6 +132,7 @@ MESH_SUBSTRATE_CELLS = $MESH_SUBSTRATE_CELLS
 PORT_REFINE = $PORT_REFINE   # refine the mesh around the lumped port (review item A4)
 MESH_SMOOTHING = $MESH_SMOOTHING
 METAL_EDGE_SNAPPING = $METAL_EDGE_SNAPPING
+NUM_THREADS = $NUM_THREADS   # 0 = let openEMS measure and decide, N = force N threads
 NF2FF_ENABLED = $NF2FF_ENABLED
 NF2FF_FREQS = $NF2FF_FREQS
 PML_CELLS = $PML_CELLS
@@ -145,7 +146,8 @@ END_CRITERIA = $END_CRITERIA
 # ---------------------------------------------------------------- FDTD setup
 # The excitation must cover the whole sweep; use F0 as centre and half of F0 as
 # the Gaussian half-width (the convention used by the openEMS tutorials).
-FDTD = openEMS(NrTS=MAX_TS, EndCriteria=END_CRITERIA)
+FDTD = openEMS(NrTS=MAX_TS, EndCriteria=END_CRITERIA, numthreads=NUM_THREADS)
+print("THREADS: %s" % ("auto" if NUM_THREADS == 0 else str(NUM_THREADS)))
 FDTD.SetGaussExcite(F0, 0.5 * F0)
 if BOUNDARY_MODE == "UNIT_CELL":
     # Infinite-array unit cell at broadside: PEC on the x pair, PMC on the y pair, an
@@ -448,6 +450,7 @@ class OpenEMSSolver(SolverAdapter):
         nf2ff: bool = True,
         nf2ff_frequencies: int = 5,
         unit_cell: bool = False,
+        numthreads: int = 0,
         port_refine: bool = True,
         max_timesteps: int = 400000,
         end_criteria: float = 1e-4,
@@ -499,6 +502,9 @@ class OpenEMSSolver(SolverAdapter):
         # one lateral pair, PMC on the other.  That is exact at broadside and *cannot*
         # represent an oblique scan angle - say so rather than pretending otherwise.
         self.unit_cell = bool(unit_cell)
+        if numthreads < 0:
+            raise ValueError("numthreads must be >= 0 (0 lets openEMS decide)")
+        self.numthreads = int(numthreads)
         self.port_refine = bool(port_refine)
         self.max_timesteps = int(max_timesteps)
         self.end_criteria = float(end_criteria)
@@ -687,6 +693,7 @@ class OpenEMSSolver(SolverAdapter):
             NF2FF_ENABLED="True" if self.nf2ff else "False",
             NF2FF_FREQS=self.nf2ff_frequencies,
             UNIT_CELL="True" if self.unit_cell else "False",
+            NUM_THREADS=self.numthreads,
             PORT_REFINE="True" if self.port_refine else "False",
             PML_CELLS=self.pml_cells,
             BOUNDARY_MODE=self.boundary if not self.unit_cell else "UNIT_CELL",
@@ -745,6 +752,7 @@ class OpenEMSSolver(SolverAdapter):
             "nf2ff": self.nf2ff,
             "nf2ff_frequencies": self.nf2ff_frequencies,
             "unit_cell": self.unit_cell,
+            "numthreads": self.numthreads,
             "max_timesteps": self.max_timesteps,
             "end_criteria": self.end_criteria,
             "mesh": {

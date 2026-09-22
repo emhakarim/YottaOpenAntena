@@ -277,6 +277,7 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
         metal_edge_snapping=args.edge_snapping,
         nf2ff=args.nf2ff,
         unit_cell=args.unit_cell,
+        numthreads=args.numthreads,
         max_timesteps=args.max_timesteps,
         end_criteria=args.end_criteria,
     )
@@ -301,6 +302,7 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
         f"construction     : port_refine={solver.port_refine}, "
         f"edge_snapping={solver.metal_edge_snapping}, nf2ff={solver.nf2ff}"
         + (", unit_cell=broadside" if solver.unit_cell else "")
+        + f", numthreads={solver.numthreads or 'auto'}"
     )
     print(f"run directory    : {prepared}")
     print(f"generated        : {solver.script_name}, {solver.project_name}, run_manifest.json")
@@ -343,6 +345,7 @@ def cmd_sweep_run(args: argparse.Namespace) -> int:
             "port_refine": args.port_refine,
             "metal_edge_snapping": args.edge_snapping,
             "nf2ff": args.nf2ff,
+            "numthreads": args.numthreads,
             "max_timesteps": args.max_timesteps,
             "end_criteria": args.end_criteria,
         },
@@ -531,6 +534,17 @@ def build_parser() -> argparse.ArgumentParser:
             "not representable this way"
         ),
     )
+    p.add_argument(
+        "--numthreads",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "threads for the FDTD kernel: 0 lets openEMS measure and decide (default), "
+            "N forces N threads. Use scripts/thread_benchmark.py to find the best value "
+            "for this machine"
+        ),
+    )
     p.add_argument("--out", required=True, help="run directory to write into")
     p.set_defaults(handler=cmd_gen_openems)
 
@@ -603,6 +617,7 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
     )
+    p.add_argument("--numthreads", type=int, default=0, metavar="N")
     p.add_argument(
         "--stop-on-error", action="store_true", help="abort the sweep at the first failure"
     )

@@ -98,19 +98,28 @@ def run_sweep(
     solver_kwargs: Optional[Dict[str, Any]] = None,
     store_path: Optional[str | Path] = None,
     stop_on_error: bool = False,
+    max_workers: int = 1,
 ) -> SweepRunSummary:
     """Execute every job of a parameter sweep and record the results.
 
     Raises :class:`SolverUnavailableError` before doing any work when the solver
     cannot run, so a sweep never silently produces an empty result set.
+
+    ``max_workers > 1`` runs jobs concurrently (one adapter instance per worker; the
+    store is still written from this thread).  Note that the FDTD kernel is itself
+    multi-threaded, so running jobs in parallel while each requests many threads
+    oversubscribes the CPU: choose ``max_workers`` and ``numthreads`` together, and
+    measure with ``scripts/thread_benchmark.py`` instead of guessing.
     """
     solver_kwargs = dict(solver_kwargs or {})
+    if max_workers < 1:
+        raise ValueError("max_workers must be >= 1")
     sweep = ParameterSweep(project, axes)
     root = Path(out_dir)
     root.mkdir(parents=True, exist_ok=True)
 
-    solver = solver_factory(**solver_kwargs)
-    status = solver.available()
+    probe = solver_factory(**solver_kwargs)
+    status = probe.available()
     if not status.available:
         raise SolverUnavailableError(
             f"cannot run a sweep: {status.detail}. Model generation and "
@@ -126,53 +135,79 @@ def run_sweep(
         store_path=str(store_path) if store_path else None,
     )
 
+    def execute(job) -> tuple[Dict[str, Any], Any, Optional[Dict[str, Any]], Optional[BaseException]]:
+        job_dir = root / job.job_id
+        job_dir.mkdir(parents=True, exist_ok=True)
+        entry: Dict[str, Any] = {"job_id": job.job_id, "overrides": job.overrides}
+        job_project = sweep.project_for(job)
+        try:
+            worker = solver_factory(**solver_kwargs)
+            worker.prepare(job_project, job_dir)
+            run = worker.run(job_dir)
+            entry["solver_status"] = run.status
+            entry["returncode"] = run.returncode
+            if run.status != "ok":
+                raise RuntimeError(f"solver returned {run.status} ({run.returncode})")
+            parsed = worker.parse_results(job_dir)
+            entry.update(
+                {
+                    "resonance_hz": parsed.get("resonance_hz"),
+                    "worst_match_db": parsed.get("worst_match_db"),
+                    "vswr": parsed.get("vswr_at_resonance"),
+                    "fractional_bandwidth": parsed.get("fractional_bandwidth"),
+                    # The convergence flag must travel with the number (item #7).
+                    "converged": parsed.get("converged"),
+                    "convergence_note": parsed.get("convergence_note"),
+                }
+            )
+            return entry, job_project, parsed, None
+        except BaseException as exc:  # noqa: BLE001 - recorded per job, not raised
+            entry["error"] = f"{type(exc).__name__}: {exc}"
+            return entry, job_project, None, exc
+
     try:
-        for job in sweep.jobs():
-            job_dir = root / job.job_id
-            job_dir.mkdir(parents=True, exist_ok=True)
-            entry: Dict[str, Any] = {"job_id": job.job_id, "overrides": job.overrides}
-            try:
-                job_project = sweep.project_for(job)
-                solver.prepare(job_project, job_dir)
-                run = solver.run(job_dir)
-                entry["solver_status"] = run.status
-                entry["returncode"] = run.returncode
-                if run.status != "ok":
-                    raise RuntimeError(f"solver returned {run.status} ({run.returncode})")
-                parsed = solver.parse_results(job_dir)
-                entry.update(
-                    {
-                        "resonance_hz": parsed.get("resonance_hz"),
-                        "worst_match_db": parsed.get("worst_match_db"),
-                        "vswr": parsed.get("vswr_at_resonance"),
-                        "fractional_bandwidth": parsed.get("fractional_bandwidth"),
-                        # The convergence flag must travel with the number (item #7).
-                        "converged": parsed.get("converged"),
-                        "convergence_note": parsed.get("convergence_note"),
-                    }
-                )
+        results_ordered: List[Dict[str, Any]] = []
+        if max_workers == 1:
+            for job in sweep.jobs():
+                entry, job_project, parsed, error = execute(job)
+                results_ordered.append((entry, job_project, parsed, error))
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {pool.submit(execute, job): job for job in sweep.jobs()}
+                collected = []
+                for future in as_completed(futures):
+                    collected.append(future.result())
+                    if stop_on_error and collected[-1][3] is not None:
+                        for pending in futures:
+                            pending.cancel()
+                        break
+                # keep a deterministic order regardless of completion order
+                order = {job.job_id: i for i, job in enumerate(sweep.jobs())}
+                collected.sort(key=lambda item: order[item[0]["job_id"]])
+                results_ordered = collected
+
+        for entry, job_project, parsed, error in results_ordered:
+            if error is None:
                 summary.completed += 1
                 if store is not None:
                     store.save_run(
-                        job.job_id,
+                        entry["job_id"],
                         job_project.to_dict(),
                         status="ok",
                         results=parsed,
                         note=f"sweep of {len(axes)} axis/axes",
                     )
-            except Exception as exc:
-                entry["error"] = f"{type(exc).__name__}: {exc}"
+            else:
                 summary.failed += 1
                 if store is not None:
                     store.save_run(
-                        job.job_id,
+                        entry["job_id"],
                         project.to_dict(),
                         status="failed",
                         note=entry["error"],
                     )
-                if stop_on_error:
-                    summary.results.append(entry)
-                    raise
             summary.results.append(entry)
     finally:
         if store is not None:
