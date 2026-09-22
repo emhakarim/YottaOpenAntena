@@ -381,7 +381,14 @@ def cmd_gen_openems(args: argparse.Namespace) -> int:
         f"mesh             : {solver.mesh_cells_per_wavelength} cells/lambda "
         f"(min), {solver.substrate_cells} cells across the substrate"
     )
-    print(f"dielectric loss  : {solver.loss_model} (kappa = {solver.last_kappa:.6g} S/m)")
+    if solver.loss_model == "debye":
+        _eps_inf, _eps_delta, _tau = solver.last_debye
+        print(
+            f"dielectric loss  : debye (eps_inf = {_eps_inf:.6g}, "
+            f"eps_delta = {_eps_delta:.6g}, tau = {_tau:.6g} s)"
+        )
+    else:
+        print(f"dielectric loss  : {solver.loss_model} (kappa = {solver.last_kappa:.6g} S/m)")
     print(f"ground margin    : {solver.ground_margin_lambda:g} lambda0 per side")
     print(
         f"boundary         : {solver.boundary}"
@@ -570,12 +577,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--loss-model",
-        choices=("kappa", "none"),
+        choices=("kappa", "debye", "none"),
         default="kappa",
         help=(
             "how to represent the substrate loss tangent: 'kappa' maps it to an "
             "equivalent constant conductivity (exact at the sweep centre, drifts "
-            "as 1/f), 'none' builds a lossless substrate (default kappa)"
+            "as 1/f), 'debye' models it as a dispersive (Debye) material, 'none' builds "
+            "a lossless substrate (default kappa)"
         ),
     )
     p.add_argument(
@@ -698,7 +706,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--store", default=None, help="sqlite file to record every run into")
     p.add_argument("--mesh-cells", type=int, default=15, metavar="N")
     p.add_argument("--substrate-cells", type=int, default=8, metavar="N")
-    p.add_argument("--loss-model", choices=("kappa", "none"), default="kappa")
+    p.add_argument("--loss-model", choices=("kappa", "debye", "none"), default="kappa")
     p.add_argument(
         "--ground-margin-lambda",
         type=float,
