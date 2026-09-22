@@ -1,12 +1,12 @@
-"""Benchmark #2 â€” rectangular waveguide, TE10 cutoff (exact analytic reference).
+"""Benchmark #2 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â rectangular waveguide, TE10 cutoff (exact analytic reference).
 
-Why this benchmark exists (see `docs/benchmarks.md` Â§5): the cutoff frequency of an
+Why this benchmark exists (see `docs/benchmarks.md` Ãƒâ€šÃ‚Â§5): the cutoff frequency of an
 air-filled rectangular waveguide has an EXACT closed form,
 
     f_c = c / (2a)          a = broad dimension
 
 so it tests the solver + mesh + post-processing pipeline against a number nobody can
-argue about â€” no fringing, no feed geometry, no dielectric.  A second, independent
+argue about ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no fringing, no feed geometry, no dielectric.  A second, independent
 topology is exactly what the benchmark gap needs.
 
 Model: a = 100 mm, b = 50 mm, length 200 mm, air filled.
@@ -84,14 +84,30 @@ def main() -> int:
     t = 1e-3
 
     CSX.AddMaterial("air").AddBox([-A / 2, -B / 2, 0], [A / 2, B / 2, LENGTH], priority=0)
-    wall = CSX.AddMetal("walls")
-    for x0, x1 in ((-A / 2, -A / 2 + t), (A / 2 - t, A / 2)):
-        wall.AddBox([x0, -B / 2, 0], [x1, B / 2, LENGTH], priority=1)
-    for y0, y1 in ((-B / 2, -B / 2 + t), (B / 2 - t, B / 2)):
-        wall.AddBox([-A / 2, y0, 0], [A / 2, y1, LENGTH], priority=1)
+    # The guide walls ARE the domain boundary: x and y are set to PEC just below.  The
+    # earlier version added 1 mm thick PEC boxes inside this outline, which shrank the
+    # air channel to 98 x 48 mm and moved the real cutoff to 1529.6 MHz while the script
+    # still compared against c/(2*100 mm) = 1499.0 MHz.
 
-    port_in = FDTD.AddLumpedPort(1, 50.0, [0, 0, 0], [0, 0, t], "z", 1.0, priority=5, edges2grid="xy")
-    port_out = FDTD.AddLumpedPort(2, 50.0, [0, 0, LENGTH - t], [0, 0, LENGTH], "z", 0.0, priority=5, edges2grid="xy")
+    # Modal (TE10) ports.  The previous z-directed lumped port with edges2grid="xy"
+    # produced "CalcVoltageIntegral: Error, only a 1D/line integration is allowed" every
+    # timestep and a field energy of exactly zero, so no transmission could be measured.
+    # An *excited* port needs a non-zero length along the propagation direction, which
+    # openEMS reports as "Port length in excitation direction may not be zero if port is
+    # excited!".  One mesh cell (t = 1 mm) is enough; the receiving port is a plane.
+    port_in = FDTD.AddRectWaveGuidePort(
+        1, [-A / 2, -B / 2, 0.0], [A / 2, B / 2, t], "z", A, B, "TE10", 1
+    )
+    port_out = FDTD.AddRectWaveGuidePort(
+        2, [-A / 2, -B / 2, LENGTH], [A / 2, B / 2, LENGTH], "z", A, B, "TE10", 0
+    )
+
+    # The port planes must sit on mesh lines -- openEMS's own example
+    # (python/Tutorials/Rect_WaveGuide.py) adds them explicitly.  Without this the probe
+    # boxes never land on the grid, no `port_ut_*` file is written, and CalcPort dies
+    # with FileNotFoundError even though the FDTD run itself succeeds.
+    mesh.AddLine("z", [0.0, t])
+    mesh.AddLine("z", [LENGTH - t, LENGTH])
 
     mesh.AddLine("x", np.linspace(-A / 2, A / 2, 21))
     mesh.AddLine("y", np.linspace(-B / 2, B / 2, 11))

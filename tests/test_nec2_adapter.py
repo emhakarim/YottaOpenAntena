@@ -98,6 +98,23 @@ class TestAvailabilityHonesty(unittest.TestCase):
             with self.assertRaises(SolverUnavailableError):
                 solver.run(tmp)
 
+    def test_the_fake_engine_launcher_matches_the_platform(self):
+        """Windows needs a .bat, POSIX an executable sh script: the suite runs on both."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            win = _make_fake_engine(root / "win", platform_name="nt")
+            posix = _make_fake_engine(root / "posix", platform_name="posix")
+
+            # assertions stay inside the TemporaryDirectory: reading the files after the
+            # context manager exits raises FileNotFoundError (a bug in the first version)
+            self.assertEqual(win.suffix, ".bat")
+            self.assertIn("@echo off", win.read_text(encoding="utf-8"))
+            self.assertEqual(posix.suffix, ".sh")
+            self.assertEqual(posix.read_text(encoding="utf-8").splitlines()[0], "#!/bin/sh")
+            self.assertTrue(
+                posix.stat().st_mode & 0o111, "the POSIX launcher must be executable"
+            )
+
     def test_prepare_rejects_a_project_clearly(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(TypeError) as ctx:
