@@ -31,3 +31,22 @@ resonance, efficiency or gain may be used to cut hardware.
 **Conclusion:** conditions 2, 3 and 4 are the blockers.  Until they are met, every
 solver number stays a *model output under test* — useful for comparing designs, not
 for promising a frequency on a datasheet.
+
+## Status re-scored (2026-09-22, with the day's evidence)
+
+| # | Status | Change since 21 Sep |
+|---|---|---|
+| 1 | **partial** | unchanged - the coupling reader and the CLI refuse unconverged numbers, but runs are still not rejected automatically |
+| 2 | **no** | unchanged - residual bias open; needs converged runs |
+| 3 | **partial** | **was no** - the generator can now realise the coplanar inset (notched patch + printed line + port at the line end, mesh refined across the line); the differential run is with Yotta |
+| 4 | **no** | unchanged - dielectric loss is native (Debye) but never validated against a known Q; metals are still PEC |
+| 5 | **yes** | **was 1 of 2** - the TE10 waveguide benchmark passed (-0.0036 dB at 1.3 f_c) |
+| 6 | **partial** | unchanged - the ground-margin sweep still carries a confound |
+| 7 | **yes at the tuned point** | unchanged |
+| 8 | **partial** | unchanged |
+
+**Score: 4.0 / 8 = 50 %** (was 3.0 / 8 = 37.5 %).
+
+**Blockers unchanged:** conditions **2** and **4** - both need converged runs, which is the real
+bottleneck on this machine. Until they clear, every solver number stays *a model output under
+test*: fine for comparing designs, not for promising a frequency on a datasheet.

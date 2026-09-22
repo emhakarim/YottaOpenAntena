@@ -21,9 +21,9 @@ reporting of what is and is not verified.
 | CLI | done |
 | Test suite | 180 tests, all passing (see docs/verification.md for the running count) |
 | Documentation | this set |
-| **Accuracy calibration of the generated model** | **open** |
-| **Dielectric loss in the generated solver model** | **open** |
-| Result plotting (optional, needs matplotlib) | open |
+| **Accuracy calibration of the generated model** | **open** - not "not started": it is blocked on machine time. Needs runs that converge (EndCriteria 1e-4, cap 400k), per `docs/convergence-policy.md` |
+| Dielectric loss in the generated solver model | **done** (2026-09-21, Phase 2 #1) - native Debye through `CSXCAD.CSProperties.CSPropDebyeMaterial`; 7 tests |
+| Result plotting (optional, needs matplotlib) | **done** - `openantenna plot` (commit `782efbd6`) |
 
 ### Known open items in Phase 1
 
