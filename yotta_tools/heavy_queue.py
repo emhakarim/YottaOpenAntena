@@ -74,15 +74,21 @@ JOBS: List[Dict[str, object]] = [
 
 
 def active_solver_processes() -> int:
-    """Count python/openEMS processes other than this interpreter."""
+    """Number of openEMS processes currently running.
+
+    Uses PowerShell, not ``tasklist``: a tasklist filter silently returns nothing on some
+    localised Windows builds, and an under-count starts this queue on top of a run that is
+    already using the machine - which is exactly the contention the queue exists to avoid.
+    """
     try:
         out = subprocess.run(
-            ["tasklist", "/FI", "IMAGENAME eq openEMS.exe", "/NH"],
-            capture_output=True, text=True, timeout=60,
+            ["powershell", "-NoProfile", "-Command",
+             "(Get-Process -Name openEMS -ErrorAction SilentlyContinue | Measure-Object).Count"],
+            capture_output=True, text=True, timeout=90,
         ).stdout
+        return int(out.strip() or 0)
     except Exception:
         return 0
-    return out.lower().count("openems.exe")
 
 
 def wait_for_room(limit: int = CONCURRENCY_LIMIT, timeout_s: float = 12 * 3600) -> None:
@@ -122,6 +128,17 @@ def run_job(job: Dict[str, object], logdir: Path) -> Dict[str, object]:
         "job": name, "what": job["what"], "status": status,
         "wall_s": round(elapsed, 1), "log": str(log), "summary": None,
     }
+    # A solver job cannot finish in seconds.  If it does, it failed at startup (wrong
+    # interpreter without CSXCAD, missing deck, ...) and an rc of 0 must NOT be read as
+    # success - that mistake made an earlier queue report four "completed" jobs that had
+    # produced nothing at all.
+    if elapsed < 60.0:
+        entry["status"] = f"failed-fast ({entry['status']} in {elapsed:.1f} s)"
+        try:
+            tail = log.read_text(encoding="utf-8", errors="replace").strip().splitlines()[-6:]
+            entry["log_tail"] = [line.strip()[:160] for line in tail]
+        except Exception:
+            pass
 
     summary_rel = job.get("summary")
     if summary_rel:
