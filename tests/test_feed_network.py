@@ -9,9 +9,11 @@ Nothing here claims the feed is drawn in the solver model - it is not, and the g
 
 from __future__ import annotations
 
+import importlib.util
 import unittest
 
 from openantenna.postproc.feed_network import (
+    skrf_cross_check,
     combine_with_elements,
     synthesise_corporate_feed,
 )
@@ -94,6 +96,24 @@ class TestMatchBehaviour(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             combine_with_elements([[1.2 + 0j, 0j], [0j, 0.1 + 0j]], feed, 2.45e9)
         self.assertIn("|S| >= 1", str(ctx.exception))
+
+@unittest.skipUnless(
+    importlib.util.find_spec("skrf") is not None, "scikit-rf is not installed"
+)
+class TestSkrfCrossCheck(unittest.TestCase):
+    def test_the_library_agrees_after_renormalisation(self):
+        for n in (2, 4, 16):
+            feed = synthesise_corporate_feed(n, 2.45e9, 3.32)
+            for z_load in (complex(50.0, 0.0), complex(75.0, 0.0), complex(35.0, 5.0)):
+                with self.subTest(n=n, z=z_load):
+                    self.assertAlmostEqual(
+                        abs(
+                            skrf_cross_check(feed, z_load) - feed.input_reflection(z_load)
+                        ),
+                        0.0,
+                        places=6,
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -42,7 +42,12 @@ import math
 from dataclasses import dataclass
 from typing import Dict, List, Sequence
 
-__all__ = ["CorporateFeed", "synthesise_corporate_feed", "combine_with_elements"]
+__all__ = [
+    "CorporateFeed",
+    "synthesise_corporate_feed",
+    "combine_with_elements",
+    "skrf_cross_check",
+]
 
 C0 = 299792458.0
 
@@ -175,3 +180,53 @@ def combine_with_elements(
             "rule). The feed geometry is not drawn in the model yet."
         ),
     }
+
+
+def skrf_cross_check(feed: CorporateFeed, load_ohm: complex = complex(50.0)) -> complex:
+    """Input reflection of the same tree, computed with scikit-rf.  Optional dependency.
+
+    Everything is renormalised to the design ``Z0`` *before* the two-port formula is applied: the
+    line is created with reference impedance ``Z_t`` (its natural reference) and then
+    ``renormalize(z0)`` moves it to ``Z0``, so the line's S-parameters and the load's reflection
+    finally share one reference.  The first version of this check skipped that step and disagreed
+    with the closed form by up to 0.74 - the check was wrong, not the recursion.
+    """
+    try:
+        import skrf as rf
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("scikit-rf is required for the cross-check") from exc
+
+    z0 = feed.z0_ohm
+    frequency = rf.Frequency(feed.design_frequency_hz, feed.design_frequency_hz, 1, unit="Hz")
+    # The section length is a quarter wave *in the guide*, so the media must be given the guide's
+    # propagation constant.  With the default (air) propagation the line is electrically too
+    # short - 0.67 of a quarter wave for PTFE - and the transform is not a quarter-wave
+    # transform at all.  That, not the renormalisation, was the 0.74 disagreement: the value did
+    # not move when the renormalisation was fixed.
+    gamma = (
+        1j
+        * 2.0
+        * math.pi
+        * feed.design_frequency_hz
+        * math.sqrt(feed.epsilon_eff)
+        / C0
+    )
+    media = rf.media.DefinedGammaZ0(
+        frequency, z0=feed.stage_impedance_ohm, gamma=gamma
+    )
+    # ``renormalize()`` mutates the network in place and returns None, so it must be called as a
+    # statement: chaining it leaves ``line`` as None and the next line raises AttributeError.
+    line = media.line(d=feed.section_length_m, unit="m")
+    line.renormalize(z0)
+    s11 = complex(line.s[0, 0, 0])
+    s12 = complex(line.s[0, 0, 1])
+    s21 = complex(line.s[0, 1, 0])
+    s22 = complex(line.s[0, 1, 1])
+
+    z_seen = complex(load_ohm)
+    for _ in range(feed.levels):
+        z_pair = z_seen / 2.0
+        gamma_load = (z_pair - z0) / (z_pair + z0)
+        gamma_in = s11 + s12 * s21 * gamma_load / (1.0 - s22 * gamma_load)
+        z_seen = z0 * (1.0 + gamma_in) / (1.0 - gamma_in)
+    return (z_seen - z0) / (z_seen + z0)
