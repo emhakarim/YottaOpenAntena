@@ -31,18 +31,34 @@ generator models them.
   abstract was readable, the case is marked partial and the extracted numbers are attributed to
   the abstract, not to the full paper.
 
-## Cases collected
+## Retrieval routes, and which one works
 
-_Being collected by the browser agent; each entry will carry: source + DOI/URL, geometry,
-substrate, measured frequency, completeness verdict, and exactly which fields were readable._
+| Route | Status |
+|---|---|
+| `autoglm-websearch` skill (local token service) | **works** - returns deep article links |
+| `web_search` (native) | works, but often returns site-level URLs and handles `site:` filters poorly |
+| Browser agent (`autoglm run`) | **blocked**: needs the owner's configuration (choose Chrome/Edge, install the AutoGLM extension, approve `auto_approve`). It cannot read paywalled full texts anyway |
+| Reading a page | `autoglm-open-link`, once a deep URL is known |
 
-| # | Source (DOI/URL) | Geometry | Substrate | Measured f | Verdict |
-|---|---|---|---|---|---|
-| — | _(pending)_ | | | | |
+## Candidates found (snippet level only - NOT usable yet)
+
+Nothing here has been read in full, so **no geometry, substrate or frequency from this list may be
+quoted**.  Each entry names what it would take to promote it.
+
+| Candidate | Why it is promising | What is missing to promote it |
+|---|---|---|
+| "Bandwidth Enhancement of An Inset-Fed Rectangular Patch" (article.sapub.org, open access) - snippet cites 3.09-3.17 GHz, 80 MHz bandwidth | inset-fed **rectangular** patch, open access, measured bandwidth stated | patch W/L, substrate epsilon_r + h, inset depth, and whether the resonance is measured |
+| "Comparison of return loss calculations with measurements" (journals.riverpublishers.com) | a direct model-vs-measurement comparison - exactly the model-error track | full text: which models, which geometries, the quoted errors |
+| "Evaluation of the effect of bending on the resonance" (journals.sagepub.com) | quantifies resonance shift vs a physical parameter | full text (likely paywalled) |
+| "A design rule for inset-fed rectangular microstrip patch antenna" (ResearchGate PDF) | gives the inset-depth rule we use as an estimate | the verification against measurement, if any |
+| MDPI "Optimization Design of a Novel Slotted Microstrip..." (2017, open access) | single-layer single-patch resonant-frequency analysis | the patch is slotted: usable only as a *rejected* example unless the plain baseline is given |
+
+Rejected on sight: PIER circularly-polarised design (not a plain rectangular patch), any
+metasurface/array paper, social-media posts.
 
 ## How these feed the calibration
 
 Collected cases become `RunSample` entries in `openantenna/postproc/calibration.py` once *our*
 model has been run on the **same geometry** (the runs need converged settings, so they go to the
-machine with capacity - Yotta's, per the current division).  Until those runs exist, this table
-is a *source list*, not a calibration: no bias number is claimed from a paper alone.
+machine with capacity).  Until those runs exist, this table is a *source list*, not a calibration:
+no bias number is claimed from a paper alone.
