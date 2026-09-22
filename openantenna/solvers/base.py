@@ -22,11 +22,14 @@ from __future__ import annotations
 import abc
 import os
 import subprocess
+import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping, Optional
 
 from ..model.project import Project
+from .progress import ProgressPrinter, SolverProgress
 
 
 class SolverUnavailableError(RuntimeError):
@@ -100,29 +103,90 @@ class SolverAdapter(abc.ABC):
         rundir: Path,
         timeout_s: Optional[float],
         env: Optional[Mapping[str, str]] = None,
+        progress_path: Optional[Path] = None,
+        total_steps: Optional[int] = None,
+        echo_progress: bool = False,
+        on_progress: Optional[Callable[[SolverProgress], None]] = None,
     ) -> SolverRun:
+        """Run a solver command, streaming its output instead of capturing it.
+
+        A run can last hours, and the generated scripts print progress (timestep, speed,
+        energy).  Capturing the output means the log only appears at the end, so a slow
+        run and a hung run look identical from outside -- which is exactly what happened
+        to two PTFE runs that sat for 90 minutes with a 0-byte console log.  Passing
+        ``progress_path`` also persists ``progress.json`` after every update, so any
+        external tool (or the GUI) can watch the run without parsing stdout.
+        """
         run_env = dict(os.environ) if env is None else dict(env)
+        printer = (
+            ProgressPrinter(progress_path, total_steps, echo=echo_progress)
+            if (progress_path is not None or echo_progress or on_progress is not None)
+            else None
+        )
+
+        started = time.monotonic()
+        timed_out = False
+
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 argv,
                 cwd=str(rundir),
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                timeout=timeout_s,
-                check=False,
+                bufsize=1,
                 env=run_env,
             )
-        except subprocess.TimeoutExpired as exc:
+        except OSError as exc:
             return SolverRun(
                 rundir=rundir,
                 status="failed",
                 returncode=None,
-                log=f"timeout after {timeout_s} s: {exc}",
+                log=f"could not launch {argv[0]}: {exc}",
             )
-        log = (completed.stdout or "") + (completed.stderr or "")
+
+        def _kill() -> None:
+            nonlocal timed_out
+            timed_out = True
+            process.kill()
+
+        timer = threading.Timer(timeout_s, _kill) if timeout_s else None
+        if timer is not None:
+            timer.start()
+
+        chunks: list[str] = []
+        try:
+            if process.stdout is not None:
+                for line in process.stdout:
+                    chunks.append(line)
+                    if printer is not None:
+                        snapshot = printer.feed(line)
+                        if snapshot is not None and on_progress is not None:
+                            on_progress(snapshot)
+        finally:
+            if timer is not None:
+                timer.cancel()
+            if process.stdout is not None:
+                process.stdout.close()
+            returncode = process.wait()
+
+        duration = time.monotonic() - started
+        if printer is not None:
+            printer.finish()
+        log = "".join(chunks)
+
+        if timed_out:
+            return SolverRun(
+                rundir=rundir,
+                status="failed",
+                returncode=None,
+                log=f"timeout after {timeout_s} s\n{log}",
+                duration_s=duration,
+            )
         return SolverRun(
             rundir=rundir,
-            status="ok" if completed.returncode == 0 else "failed",
-            returncode=completed.returncode,
+            status="ok" if returncode == 0 else "failed",
+            returncode=returncode,
             log=log,
+            duration_s=duration,
         )

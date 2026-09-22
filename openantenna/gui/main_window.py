@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -354,6 +355,19 @@ class SimulateTab(QWidget):
             row.addWidget(widget)
         layout.addLayout(row)
 
+        # Progress of the *solver*, taken from its own timestep lines.  The value is a
+        # percentage of the step cap, which is an upper bound: a run normally stops on
+        # the energy criterion long before it (the tutorial run finished at 6 % of its
+        # cap).  The format text says so, because a bare "6 %" reads like "barely
+        # started", which is a misreading that actually happened.
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat(
+            "%p% of the step cap (a run usually stops earlier, on energy)"
+        )
+        layout.addWidget(self.progress_bar)
+
         self.log = QTextEdit()
         self.log.setReadOnly(True)
         layout.addWidget(self.log)
@@ -427,18 +441,26 @@ class SimulateTab(QWidget):
         if not self._begin_work():
             return
         self.log.append("starting simulation (the window stays responsive) ...")
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat(
+            "%p% of the step cap (a run usually stops earlier, on energy)"
+        )
         worker = SimulateWorker(
             self.design_tab.current_project(),
             Path(self.rundir.text()),
             **self._solver_kwargs(),
         )
         worker.progress.connect(self.log.append)
+        worker.progress_value.connect(self.progress_bar.setValue)
         worker.done.connect(self._finished)
         worker.failed.connect(self._failed)
         self._track(worker)
 
     def _finished(self, payload: dict) -> None:
         results = payload["results"]
+        self.progress_bar.setFormat(
+            "finished at %p% of the step cap (stopped on the energy criterion)"
+        )
         self.log.append(
             "done: resonance %.4f GHz, |S11| %.2f dB, VSWR %.3f"
             % (

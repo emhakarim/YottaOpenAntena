@@ -74,5 +74,35 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_simulate_tab_shows_a_progress_bar_that_says_what_it_measures(self):
+        window = self._window()
+        simulate_tab = window.centralWidget().widget(2)
+        bar = simulate_tab.progress_bar
+        self.assertEqual(bar.value(), 0)
+        self.assertEqual(bar.maximum(), 100)
+        # the label must not let "6 %" read as "barely started"
+        self.assertIn("step cap", bar.format())
+        window.close()
+
+    def test_worker_maps_solver_progress_to_a_percentage(self):
+        from pathlib import Path
+
+        from openantenna.gui.worker import SimulateWorker
+        from openantenna.solvers.progress import SolverProgress
+
+        window = self._window()
+        project = window.centralWidget().widget(1).current_project()
+        worker = SimulateWorker(project, Path("runs"))
+        worker._cap_steps = 400000
+        seen: list[int] = []
+        worker.progress_value.connect(seen.append)
+        worker._on_progress(SolverProgress(timestep=100000, elapsed_s=100.0))
+        worker._on_progress(SolverProgress(timestep=400000, elapsed_s=400.0))
+        # clamped to 100 even if the solver overshoots its own cap
+        worker._on_progress(SolverProgress(timestep=999999, elapsed_s=900.0))
+        self.assertEqual(seen, [25, 100, 100])
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()

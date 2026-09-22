@@ -40,7 +40,7 @@ import sys
 from importlib import util as importlib_util
 from pathlib import Path
 from string import Template
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from ..geometry.array import build_array_layout
 from ..geometry.patch import ground_plane_size, synthesize_patch
@@ -812,7 +812,12 @@ class OpenEMSSolver(SolverAdapter):
         return run_path.resolve()
 
     # ------------------------------------------------------------------- run
-    def run(self, rundir: str | Path, timeout_s: Optional[float] = None) -> SolverRun:
+    def run(
+        self,
+        rundir: str | Path,
+        timeout_s: Optional[float] = None,
+        on_progress: Optional[Callable[[Any], None]] = None,
+    ) -> SolverRun:
         run_path = Path(rundir)
         status = self.available()
         if not status.available:
@@ -829,7 +834,19 @@ class OpenEMSSolver(SolverAdapter):
         if root:
             env["OPENEMS_ROOT"] = root
             env["PATH"] = root + os.pathsep + env.get("PATH", "")
-        run = self._execute([sys.executable, str(script)], run_path, timeout_s, env=env)
+        # ``-u`` is required, not cosmetic: the generated script prints progress lines,
+        # and a block-buffered child would deliver them in 4 KB bursts hours apart, so
+        # the console log stayed empty while the run was clearly alive.
+        run = self._execute(
+            [sys.executable, "-u", str(script)],
+            run_path,
+            timeout_s,
+            env=env,
+            progress_path=run_path / "progress.json",
+            total_steps=getattr(self, "max_timesteps", None),
+            echo_progress=True,
+            on_progress=on_progress,
+        )
         # Persist the solver log next to the results: convergence can only be
         # judged from it, and without it a run cannot be audited (review item N-02).
         (run_path / "run.stdout.log").write_text(run.log or "", encoding="utf-8")

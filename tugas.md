@@ -128,3 +128,21 @@ tidak mengklaim ETA. Perbaikannya: jalankan dengan `-u` + tulis `progress.json` 
 **Status lain:** A2 (NF2FF opt-in) dan C2 (CI) sudah dikerjakan; angka A4 di backlog lama
 tidak bisa direproduksi dan sudah saya koreksi. Suite 203 test hijau, termasuk di runner
 tanpa dependensi opsional.
+
+**Progres run sekarang bisa dilihat (baru, 2026-09-22 ~13:5x):** solver dijalankan dengan
+`-u` dan outputnya di-*stream* baris per baris, bukan ditangkap di akhir. Setiap baris
+`Timestep / Speed / Energy` menghasilkan `progress.json` di direktori run plus progress bar
+di konsol dan di tab Simulate GUI. Provider lokalnya `openantenna/solvers/progress.py`
+(parser + bar + penulis JSON), dan `_execute` menerima `on_progress` supaya GUI bisa
+menyambung tanpa memindai stdout.
+
+Satu detail desain yang penting untukmu: label persentasenya sengaja berbunyi
+**"x % of the N-step cap"**, karena cap 400.000 itu plafon, bukan target. Run tutorial
+A-1 **selesai di 6,0 % cap** (24.180 langkah dari 400.000, 3m11s) karena berhenti pada
+kriteria energi -40 dB. Angka "6 %" tanpa penjelasan pernah terbaca sebagai "baru mulai" -
+itu kesalahan penyajian saya, dan sekarang bar-nya menyebutnya eksplisit.
+
+**Keterbatasan yang saya akui:** dua run yang sedang berjalan (A-1 PTFE ON + validasi loss)
+dimulai sebelum perubahan ini, jadi **progres mereka tidak bisa dilihat sama sekali** -
+jumlah langkahnya hanya ada di memori proses induk dan hilang saat run selesai. Fitur ini
+berlaku untuk run berikutnya.

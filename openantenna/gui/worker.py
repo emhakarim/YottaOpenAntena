@@ -12,6 +12,7 @@ from typing import Any, Dict
 from PySide6.QtCore import QThread, Signal
 
 from ..model.project import Project
+from ..solvers.progress import SolverProgress, format_bar
 from ..solvers.base import SolverUnavailableError
 from ..solvers.openems import OpenEMSSolver
 
@@ -42,6 +43,7 @@ class SimulateWorker(QThread):
     """Prepare, run and parse one simulation."""
 
     progress = Signal(str)
+    progress_value = Signal(int)
     done = Signal(dict)
     failed = Signal(str)
 
@@ -50,10 +52,26 @@ class SimulateWorker(QThread):
         self.project = project
         self.rundir = Path(rundir)
         self.solver_kwargs = solver_kwargs
+        self._cap_steps: int | None = None
+        self._updates = 0
+
+    def _on_progress(self, snapshot: SolverProgress) -> None:
+        """Feed the solver's own progress to the bar, and occasionally to the log.
+
+        Runs from the worker thread; the signals are delivered to the GUI thread, so
+        touching widgets from here would be wrong.
+        """
+        self._updates += 1
+        cap = self._cap_steps
+        if cap and snapshot.timestep:
+            self.progress_value.emit(min(100, int(round(100.0 * snapshot.timestep / cap))))
+        if self._updates % 10 == 1:
+            self.progress.emit(format_bar(snapshot, cap))
 
     def run(self) -> None:  # noqa: D102 - Qt entry point
         try:
             solver = OpenEMSSolver(**self.solver_kwargs)
+            self._cap_steps = getattr(solver, "max_timesteps", None)
             status = solver.available()
             self.progress.emit(f"solver availability: {status.available} - {status.detail}")
             if not status.available:
@@ -64,7 +82,7 @@ class SimulateWorker(QThread):
             self.progress.emit(f"model written to {prepared}")
 
             self.progress.emit("running the solver (this takes minutes; the window stays responsive) ...")
-            run = solver.run(prepared)
+            run = solver.run(prepared, on_progress=self._on_progress)
             self.progress.emit(f"solver exited with status {run.status} (code {run.returncode})")
             if run.status != "ok":
                 raise RuntimeError(f"solver run failed; log tail:\n{run.log[-2000:]}")
