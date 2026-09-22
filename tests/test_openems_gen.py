@@ -388,5 +388,37 @@ class TestNf2ffDefault(unittest.TestCase):
         self.assertIn("NF2FF_FREQS = 3", script)
 
 
+class TestCoplanarInsetFeed(unittest.TestCase):
+    """B2 / Y-19: the generator must be able to draw the feed the synthesis describes.
+
+    These are structural checks on the rendered script.  Whether the geometry is *right*
+    at runtime needs a solver run - that is the differential step (probe vs coplanar), and
+    it is not claimed here.
+    """
+
+    def test_a_line_width_switches_the_feed_to_a_coplanar_line(self):
+        project = make_project()
+        project.patch.feed_line_width_m = 5.0e-3
+        project.patch.feed_inset_m = project.patch.feed_inset_m or 1.0e-2
+        script = OpenEMSSolver().render_script(project)
+
+        self.assertIn('AddMetal("feed_line")', script)
+        self.assertIn("coplanar inset line", script)
+        self.assertIn("FEED_LINE_WIDTH = 0.005", script)
+        # the notched patch: the slot arithmetic must be in the script
+        self.assertIn("_y_notch = _y_top - FEED_INSET", script)
+        # and the feed branch is selected at run time
+        self.assertIn('FEED_IS_LINE = FEED_MODE in ("inset", "edge")', script)
+
+    def test_without_a_line_width_the_probe_feed_is_kept(self):
+        project = make_project()
+        if hasattr(project.patch, "feed_line_width_m"):
+            project.patch.feed_line_width_m = None
+        script = OpenEMSSolver().render_script(project)
+        self.assertIn("FEED_LINE_WIDTH = 0.0", script)
+        # the probe print stays, so no existing project changes behaviour silently
+        self.assertIn("vertical lumped port (probe)", script)
+
+
 if __name__ == "__main__":
     unittest.main()

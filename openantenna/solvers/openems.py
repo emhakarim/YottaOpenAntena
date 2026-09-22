@@ -125,6 +125,8 @@ CONDUCTOR_MODEL = "$CONDUCTOR_MODEL"   # metals are ideal PEC: conductor loss is
 FEED_X = $FEED_X
 FEED_Y = $FEED_Y
 FEED_INSET = $FEED_INSET
+FEED_LINE_WIDTH = $FEED_LINE_WIDTH   # microstrip line width [m]; 0 = legacy probe feed
+FEED_MODE = "$FEED_MODE"
 FEED_Z0 = $FEED_Z0         # port reference impedance [ohm]
 
 MESH_MAX_RES = C0 / F_MAX / $MESH_CELLS_PER_WAVELENGTH
@@ -219,16 +221,34 @@ ground.AddBox(
     priority=2,
 )
 
-# Radiating elements, one thin sheet per array element.
+# Radiating elements, one thin sheet per array element.  With a coplanar inset feed the
+# patch carries a rectangular notch on the feed edge (review item Y-19), so that element is
+# emitted as three sheets; every other element stays a plain rectangle.
 ELEMENTS = $ELEMENTS_LITERAL
+FEED_IS_LINE = FEED_MODE in ("inset", "edge") and FEED_LINE_WIDTH > 0.0 and FEED_INSET > 0.0
 _patch_props = []
 for index, (x0, y0) in enumerate(ELEMENTS, start=1):
     patch = CSX.AddMetal("patch_%d" % index)
-    patch.AddBox(
-        [x0 - W_PATCH / 2.0, y0 - L_PATCH / 2.0, 0.0],
-        [x0 + W_PATCH / 2.0, y0 + L_PATCH / 2.0, 0.0],
-        priority=3,
-    )
+    if FEED_IS_LINE and index == 1:
+        _slot = FEED_LINE_WIDTH / 2.0
+        _y_bottom = y0 - L_PATCH / 2.0
+        _y_top = y0 + L_PATCH / 2.0
+        _y_notch = _y_top - FEED_INSET
+        patch.AddBox(
+            [x0 - W_PATCH / 2.0, _y_bottom, 0.0], [x0 - _slot, _y_top, 0.0], priority=3
+        )
+        patch.AddBox(
+            [x0 + _slot, _y_bottom, 0.0], [x0 + W_PATCH / 2.0, _y_top, 0.0], priority=3
+        )
+        patch.AddBox(
+            [x0 - _slot, _y_bottom, 0.0], [x0 + _slot, _y_notch, 0.0], priority=3
+        )
+    else:
+        patch.AddBox(
+            [x0 - W_PATCH / 2.0, y0 - L_PATCH / 2.0, 0.0],
+            [x0 + W_PATCH / 2.0, y0 + L_PATCH / 2.0, 0.0],
+            priority=3,
+        )
     _patch_props.append(patch)
 
 if METAL_EDGE_SNAPPING:
@@ -241,12 +261,13 @@ if METAL_EDGE_SNAPPING:
         FDTD.AddEdges2Grid(dirs="xy", properties=_prop, metal_edge_res=MESH_MAX_RES / 2.0)
     print("METAL EDGES: snapped to the grid (AddEdges2Grid, res %.3f mm)" % (MESH_MAX_RES / 2.0 * 1e3))
 
-# Feed realisation.  CAREFUL - what this actually models: a *vertical lumped
-# port* from the ground plane up through the substrate to the patch, i.e. a
-# probe/coax feed.  FEED_Y is shifted by the inset depth, so feed_mode="inset"
-# only moves the probe; it is NOT a coplanar inset line with a notch.  The
-# closed-form inset formula used by the synthesis describes a coplanar inset
-# feed, so this model cannot validate that formula (review item Y-19).
+# Feed realisation, two honest options:
+#   * FEED_IS_LINE: a microstrip line on the substrate that enters the patch notch - the
+#     coplanar inset the synthesis formula actually describes (review item Y-19).  The port
+#     sits at the outer end of that line, so the modelled feed matches what gets built.
+#   * otherwise: a vertical lumped port from the ground plane to the patch, i.e. a
+#     probe/coax feed.  FEED_Y is shifted by the inset depth, so feed_mode="inset" then only
+#     moves the probe; that model cannot validate the inset formula.
 #
 # ``edges2grid`` snaps the port box onto the mesh; without it openEMS reports
 # "Unused primitive (type: Box) ... port_excite", the port never excites and every
@@ -254,7 +275,25 @@ if METAL_EDGE_SNAPPING:
 # NOTE: a real NxM array also needs a feed network and one port per element (or a
 # proper corporate-feed model).  Phase 1 models ONE port only.
 print("CONDUCTOR: %s (conductor loss not modelled)" % CONDUCTOR_MODEL)
-print("FEED: vertical lumped port (probe); inset depth = %.3f mm" % (FEED_INSET * 1e3))
+if FEED_IS_LINE:
+    _feed_line = CSX.AddMetal("feed_line")
+    _feed_line.AddBox(
+        [FEED_X - FEED_LINE_WIDTH / 2.0, FEED_Y - FEED_INSET, 0.0],
+        [FEED_X + FEED_LINE_WIDTH / 2.0, GROUND_Y / 2.0, 0.0],
+        priority=4,
+    )
+    if METAL_EDGE_SNAPPING:
+        FDTD.AddEdges2Grid(
+            dirs="xy", properties=_feed_line, metal_edge_res=MESH_MAX_RES / 2.0
+        )
+    _port_y = GROUND_Y / 2.0 - 2.0 * MESH_MAX_RES
+    print(
+        "FEED: coplanar inset line (Y-19), width %.3f mm, inset %.3f mm, port at y = %.3f mm"
+        % (FEED_LINE_WIDTH * 1e3, FEED_INSET * 1e3, _port_y * 1e3)
+    )
+else:
+    _port_y = FEED_Y
+    print("FEED: vertical lumped port (probe); inset depth = %.3f mm" % (FEED_INSET * 1e3))
 print(
     "GROUND: %.3f x %.3f mm (margin %.3f lambda0 per side; the ground plane is part "
     "of the radiating structure - review item N-01)"
@@ -263,8 +302,8 @@ print(
 port = FDTD.AddLumpedPort(
     1,
     FEED_Z0,
-    [FEED_X, FEED_Y, -H_TOTAL],
-    [FEED_X, FEED_Y, 0.0],
+    [FEED_X, _port_y, -H_TOTAL],
+    [FEED_X, _port_y, 0.0],
     "z",
     1.0,
     priority=5,
@@ -700,6 +739,10 @@ class OpenEMSSolver(SolverAdapter):
             FEED_X=fmt(feed_x),
             FEED_Y=fmt(feed_y),
             FEED_INSET=fmt(project.patch.feed_inset_m or design.inset_depth_m),
+            FEED_LINE_WIDTH=fmt(
+                project.patch.feed_line_width_m or design.feed_line_width_m or 0.0
+            ),
+            FEED_MODE=project.patch.feed_mode,
             FEED_Z0=fmt(50.0),
             MESH_CELLS_PER_WAVELENGTH=self.mesh_cells_per_wavelength,
             MESH_SUBSTRATE_CELLS=self.substrate_cells,
