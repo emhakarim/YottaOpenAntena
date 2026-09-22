@@ -519,5 +519,56 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_results_tab_shows_a_coupling_matrix_from_port_folders(self):
+        """Phase 2 #4 toolkit side: the GUI must show coupling, not only the API."""
+        import json
+        import tempfile
+        from pathlib import Path
+        from test_port_matrix_reader import write_port
+
+        window = self._window()
+        results_tab = window.centralWidget().widget(3)
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "array"
+            for driven in (1, 2, 3):
+                run = folder / f"port{driven}"
+                run.mkdir(parents=True)
+                for port in (1, 2, 3):
+                    write_port(
+                        run / f"port_{port}.csv",
+                        incident=1 + 0j,
+                        reflected=(0.2 + 0.1j) if port == driven else (0.05 + 0j),
+                    )
+                (run / "run_summary.json").write_text(
+                    json.dumps({"converged": True, "timesteps": 1000}), encoding="utf-8"
+                )
+            results_tab.coupling_path.setText(str(folder))
+            results_tab.load_coupling()
+            rows = results_tab.coupling_table.rowCount()
+            off_diagonal = results_tab.coupling_table.item(0, 1).text()
+            note = results_tab.coupling_note.text()
+
+        self.assertEqual(rows, 3)
+        # 0.05 is -26.0 dB
+        self.assertTrue(off_diagonal.startswith("-26"), off_diagonal)
+        self.assertIn("Worst coupling", note)
+        self.assertIn("converged", note)
+        window.close()
+
+    def test_a_coupling_folder_without_port_runs_reports_instead_of_guessing(self):
+        import tempfile
+        from pathlib import Path
+
+        window = self._window()
+        results_tab = window.centralWidget().widget(3)
+        with tempfile.TemporaryDirectory() as tmp:
+            results_tab.coupling_path.setText(str(Path(tmp)))
+            results_tab.load_coupling()
+            note = results_tab.coupling_note.text()
+        self.assertIn("coupling not loaded", note)
+        self.assertIn("port<N>", note)
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()

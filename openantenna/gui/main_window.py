@@ -8,6 +8,7 @@ GUI cannot drift away from the scriptable core.
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -883,6 +884,30 @@ class ResultsTab(QWidget):
         compare_row.addWidget(compare_clear)
         layout.addLayout(compare_row)
 
+        # Coupling panel (Phase 2 #4, toolkit side).  Convention for the folder: one
+        # subdirectory per driven port, named port<N> (port1, port2, ...), each holding the
+        # run's port_<n>.csv files.  The driven port comes from the NAME, so it is explicit
+        # rather than inferred - a wrong column is worse than no column.
+        coupling_group = QGroupBox("Array coupling (per-port runs)")
+        coupling_layout = QVBoxLayout(coupling_group)
+        coupling_row = QHBoxLayout()
+        self.coupling_path = QLineEdit()
+        self.coupling_path.setPlaceholderText(
+            "folder containing port1/, port2/, ... (one run per driven port)"
+        )
+        coupling_pick = QPushButton("Load coupling ...")
+        coupling_pick.clicked.connect(self.pick_coupling)
+        coupling_row.addWidget(self.coupling_path)
+        coupling_row.addWidget(coupling_pick)
+        coupling_layout.addLayout(coupling_row)
+        self.coupling_table = QTableWidget(0, 0)
+        self.coupling_table.setMaximumHeight(150)
+        coupling_layout.addWidget(self.coupling_table)
+        self.coupling_note = QLabel("")
+        self.coupling_note.setWordWrap(True)
+        coupling_layout.addWidget(self.coupling_note)
+        layout.addWidget(coupling_group)
+
         self.metrics = QTextEdit()
         self.metrics.setReadOnly(True)
         self.metrics.setMaximumHeight(150)
@@ -908,6 +933,68 @@ class ResultsTab(QWidget):
 
     def clear_compare(self) -> None:
         self.compare_path.clear()
+
+    def pick_coupling(self) -> None:
+        chosen = QFileDialog.getExistingDirectory(self, "Choose the per-port run folder")
+        if chosen:
+            self.coupling_path.setText(chosen)
+            self.load_coupling()
+
+    def load_coupling(self) -> None:
+        """Assemble the coupling matrix from ``port<N>`` subfolders and show it as dB."""
+        from ..postproc.port_matrix import assemble
+
+        folder = Path(self.coupling_path.text().strip())
+        try:
+            runs = []
+            for child in sorted(folder.iterdir()):
+                name = child.name.lower()
+                if child.is_dir() and name.startswith("port") and name[4:].isdigit():
+                    runs.append((child, int(name[4:])))
+            if not runs:
+                raise ValueError(
+                    "no port<N> subfolders found; each driven port needs its own run folder"
+                )
+            n_ports = max(port for _, port in runs)
+            matrix = assemble(runs, n_ports=n_ports, require_convergence=True)
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            self.coupling_note.setText(f"coupling not loaded: {type(exc).__name__}: {exc}")
+            self.coupling_table.setRowCount(0)
+            self.coupling_table.setColumnCount(0)
+            return
+
+        used_hz, values = matrix.at(self.last_frequency_hz())
+        self.coupling_table.setRowCount(matrix.n_ports)
+        self.coupling_table.setColumnCount(matrix.n_ports)
+        self.coupling_table.setHorizontalHeaderLabels(
+            [f"drv {n}" for n in range(1, matrix.n_ports + 1)]
+        )
+        self.coupling_table.setVerticalHeaderLabels(
+            [f"to {n}" for n in range(1, matrix.n_ports + 1)]
+        )
+        for row in range(matrix.n_ports):
+            for column in range(matrix.n_ports):
+                magnitude = abs(values[row][column])
+                db = 20.0 * math.log10(magnitude) if magnitude > 0 else float("-inf")
+                item = QTableWidgetItem("self" if row == column else f"{db:.1f}")
+                self.coupling_table.setItem(row, column, item)
+
+        summary = matrix.coupling_summary(self.last_frequency_hz())
+        self.coupling_note.setText(
+            f"{matrix.n_ports} ports at {used_hz / 1e9:.4f} GHz (nearest sample). "
+            f"Worst coupling {summary['worst_db']:.1f} dB, mean "
+            f"{20.0 * math.log10(max(summary['mean_magnitude'], 1e-12)):.1f} dB. "
+            "Values are dB |Sij|; a coupling number is only meaningful for runs that differ "
+            "in one variable and converged."
+        )
+
+    def last_frequency_hz(self) -> float:
+        """The design frequency, taken from the design tab so the panels agree."""
+        try:
+            design_tab = self.window().centralWidget().widget(1)
+            return float(design_tab.frequency.value()) * 1e9
+        except Exception:  # pragma: no cover - standalone use
+            return 2.45e9
 
     @staticmethod
     def _summarise(trace: S11Trace) -> dict:
