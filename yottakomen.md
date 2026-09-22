@@ -1249,6 +1249,39 @@ Angka itu konsisten dengan sapu jari-jari kawat saya sebelumnya (a/L = 0,0003 �
 
 ---
 
+# 37. Pass hardening: tiga bug diperbaiki, masing-masing dengan test
+
+Diminta fokus ke test dan perbaikan kesalahan yang sudah dibuat. Hasilnya:
+
+| Bug | Akibat tanpa perbaikan | Perbaikan | Test |
+|---|---|---|---|
+| `nec2.py::_vswr` membagi dengan `(z + z0)` | impedansi murni −50 Ω (short) → `ZeroDivisionError` yang mematikan parsing | guard `abs(z + z0) < 1e-12` → `inf` | `test_vswr_survives_a_short_circuit_impedance` |
+| `yotta_tools/reference_table.py` | satu `s11.csv` rusak → **seluruh tabel mati** | per-run `try/except` → baris `error` menyebut nama run-nya | `test_a_broken_run_becomes_an_error_row_not_a_crash` |
+| `openantenna/cli.py` (perintah `wire`) | mencetak literal `status.detail: …` (label salah-tempel) | label dibersihkan | dicek manual |
+
+**Verifikasi:** suite penuh di snapshot bersih + semua patch → **210 test OK (2 skipped)** (naik dari 208). CI: **hijau** untuk ketiga commit perbaikan (`6a788521`, `99821905`, `239f349a`), termasuk job Ubuntu × Py 3.11/3.13.
+
+## 37.1 Temuan yang muncul dari menjalankan (bukan dari membaca kode)
+
+A/B `port_refine` dengan **setelan penuh** (EndCriteria 1e-4, cap 400k) sudah berjalan **~80 menit CPU** pada satu arm tanpa menulis `s11.csv`. Ini pola yang **ketiga kalinya** sama: tiga run berbeda (selfcheck1 default, validasi loss, A/B penuh) semuanya berjalan sangat lama dan berhenti di batas langkah.
+
+Konsekuensinya penting dan sekarang berbukti, bukan dugaan:
+
+1. **EndCriteria 1e-4 tidak tercapai untuk model patch ini di mesin ini** dalam 400k langkah — jadi semua angka resonansi dari run semacam itu adalah *cap-hit* dan wajib ditolak menurut aturan pelaporan kita sendiri.
+2. Karena itu usulan **EndCriteria bertingkat** (1e-2/1e-3 untuk eksplorasi, 1e-4 hanya untuk run final) bukan optimasi kosmetik — ia menentukan apakah ada hasil yang boleh dikutip sama sekali.
+3. Pertanyaan terbuka untuk tim: apakah 1e-4 realistis untuk struktur resonan lossless seperti ini, atau sebaiknya kriteria dipilih dari **stabilitas S11** (perubahan minimum |S11| antar blok langkah) alih-alih energi absolut?
+
+## 37.2 Status pengiriman
+
+* Semua perbaikan bug sudah di repo dan CI hijau.
+* Hasil A/B `port_refine` (dua arm) masih berjalan; akan kusampaikan lengkap dengan status konvergen  apa pun yang keluar — termasuk bila jawabannya “tidak konvergen”.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (hardening). Tiga bug tertutup dengan test, CI hijau, dan satu temuan konvergensi yang hanya bisa muncul dengan benar-benar menjalankan solver.*
+
+---
+
 # 21. Yotta mengerjakan antreannya — Y-1, Y-2, Y-3 selesai & terverifikasi
 
 ## 21.1 Y-1 — `yotta_tools/reference_table.py` (P1)
