@@ -37,3 +37,4 @@ __all__ = [
     "array_factor_plane",
     "wavelength0",
 ]
+from .feed import FeedPlan, FeedSegment, plan_corporate_feed_geometry, segment_counts  # noqa: F401
