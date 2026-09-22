@@ -1,4 +1,4 @@
-"""A/B test for the port-region mesh refinement (review item A4 / task A-1).
+﻿"""A/B test for the port-region mesh refinement (review item A4 / task A-1).
 
 Yotta added ``port_refine=True``: the mesh is refined in a small box around the
 lumped port.  Refining near a feed is not automatically an improvement - it changes
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -107,6 +108,12 @@ def run_case(spec: dict, port_refine: bool) -> dict:
     )
     tag = f"portrefine_{spec['name']}_on" if port_refine else f"portrefine_{spec['name']}_off"
     rundir = ROOT / "runs" / tag
+    # Start from a clean directory.  On Windows, FDTD.Run(cleanup=True) tries to
+    # delete the previous run's port files, and a stale handle from an interrupted
+    # attempt makes that fail with WinError 32 - which looks like a physics failure
+    # but is a file lock.  Clearing the directory here avoids the whole class.
+    if rundir.exists():
+        shutil.rmtree(rundir)
     rundir.mkdir(parents=True, exist_ok=True)
     solver.prepare(project, rundir)
 
