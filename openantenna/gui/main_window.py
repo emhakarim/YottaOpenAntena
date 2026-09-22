@@ -13,6 +13,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -340,6 +341,21 @@ class SimulateTab(QWidget):
         form.addRow("mesh cells / wavelength", self.mesh_cells)
         form.addRow("cells across substrate", self.substrate_cells)
         form.addRow("dielectric loss model", self.loss_model)
+
+        # A/B knobs (review item R-6 / A-7).  They have existed in the library and in the
+        # CLI all along, but the GUI could not set them, so an A/B needed a hand-edited
+        # script -- exactly the manual step the board wants removed.  The initial state is
+        # taken from the adapter itself so the GUI cannot drift from the library default.
+        library_defaults = OpenEMSSolver()
+        self.port_refine = QCheckBox("refine the mesh around the lumped port")
+        self.port_refine.setChecked(library_defaults.port_refine)
+        self.edge_snapping = QCheckBox("snap metal edges onto the grid")
+        self.edge_snapping.setChecked(library_defaults.metal_edge_snapping)
+        self.nf2ff = QCheckBox("record a near-to-far-field box (costs a far-field pass)")
+        self.nf2ff.setChecked(library_defaults.nf2ff)
+        form.addRow(self.port_refine)
+        form.addRow(self.edge_snapping)
+        form.addRow(self.nf2ff)
         form.addRow("run directory", self.rundir)
         form.addRow("", browse)
         layout.addWidget(settings)
@@ -377,6 +393,9 @@ class SimulateTab(QWidget):
             "mesh_cells_per_wavelength": self.mesh_cells.value(),
             "substrate_cells": self.substrate_cells.value(),
             "loss_model": self.loss_model.currentText(),
+            "port_refine": self.port_refine.isChecked(),
+            "metal_edge_snapping": self.edge_snapping.isChecked(),
+            "nf2ff": self.nf2ff.isChecked(),
         }
 
     def pick_directory(self) -> None:

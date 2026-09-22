@@ -104,5 +104,35 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_simulate_tab_exposes_the_ab_knobs(self):
+        """R-6: an A/B must not require hand-editing a generated script.
+
+        The knobs exist in the library and the CLI; the GUI was the missing piece.  The
+        checkboxes must start at the library defaults (no drift) and their state must
+        reach the worker through ``_solver_kwargs``.
+        """
+        from openantenna.solvers.openems import OpenEMSSolver
+
+        window = self._window()
+        simulate_tab = window.centralWidget().widget(2)
+        library = OpenEMSSolver()
+
+        self.assertEqual(simulate_tab.port_refine.isChecked(), library.port_refine)
+        self.assertEqual(simulate_tab.edge_snapping.isChecked(), library.metal_edge_snapping)
+        self.assertEqual(simulate_tab.nf2ff.isChecked(), library.nf2ff)
+
+        kwargs = simulate_tab._solver_kwargs()
+        for name in ("port_refine", "metal_edge_snapping", "nf2ff"):
+            self.assertEqual(kwargs[name], getattr(library, name), name)
+
+        # flipping a box must change what the worker receives
+        simulate_tab.port_refine.setChecked(not library.port_refine)
+        simulate_tab.nf2ff.setChecked(not library.nf2ff)
+        flipped = simulate_tab._solver_kwargs()
+        self.assertEqual(flipped["port_refine"], not library.port_refine)
+        self.assertEqual(flipped["nf2ff"], not library.nf2ff)
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()
