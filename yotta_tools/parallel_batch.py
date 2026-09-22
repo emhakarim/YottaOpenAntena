@@ -71,6 +71,13 @@ PRESETS: dict[str, list[dict]] = {
         {"name": "gm050", "label": "ground 0.50 lambda0, SAME domain",
          "kwargs": {"ground_margin_lambda": 0.50, "air_margin_lambda": 0.513}},
     ],
+    "port-refine": [
+        # A-1: the one variable is the port-region refinement.  Both arms must use the
+        # SAME EndCriteria/cap (see --end-criteria / --max-ts): the 1e-4 + 400k default did
+        # not converge on this machine in three separate attempts.
+        {"name": "prab_on", "label": "port_refine on", "kwargs": {"port_refine": True}},
+        {"name": "prab_off", "label": "port_refine off", "kwargs": {"port_refine": False}},
+    ],
 }
 
 
@@ -109,7 +116,6 @@ def main() -> int:
         return 2
 
     common = {
-        "port_refine": True,
         "nf2ff": False,          # far-field is not needed for a resonance A/B and costs time
         "end_criteria": args.end_criteria,
         "max_timesteps": args.max_ts,
