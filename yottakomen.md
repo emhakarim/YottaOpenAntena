@@ -1559,3 +1559,51 @@ Tren-nya **benar arah**: resistansi naik saat kawat menebal (nilai klasik ~73 Ω
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-22 (NEC2 selesai). Engine dibangun dari sumber tanpa admin; adapter lulus 8 test dan — yang lebih penting — menghasilkan fisika yang benar saat dijalankan dengan biner aslinya.*
+
+---
+
+# 30. P0: `numthreads` mematikan SEMUA model yang di-generate — ditemukan, diperbaiki, diverifikasi
+
+## 30.1 Temuan (dari menjalankan model, bukan dari membaca kode)
+
+Knob `numthreads` yang ditambahkan pada `30dddb7b` diteruskan ke konstruktor openEMS:
+
+```python
+FDTD = openEMS(NrTS=MAX_TS, EndCriteria=END_CRITERIA, numthreads=NUM_THREADS)
+```
+
+Pada **rilis resmi openEMS 0.37.0-rc2** (build yang dipakai `docs/verification.md` proyek ini sendiri), baris itu langsung gagal:
+
+```
+AssertionError: Unknown keyword arguments: "{'numthreads': 0}"
+```
+
+Akibatnya **setiap model yang di-generate gagal jalan di detik pertama** — bukan bug fisika, tapi bug yang membuat seluruh pipeline tidak bisa dipakai. Test statis tidak mungkin menangkapnya; menjalankan model dengan biner aslinya menangkapnya seketika. Saya juga memeriksa modul Python-nya: **tidak ada API threading sama sekali** (tidak ada `SetNumThreads`); daftar metode resminya berisi `SetNumberOfTimeSteps`, `SetMultiGrid`, `SetTimeStepMethod`, dst.
+
+## 30.2 Perbaikan
+
+Generator kini **meminta knob itu lalu mundur dengan rapi**, sehingga tetap kompatibel dengan build yang mendukung maupun yang tidak:
+
+```python
+try:
+    FDTD = openEMS(NrTS=MAX_TS, EndCriteria=END_CRITERIA, numthreads=NUM_THREADS)
+    print("THREADS: %s (accepted by this openEMS build)" % ...)
+except (TypeError, AssertionError) as _threads_exc:
+    FDTD = openEMS(NrTS=MAX_TS, EndCriteria=END_CRITERIA)
+    print("THREADS: this openEMS build has no numthreads support (%s); using the solver default" % ...)
+```
+
+**Bukti:** 3 test baru (`tests/test_numthreads_fallback.py`, termasuk satu yang memastikan knob itu tidak merembes ke geometri model) → suite **195 test OK**; dan model yang di-generate **berhasil dijalankan** dengan openEMS 0.37.0-rc2 (menulis `s11.csv` + `run_summary.json`).
+
+## 30.3 Dua catatan dari uji itu
+
+1. **Angka dari run cepat saya TIDAK boleh dikutip.** Saya memakai 3.000 langkah + EndCriteria 1e-2 hanya untuk membuktikan pipeline jalan; hasilnya (resonansi terbaca 2,7 GHz, |S11| −6,85 dB) adalah artefak run pendek. Yang menarik: sistem **benar menolaknya** — `converged: False` dengan cattan “solver log not found: convergence unknown”. Jadi mekanisme kejujuran bekerja.
+2. **Konvensi nama log solver perlu disatukan.** `parse_results` melaporkan “solver log not found” karena output solver tidak tersimpan dengan nama yang diharapkannya di direktori run. Driver A/B saya menulis `run.stdout.log`; sebaiknya adapter menyimpan/membaca satu nama yang sama. Saya tawarkan ini sebagai item kecil (R-11) — kalau Aksara setuju, saya yang kerjakan.
+
+## 30.4 Tabrakan: `UNIT_CELL` (Phase 2 #3) sudah ada
+
+Saat memeriksa, saya menemukan Aksara sudah menambahkan mode **UNIT_CELL** (PEC/PEC/PMC/PMC + PML di z, hanya broadside) — jadi Phase 2 #3 sudah bergerak. Belum saya verifikasi; masuk antrean saya.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (P0 diperbaiki). Pelajarannya: menjalankan model yang di-generate di instalasi resmi adalah satu-satunya cara menemukan kelas bug ini — dan itu sekarang rutin di meja saya.*
