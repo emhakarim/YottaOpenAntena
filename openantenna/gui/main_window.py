@@ -318,6 +318,13 @@ class DesignTab(QWidget):
         self.summary.setReadOnly(True)
         layout.addWidget(self.summary)
 
+        # The left panel can show the layout flat (readable for spacing) or as a 3-D
+        # preview (readable for "what does this even look like").  Both are drawn from
+        # the same model, so they cannot disagree.
+        self.view_mode = QComboBox()
+        self.view_mode.addItems(["2-D layout", "3-D preview"])
+        layout.addWidget(self.view_mode)
+
         try:
             self.figure, self.canvas = _plot_canvas()
             layout.addWidget(self.canvas)
@@ -444,8 +451,12 @@ class DesignTab(QWidget):
         # A single array-factor curve told the user nothing about the geometry it came
         # from, which is the one thing a layout preview is for.
         self.figure.clear()
-        geometry_axes = self.figure.add_subplot(121)
-        self._draw_geometry(geometry_axes, design, layout)
+        if self.view_mode.currentText() == "3-D preview":
+            geometry_axes = self.figure.add_subplot(121, projection="3d")
+            self._draw_geometry_3d(geometry_axes, design, layout, self.height.value())
+        else:
+            geometry_axes = self.figure.add_subplot(121)
+            self._draw_geometry(geometry_axes, design, layout)
 
         factor_axes = self.figure.add_subplot(122)
         samples = array_factor_plane(layout.positions_m, frequency, n_points=361, plane="e")
@@ -459,6 +470,69 @@ class DesignTab(QWidget):
         factor_axes.set_ylim(-40, 2)
         factor_axes.grid(True)
         self.canvas.draw_idle()
+
+    @staticmethod
+    def _draw_geometry_3d(axes, design, layout, substrate_mm: float) -> None:
+        """A lightweight 3-D preview: ground plate, substrate slab, patch elements.
+
+        Deliberately plain matplotlib so no new dependency enters the project: the
+        roadmap's PyVista viewport stays an *option*, but a dependency that heavy is the
+        owner's decision, not the GUI's.  The ground-plane footprint is approximate (the
+        real one extends to the domain edge); the preview answers "what does the model
+        look like", not "what does the mesh look like".
+        """
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+        def add_box(x0, y0, z0, dx, dy, dz, **kwargs):
+            x1, y1, z1 = x0 + dx, y0 + dy, z0 + dz
+            faces = [
+                [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0)],
+                [(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)],
+                [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)],
+                [(x0, y1, z0), (x1, y1, z0), (x1, y1, z1), (x0, y1, z1)],
+                [(x0, y0, z0), (x0, y1, z0), (x0, y1, z1), (x0, y0, z1)],
+                [(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)],
+            ]
+            axes.add_collection3d(Poly3DCollection(faces, **kwargs))
+
+        half_x = layout.size_x_m * 1e3 / 2.0
+        half_y = layout.size_y_m * 1e3 / 2.0
+        height = max(substrate_mm, 0.05)
+
+        # ground plane (thin plate under the substrate; footprint approximate)
+        add_box(-half_x, -half_y, -height - 0.05, 2 * half_x, 2 * half_y, 0.05,
+                facecolor="0.4", edgecolor="0.2", linewidth=0.4)
+        # substrate slab
+        add_box(-half_x, -half_y, -height, 2 * half_x, 2 * half_y, height,
+                facecolor="tab:blue", alpha=0.25, edgecolor="tab:blue", linewidth=0.5)
+        # patch elements on top of the slab
+        width_mm = design.width_m * 1e3
+        length_mm = design.length_m * 1e3
+        for x_m, y_m in layout.positions_m:
+            add_box(
+                x_m * 1e3 - width_mm / 2.0,
+                y_m * 1e3 - length_mm / 2.0,
+                0.0,
+                width_mm,
+                length_mm,
+                0.05,
+                facecolor="tab:red",
+                edgecolor="darkred",
+                linewidth=0.5,
+            )
+
+        reach = max(half_x, half_y) * 1.15
+        axes.set_xlim(-reach, reach)
+        axes.set_ylim(-reach, reach)
+        axes.set_zlim(-height - 0.4, 0.6)
+        axes.set_xlabel("x [mm]")
+        axes.set_ylabel("y [mm]")
+        axes.set_zlabel("z [mm]")
+        axes.set_title(
+            f"3-D preview: {layout.element_count} patches on {height:.2f} mm substrate "
+            "(footprint approximate)",
+            fontsize=8,
+        )
 
     @staticmethod
     def _draw_geometry(axes, design, layout) -> None:

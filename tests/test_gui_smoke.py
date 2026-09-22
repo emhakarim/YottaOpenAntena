@@ -443,5 +443,19 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_design_tab_can_show_a_3d_preview_of_the_same_model(self):
+        """The 3-D preview draws the same layout: no new dependency, no separate model."""
+        window = self._window()
+        design_tab = window.centralWidget().widget(1)
+        if design_tab.figure is None:
+            self.skipTest("matplotlib is not installed")
+        design_tab.view_mode.setCurrentText("3-D preview")
+        design_tab.synthesise()
+        self.assertEqual(design_tab.figure.axes[0].name, "3d")
+        # the substrate slab, the ground plate and 4x4 patches are all collections
+        self.assertGreaterEqual(len(design_tab.figure.axes[0].collections), 18)
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()
