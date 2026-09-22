@@ -106,6 +106,15 @@ class TestReferenceTable(unittest.TestCase):
         records = self.tool.collect([self.root])
         self.assertEqual(sorted(r["run"] for r in records), ["run-a", "run-b"])
 
+    def test_a_broken_run_becomes_an_error_row_not_a_crash(self):
+        """One unreadable s11.csv must not take down the whole table."""
+        run = self._make_run("run-broken", csv=False)
+        (run / "s11.csv").write_text("freq_hz,s11_re\n2.400e9,\n", encoding="utf-8")
+        records = self.tool.collect([self.root])
+        self.assertEqual(len(records), 1)
+        self.assertIn("error", records[0])
+        self.assertIn("run-broken", records[0]["run"])
+
 
 if __name__ == "__main__":
     unittest.main()
