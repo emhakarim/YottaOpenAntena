@@ -48,10 +48,10 @@ WIDTH = 0.049142672841793994
 LENGTH = 0.041378916081297096
 
 
-def project(name: str) -> Project:
+def project(name: str, material: str = "PTFE", height_m: float = H) -> Project:
     return Project(
         name=name,
-        substrate=SubstrateStackup.single("PTFE", H),
+        substrate=SubstrateStackup.single(material, height_m),
         patch=PatchGeometry(width_m=WIDTH, length_m=LENGTH, feed_mode="inset"),
         array=ArrayConfig(nx=1, ny=1),
         sweep=FrequencySweep(start_hz=2.083e9, stop_hz=2.817e9, points=101),
@@ -78,6 +78,16 @@ PRESETS: dict[str, list[dict]] = {
         {"name": "prab_on", "label": "port_refine on", "kwargs": {"port_refine": True}},
         {"name": "prab_off", "label": "port_refine off", "kwargs": {"port_refine": False}},
     ],
+    "loss-validation": [
+        # B3, taken over from the cancelled PTFE pair: the loss MODEL is the variable, the
+        # far-field box is needed because radiation efficiency is the observable.
+        {"name": "loss_ptfe", "label": "PTFE tanD 4e-4 through kappa",
+         "kwargs": {"nf2ff": True, "loss_model": "kappa"}, "material": "PTFE"},
+        {"name": "loss_fr4", "label": "FR-4 tanD 2e-2 through kappa",
+         "kwargs": {"nf2ff": True, "loss_model": "kappa"}, "material": "FR-4"},
+        {"name": "loss_fr4_none", "label": "FR-4 with the loss model switched off",
+         "kwargs": {"nf2ff": True, "loss_model": "none"}, "material": "FR-4"},
+    ],
 }
 
 
@@ -87,7 +97,7 @@ def run_case(case: dict, workers_timeout: float, common: dict) -> dict:
         shutil.rmtree(rundir, ignore_errors=True)
     kwargs = {**common, **case["kwargs"]}
     solver = OpenEMSSolver(**kwargs)
-    solver.prepare(project(case["name"]), rundir)
+    solver.prepare(project(case["name"], material=case.get("material", "PTFE")), rundir)
 
     log_path = rundir / "run.stdout.log"
     started = time.time()
