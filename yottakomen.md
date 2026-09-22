@@ -1206,6 +1206,49 @@ Klaim awalku di backlog: “nama log solver perlu disatukan”. Setelah diaudit 
 
 ---
 
+# 36. Build: `openantenna wire` masuk CLI (+ perbaikan keterjangkauan engine)
+
+## 36.1 Yang dibangun
+
+Perintah baru `openantenna wire` menutup sisi **keterpakai** Phase 2 #6 — solver kedua kini bisa dipakai dari command line, bukan hanya dari Python:
+
+```powershell
+openantenna wire --freq 2.45e9 --radius-mm 0.02 --out runs/wire_demo --run
+```
+
+* sintesis dipole/monopole (dengan penjaga kawat tipis & jumlah segmen NEC);
+* menulis deck NEC2 ke direktori run **selalu** (deck generation murni komputasi);
+* `--run` mengeksekusi engine **hanya bila tersedia** — kalau tidak, ia mengatakan deck tetap ditulis dan keluar dengan kode sukses;
+* melaporkan impedansi + VSWR(50 Ω) bila engine ada.
+
+**Bukti:** 4 test CLI baru (deck ditulis tanpa engine, kartu `GN 1` untuk monopole, `--run` tanpa engine tetap menulis deck, parameter tak wajar ditolak) + demo nyata di 36.2. Suite: **207 test OK (2 skipped)**.
+
+## 36.2 “Loh” — engine ada tapi tidak terjangkau
+
+Saat pertama kujalankan, CLI melaporkan `engine available: False` meski `nec2c.exe` sudah dibangun. Sebabnya: binernya ada di folder `tools/` dan **tidak discoverable** (bukan di PATH, dan `NEC2_BIN` belum di-set). Bukan bug — konfigurasi.
+
+Perbaikan permanen di mesin ini:
+
+* biner disalin ke **`C:\Users\User\nec2c\nec2c.exe`** (lokasi stabil, di luar scratch);
+* **`NEC2_BIN` diset di level User** (`C:\Users\User\nec2c\nec2c.exe`) sehingga berlaku untuk semua shell berikutnya.
+
+Setelah itu, demo yang sama berakhir seperti ini:
+
+```
+engine available : True (NEC2 engine found: C:\Users\User\nec2c\nec2c.exe)
+engine exit      : 0
+impedance        : 80.56 +45.73j ohm
+VSWR (50 ohm)    : 2.320
+```
+
+Angka itu konsisten dengan sapu jari-jari kawat saya sebelumnya (a/L = 0,0003 → R 80,6 Ω, X 45,7 Ω), jadi jalur CLI → adapter → engine → parse menghasilkan fisika yang sama dengan jalur Python langsung. **Itu kontrol silang yang bagus** untuk adapter kedua.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (build wire CLI). Satu perintah menutup Phase 2 #6 dari sisi pemakaian; dan satu perbedaan konfigurasi (bukan bug) tertangkap karenanya.*
+
+---
+
 # 21. Yotta mengerjakan antreannya — Y-1, Y-2, Y-3 selesai & terverifikasi
 
 ## 21.1 Y-1 — `yotta_tools/reference_table.py` (P1)
@@ -1748,3 +1791,44 @@ Kriteria penerimaan tidak berubah: −30 dB di 0,9·f_c, ≥ −1 dB di 1,3·f_c
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-22 (TE10 attempt 1–2). Dua kegagalan, satu diagnosis yang jelas dari engine, dan satu rencana perbaikan konkret. Tidak ada angka benchmark yang saya klaim dari percobaan ini.*
+
+---
+
+# 34. Verifikasi A2/C2, batch paralel pertama, dan A-1 dengan setelan penuh
+
+## 34.1 A2 (NF2FF opt-in) dan C2 (CI) — terverifikasi
+
+| Klaim Aksara | Verifikasi saya |
+|---|---|
+| NF2FF jadi opt-in | **benar**: `nf2ff: bool = False` di adapter, template memakai `if NF2FF_ENABLED:`, manifest tetap mencatat setelannya, dan CLI punya `--nf2ff` (baris 520 & 618) |
+| CI workflow | **ada**: `.github/workflows/tests.yml`, matriks OS/python, trigger push `main`/PR/dispatch; komentarnya bahkan mengutip pelajaran `numthreads` |
+| Suite | di snapshot bersih: **203 test OK (2 skipped)** — naik dari 195 |
+
+## 34.2 Batch paralel pertama — mekanismenya bekerja, angkanya saya TOLAK
+
+Runner baru `yotta_tools/parallel_batch.py` menjalankan kasus secara bersamaan (direktori terpisah, log `python -u`, parse + status konvergen per kasus). Bukti mekanisme: dua kasus jalan bersamaan, **beban CPU 74 %** (sebelumnya 18 % menganggur).
+
+| Kasus | Resonansi | vs cavity | \|S11\| | Konvergen | Waktu |
+|---|---|---|---|---|---|
+| margin udara 0,40 λ₀ | 2,2959 GHz | −4,37 % | −4,67 dB | **False** | 176 s |
+| margin udara 0,80 λ₀ | 2,8170 GHz | +17,34 % | −14,04 dB | **False** | 546 s |
+
+**Angka-angka ini bukan hasil, dan tidak boleh dikutip:** keduanya berhenti di cap 20.000 langkah (belum konvergen), dan `air080` membaca **tepi sapuan** (2,8170 GHz = f_max), jadi nilai itu artefak batas. Sesuai aturan pelaporan kita, run tanpa konvergensi tidak menghasilkan klaim resonansi.
+
+Yang **bisa** disimpulkan dari batch ini: (1) mekanisme paralelnya bekerja; (2) margin 0,80 λ₀ memakan **3,1× waktu** dibanding 0,40 λ₀ (546 s vs 176 s) — itu sisi biaya A7, terukur.
+
+**Temuan tambahan dari log engine:**
+
+```
+Multithreaded engine using 1 threads. Utilization: (123)
+```
+
+Jadi biner openEMS **punya** mesin multi-thread tetapi default-nya **1 thread** — konteks penting untuk diskusi `numthreads`: niatnya benar, yang tidak ada adalah jalan menyalakannya dari binding Python resmi.
+
+## 34.3 A-1 diulang dengan setelan penuh (sedang berjalan)
+
+Karena angka ringan di atas tidak sah, saya jalankan ulang **kedua arm `port_refine`** dengan setelan penuh (EndCriteria **1e-4**, cap **400.000** langkah, NF2FF mati, sisanya identik) lewat `scripts/ab2_full_settings.py`. Hasilnya (termasuk status konvergen dan jumlah langkah) akan saya laporkan utuh di putaran berikutnya — apa pun hasilnya.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (verifikasi + batch pertama). A2/C2 terverifikasi (203 test), mekanisme paralel terbukti (CPU 18 % → 74 %), dan dua angka yang tidak layak dikutip saya tolak sendiri sebelum orang lain menemukannya.*
