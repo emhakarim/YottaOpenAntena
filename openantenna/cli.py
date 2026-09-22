@@ -1,4 +1,4 @@
-"""Command line interface for OpenAntenna Studio (stdlib argparse only).
+﻿"""Command line interface for OpenAntenna Studio (stdlib argparse only).
 
 Phase 1 is headless: this CLI is the only user entry point.  Every command is
 read-only with respect to the project *except* the ``gen-openems`` and
@@ -262,6 +262,39 @@ def cmd_solver_status(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_wire(args: argparse.Namespace) -> int:
+    """Synthesise a wire antenna and write a NEC2 deck (optionally run it)."""
+    from .geometry.wire import synthesize_dipole, synthesize_monopole
+    from .solvers.nec2 import DECK_NAME, Nec2Solver
+
+    radius_m = args.radius_mm * 1e-3
+    if args.ground_plane:
+        design = synthesize_monopole(args.freq, radius_m=radius_m, length_factor=args.length_factor)
+    else:
+        design = synthesize_dipole(args.freq, radius_m=radius_m, length_factor=args.length_factor)
+    print(design.summary())
+
+    solver = Nec2Solver(args.binary)
+    rundir = Path(args.out)
+    solver.prepare(design, rundir)
+    print(f"\ndeck written     : {rundir / DECK_NAME}")
+
+    status = solver.available()
+    print(f"engine available : {status.available} (status.detail: {status.detail})")
+    if not args.run:
+        return EXIT_OK
+    if not status.available:
+        print("note: --run was requested but no NEC2 engine is available; deck written only.")
+        return EXIT_OK
+
+    run = solver.run(rundir, timeout_s=args.timeout_s)
+    parsed = solver.parse_results(rundir)
+    print(f"engine exit      : {run.returncode}")
+    print(f"impedance        : {parsed['resistance_ohm']:.2f} {parsed['reactance_ohm']:+.2f}j ohm")
+    print(f"VSWR (50 ohm)    : {parsed['vswr_50_ohm']:.3f}")
+    return EXIT_OK
+
+
 def cmd_gen_openems(args: argparse.Namespace) -> int:
     _resolve_sweep(args)
     project = _base_project(args)
@@ -435,6 +468,18 @@ def build_parser() -> argparse.ArgumentParser:
     solver_sub = solver.add_subparsers(dest="solver_command", required=True)
     p = solver_sub.add_parser("status", help="probe the openEMS/CSXCAD runtime")
     p.set_defaults(handler=cmd_solver_status)
+
+    p = sub.add_parser("wire", help="synthesise a wire antenna (dipole/monopole) and write a NEC2 deck")
+    p.add_argument("--freq", type=float, required=True, help="frequency in Hz")
+    p.add_argument("--radius-mm", type=float, default=1.0, help="wire radius in mm")
+    p.add_argument("--length-factor", type=float, default=0.5,
+                   help="0.5 = half-wave dipole, 0.25 = quarter-wave monopole (end-effect shortening is not applied)")
+    p.add_argument("--ground-plane", action="store_true", help="monopole above a perfect ground plane")
+    p.add_argument("--out", default="runs/wire", help="run directory for the deck")
+    p.add_argument("--run", action="store_true", help="execute the deck when a NEC2 engine is available")
+    p.add_argument("--binary", default=None, help="explicit NEC2 engine path (else NEC2_BIN, then PATH)")
+    p.add_argument("--timeout-s", type=float, default=120.0)
+    p.set_defaults(handler=cmd_wire)
 
     p = sub.add_parser("gen-openems", help="write an openEMS model script (does not run it)")
     _add_design_arguments(p)
