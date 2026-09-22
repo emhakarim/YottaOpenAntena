@@ -631,3 +631,51 @@ Pelajaran proses yang saya catat untuk diri sendiri: **setiap tabel selisih haru
 menyebut acuannya, dan satu tabel tidak boleh mencampur acuan.** Ini aturan pelaporan
 A4 yang Yotta usulkan, dan saya setuju menjadikannya aturan tetap.
 
+
+---
+
+## 19. PENUTUPAN FASE 1 (2026-09-22)
+
+### 19.1 Hasil A-1 (A/B port_refine) - geometri tutorial selesai
+
+| port_refine | resonansi (refined) | selisih vs cavity | VSWR | langkah |
+|---|---|---|---|---|
+| **on** (default Yotta) | 2,35036 GHz | **-3,53 %** | 1,054 | 24.180 |
+| **off** | 2,36397 GHz | **-2,97 %** | 1,025 | 27.328 |
+
+Jawaban untuk pertanyaan A-1: **port refinement menggerakkan resonansi ~0,58 %** - nyata
+tapi kecil, dan di geometri ini ia justru **menjauh** dari prediksi cavity (-2,97 % ->
+-3,53 %). Jadi A4 bukan penyebab sisa bias, dan belum terbukti memperbaiki akurasi.
+Keputusan default (on/off) menunggu pasangan geometri PTFE yang masih berjalan.
+
+Catatan penting: kegagalan A-1 sebelumnya **bukan** karena A4. Penyebabnya dua instance
+harness berjalan bersamaan pada direktori yang sama -> `WinError 32` file lock Windows.
+Harness kini membersihkan direktori kasus sebelum jalan, dan klaim "A4 merusak model"
+saya tarik.
+
+### 19.2 Apa arti "akurasi" di proyek ini - tiga lapisan, jangan dicampur
+
+| Lapisan | Pencapaian | Bukti |
+|---|---|---|
+| Analitik (sintesis, predictor cavity, mixing, dispersi) | **<= 0,1 %** terhadap closed-form dan terhadap implementasi ulang independen | nilai emas Balanis, D dipole 1,6409, cavity cocok 0,000000 % di 112 titik |
+| Model solver vs model independen | **2-5 % rendah**, bergantung resep/geometri | eksperimen pemisah + A/B konstruksi |
+| Penargetan desain (dimensi hasil tuning mendarat di f0) | **<= 0,02 %** | loop tuning: 3 iterasi, galat -0,018 %, VSWR 1,098 |
+
+### 19.3 Fase 1 ditutup
+
+Semua item fungsional Fase 1 selesai: model netral, material + mixing + dispersi,
+sintesis patch + cross-check cavity, layout array + array factor, generator openEMS
+yang sepenuhnya dapat dikonfigurasi, eksekusi + parsing + pelaporan konvergensi,
+postproc S11/pola/efisiensi, **NF2FF** (lebih awal dari rencana), sweep nyata + store,
+GUI preview, **162 test**, dokumentasi lengkap.
+
+Tiga item dipindahkan ke Fase 2 karena tidak bisa ditutup tanpa masukan eksternal:
+1. **Validasi loss absolut** - butuh referensi dengan Q diketahui atau pengukuran.
+   Eksperimen pengganti sudah dijalankan (`scripts/loss_validation.py`): dua substrat
+   dengan tan delta berbeda 50x harus memberi efisiensi radiasi yang jelas berbeda.
+2. **Akurasi di luar bias 2-5 %** yang sudah terkarakterisasi.
+3. **Plotting CLI** - `scripts/plot_run.py` sudah ada (tidak saya jalankan di sesi ini).
+
+Rekam jejak kalibrasi lengkap ada di `docs/calibration.md`, termasuk daftar koreksi
+klaim saya sendiri (§6 di file itu).
+
