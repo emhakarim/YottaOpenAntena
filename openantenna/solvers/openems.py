@@ -72,6 +72,7 @@ Coordinate conventions: z = 0 is the top of the substrate; patch width W along
 x, patch length L along y; the lumped port runs along z through the substrate.
 """
 
+import csv
 import json
 import os
 import sys
@@ -316,6 +317,7 @@ if METAL_EDGE_SNAPPING:
 # proper corporate-feed model).  Phase 1 models ONE port only.
 print("CONDUCTOR: %s (conductor loss not modelled)" % CONDUCTOR_MODEL)
 if ELEMENT_PORTS:
+    ELEMENT_PORTS_OBJS = []
     # Phase 2 #4: one port per element, so a coupling matrix can be extracted.  Which port
     # is driven comes from the environment, so ONE deck yields every row of the S-matrix by
     # being run once per port - no per-run editing, and no risk of the decks drifting apart.
@@ -324,17 +326,23 @@ if ELEMENT_PORTS:
             "element_ports=True with a printed feed line is not supported yet: per-element "
             "lines belong to the corporate-feed work (Phase 2 #5)"
         )
+    # Keep every port object.  Without this `port` is never bound and main() dies with
+    # NameError before it can write a single result - found by static audit, and the
+    # rendered-text tests cannot see it, hence the regression test shipped with this patch.
     for index, (x0, y0) in enumerate(ELEMENTS, start=1):
-        FDTD.AddLumpedPort(
-            index,
-            FEED_Z0,
-            [x0 + FEED_X, y0 + FEED_Y, -H_TOTAL],
-            [x0 + FEED_X, y0 + FEED_Y, 0.0],
-            "z",
-            1.0 if index == EXCITE_PORT else 0.0,
-            priority=5,
-            edges2grid="xy",
+        ELEMENT_PORTS_OBJS.append(
+            FDTD.AddLumpedPort(
+                index,
+                FEED_Z0,
+                [x0 + FEED_X, y0 + FEED_Y, -H_TOTAL],
+                [x0 + FEED_X, y0 + FEED_Y, 0.0],
+                "z",
+                1.0 if index == EXCITE_PORT else 0.0,
+                priority=5,
+                edges2grid="xy",
+            )
         )
+    port = ELEMENT_PORTS_OBJS[0]
     print(
         "PORTS: %d element ports (probe feed); exciting port %d "
         "- set OPENANTENNA_EXCITE_PORT to excite another"
@@ -491,6 +499,36 @@ def main():
     FDTD.Run(sim_path, verbose=3, cleanup=True)
 
     freqs = np.linspace(F_MIN, F_MAX, N_FREQ)
+
+    if ELEMENT_PORTS:
+        # Phase 2 #4: dump EVERY port, not only the driven one.  One run yields a full
+        # column of the S-matrix, S_ij = uf_ref(i) / uf_inc(j), and running the same deck
+        # once per driven port assembles the whole matrix.
+        driven = None
+        for index, element_port in enumerate(ELEMENT_PORTS_OBJS, start=1):
+            element_port.CalcPort(sim_path, freqs, FEED_Z0)
+            port_path = os.path.join(HERE, "port_%d.csv" % index)
+            with open(port_path, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["freq_hz", "uf_inc_re", "uf_inc_im", "uf_ref_re", "uf_ref_im"])
+                for frequency, inc, ref in zip(freqs, element_port.uf_inc, element_port.uf_ref):
+                    writer.writerow(
+                        ["%.6e" % frequency, "%.9e" % inc.real, "%.9e" % inc.imag,
+                         "%.9e" % ref.real, "%.9e" % ref.imag]
+                    )
+            if index == EXCITE_PORT:
+                driven = element_port
+        if driven is None:
+            raise SystemExit(
+                "OPENANTENNA_EXCITE_PORT=%d is outside the %d element ports"
+                % (EXCITE_PORT, len(ELEMENT_PORTS_OBJS))
+            )
+        port = driven
+        print(
+            "PORTS: wrote %d per-port files; driven port %d"
+            % (len(ELEMENT_PORTS_OBJS), EXCITE_PORT)
+        )
+
     port.CalcPort(sim_path, freqs, FEED_Z0)
     s11 = port.uf_ref / port.uf_inc
 
