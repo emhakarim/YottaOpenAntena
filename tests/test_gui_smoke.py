@@ -231,7 +231,11 @@ class TestMainWindow(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp)
             (run / "s11.csv").write_text(
-                "freq_hz,s11_re,s11_im\n2.45e9,-0.02,0.01\n", encoding="utf-8"
+                "freq_hz,s11_re,s11_im\n"
+                "2.40e9,-0.30,0.10\n"
+                "2.45e9,-0.02,0.01\n"
+                "2.50e9,-0.35,0.12\n",
+                encoding="utf-8",
             )
             (run / "nf2ff_summary.csv").write_text(
                 "freq_hz,directivity_lin,directivity_dbi,prad_w,p_acc_w,eta_rad\n"
@@ -256,7 +260,11 @@ class TestMainWindow(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp)
             (run / "s11.csv").write_text(
-                "freq_hz,s11_re,s11_im\n2.45e9,-0.02,0.01\n", encoding="utf-8"
+                "freq_hz,s11_re,s11_im\n"
+                "2.40e9,-0.30,0.10\n"
+                "2.45e9,-0.02,0.01\n"
+                "2.50e9,-0.35,0.12\n",
+                encoding="utf-8",
             )
             (run / "nf2ff_summary.csv").write_text(
                 "freq_hz,directivity_lin,directivity_dbi,prad_w,p_acc_w,eta_rad\n"
@@ -268,6 +276,27 @@ class TestMainWindow(unittest.TestCase):
             text = results_tab.metrics.toPlainText()
 
         self.assertNotIn("WARNING: radiation efficiency", text)
+        window.close()
+
+    def test_a_bad_run_directory_reports_without_blocking(self):
+        """Regression: a single-point CSV made `load()` show a *modal* dialog and the
+        whole suite hung.  The failure must surface in the panel and return."""
+        import tempfile
+        from pathlib import Path
+
+        window = self._window()
+        results_tab = window.centralWidget().widget(3)
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            (run / "s11.csv").write_text(
+                "freq_hz,s11_re,s11_im\n2.45e9,-0.02,0.01\n", encoding="utf-8"
+            )
+            results_tab.path.setText(str(run))
+            results_tab.load()  # must return; if this blocks, the suite hangs
+            text = results_tab.metrics.toPlainText()
+
+        self.assertIn("Cannot load s11.csv", text)
+        self.assertIn("at least two frequency points", text)
         window.close()
 
 

@@ -593,6 +593,23 @@ class ResultsTab(QWidget):
         if chosen:
             self.path.setText(chosen)
 
+    def _notify(self, message: str) -> None:
+        """Report a load failure **without blocking**.
+
+        A modal ``QMessageBox.warning`` froze the whole test suite (and would freeze CI)
+        the moment a test loaded a bad run directory: the dialog waits for input that never
+        comes.  The message is written into the metrics panel as well, so it is visible
+        even headless, and the popup is shown non-modally.
+        """
+        self.metrics.setPlainText(message)
+        box = QMessageBox(self)
+        box.setWindowTitle("Cannot load")
+        box.setText(message)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setModal(False)
+        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        box.show()
+
     def load(self) -> None:
         candidate = Path(self.path.text())
         csv_path = candidate / "s11.csv" if candidate.is_dir() else candidate
@@ -629,7 +646,7 @@ class ResultsTab(QWidget):
             # All of the above is inside the try: impedance_ohm() deliberately raises
             # for a phase-less trace (review item G-5), and an exception escaping into
             # the Qt event loop would go uncaught.
-            QMessageBox.warning(self, "Cannot load", f"{type(exc).__name__}: {exc}")
+            self._notify(f"Cannot load {csv_path.name}: {type(exc).__name__}: {exc}")
             return
         self.metrics.setPlainText("\n".join(lines))
 
@@ -724,9 +741,11 @@ class ResultsTab(QWidget):
                 # number without saying so would be worse than not showing it at all.
                 out_of_range = []
                 for point in points:
-                    eta = getattr(point, "eta_rad", None)
-                    if eta is None and hasattr(point, "to_dict"):
-                        eta = point.to_dict().get("eta_rad")
+                    fields = point.to_dict() if hasattr(point, "to_dict") else {}
+                    # the dataclass calls it radiation_efficiency; the CSV column is eta_rad
+                    eta = getattr(point, "radiation_efficiency", None)
+                    if eta is None:
+                        eta = fields.get("radiation_efficiency", fields.get("eta_rad"))
                     if eta is not None and not (0.0 < float(eta) <= 1.0):
                         out_of_range.append(float(eta))
                 if out_of_range:
