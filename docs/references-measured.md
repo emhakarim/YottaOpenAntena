@@ -17,48 +17,48 @@ A case may be used as a reference only if **all** of the following are readable:
 | A **measured** resonance (not only simulated) | a simulated number is not independent of us |
 | Instrument, or at least "measured" stated | a number of unknown origin cannot anchor anything |
 
-Anything less is recorded in the table but marked **not usable**, with the missing field named.
-Cases that are arrays, metasurfaces, or fully flexible/textile are out of scope until the
-generator models them.
+Anything less is recorded but marked **not usable**, with the missing field named.
 
-## What a published case can and cannot settle
+## Route status - measured, not assumed (2026-09-22)
 
-* **Can**: reveal a *systematic* bias of the model on a geometry we did not invent (our analytic
-  references cannot do that).
-* **Cannot**: prove 0.1 % accuracy - the paper's own permittivity uncertainty is usually larger
-  than that. A comparison inherits that uncertainty and must be reported with it.
-* **Cannot**: be quoted from an abstract alone. Most results sections are paywalled; if only the
-  abstract was readable, the case is marked partial and the extracted numbers are attributed to
-  the abstract, not to the full paper.
-
-## Retrieval routes, and which one works
-
-| Route | Status |
+| Route | Outcome |
 |---|---|
-| `autoglm-websearch` skill (local token service) | **works** - returns deep article links |
-| `web_search` (native) | works, but often returns site-level URLs and handles `site:` filters poorly |
-| Browser agent (`autoglm run`) | **blocked**: needs the owner's configuration (choose Chrome/Edge, install the AutoGLM extension, approve `auto_approve`). It cannot read paywalled full texts anyway |
-| Reading a page | `autoglm-open-link`, once a deep URL is known |
+| Research subagents (3 dispatched, web_search) | **all three failed** after 40-69 s: the platform's model service returned errors. No output was produced |
+| Browser agent (`autoglm run`) | **blocked**: needs the owner's configuration (pick Chrome or Edge, install the AutoGLM extension, approve `auto_approve`). Even configured, it cannot read a paywalled results section |
+| `web_search` (native) | returns site-level URLs and mangles `site:` filters (one query came back with baking-recipe results) |
+| `autoglm-websearch` skill (local token) | **works** - returns deep article links; this is the route to use |
+| `autoglm-open-link` skill | works, but extraction quality varies: on the first attempt it returned the article's **reference list** instead of its body, so a single read is not enough |
+
+**Conclusion: the literature route is viable but not yet productive.** No geometry, substrate or
+frequency may be quoted from this page yet - every entry below is snippet level.
 
 ## Candidates found (snippet level only - NOT usable yet)
 
-Nothing here has been read in full, so **no geometry, substrate or frequency from this list may be
-quoted**.  Each entry names what it would take to promote it.
-
-| Candidate | Why it is promising | What is missing to promote it |
+| Candidate | Why promising | Missing to promote it |
 |---|---|---|
-| "Bandwidth Enhancement of An Inset-Fed Rectangular Patch" (article.sapub.org, open access) - snippet cites 3.09-3.17 GHz, 80 MHz bandwidth | inset-fed **rectangular** patch, open access, measured bandwidth stated | patch W/L, substrate epsilon_r + h, inset depth, and whether the resonance is measured |
-| "Comparison of return loss calculations with measurements" (journals.riverpublishers.com) | a direct model-vs-measurement comparison - exactly the model-error track | full text: which models, which geometries, the quoted errors |
-| "Evaluation of the effect of bending on the resonance" (journals.sagepub.com) | quantifies resonance shift vs a physical parameter | full text (likely paywalled) |
-| "A design rule for inset-fed rectangular microstrip patch antenna" (ResearchGate PDF) | gives the inset-depth rule we use as an estimate | the verification against measurement, if any |
-| MDPI "Optimization Design of a Novel Slotted Microstrip..." (2017, open access) | single-layer single-patch resonant-frequency analysis | the patch is slotted: usable only as a *rejected* example unless the plain baseline is given |
+| "Bandwidth Enhancement of An Inset-Fed Rectangular Patch" (article.sapub.org, open access) - snippet cites 3.09-3.17 GHz, 80 MHz bandwidth | inset-fed **rectangular** patch, open access | W/L, epsilon_r, h, inset depth, and whether the resonance is measured |
+| "Inset Fed Rectangular Patch Antenna Design for ISM Band" (IJPSAT 2023, open access, `ijpsat.org/index.php/ijpsat/article/view/5777`) | inset-fed rectangular patch, ISM band | the read returned only the reference list; the body must be re-fetched |
+| "Comparison of return loss calculations with measurements" (journals.riverpublishers.com) | a direct model-vs-measurement comparison | full text: which models, which geometries, the quoted errors |
+| "A design rule for inset-fed rectangular microstrip patch antenna" (ResearchGate PDF) | gives the inset-depth rule we use as an estimate | its verification against measurement |
+| MDPI "Optimization Design of a Novel Slotted Microstrip..." (2017, open access) | single-layer single-patch resonance analysis | the patch is slotted: usable only as a *rejected* example |
 
-Rejected on sight: PIER circularly-polarised design (not a plain rectangular patch), any
-metasurface/array paper, social-media posts.
+Rejected on sight: circularly-polarised PIER design, metasurfaces, arrays, social-media posts.
+
+## What this changes about the plan
+
+Reading several open-access articles properly (search -> fetch -> verify the body -> extract five
+fields) is a **slow loop with an uncertain yield**, and the two fastest routes are currently shut
+(subagents failing, browser agent unconfigured). The better anchor for this project is therefore:
+
+1. **Analytic references** (cavity model, microstrip synthesis) - already in place, independent of
+   the solver, and enough for gate #5's two-topology requirement.
+2. **The owner's own measurement** - a fabricated patch measured on a VNA. That is ground truth for
+   the geometries the project actually cares about, and it does not depend on anyone's paywall.
+3. Literature cases as **additional** anchors once someone reads them properly (a task a human can
+   do faster than this loop).
 
 ## How these feed the calibration
 
 Collected cases become `RunSample` entries in `openantenna/postproc/calibration.py` once *our*
-model has been run on the **same geometry** (the runs need converged settings, so they go to the
-machine with capacity).  Until those runs exist, this table is a *source list*, not a calibration:
-no bias number is claimed from a paper alone.
+model has been run on the **same geometry** (converged settings, machine time). Until then this
+page is a *source list*, not a calibration: no bias number is claimed from a paper alone.
