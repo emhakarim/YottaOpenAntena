@@ -181,5 +181,58 @@ class TestNf2ffDefault(unittest.TestCase):
             self.assertIn("NF2FF_ENABLED = True", script)
 
 
+class TestCouplingCli(unittest.TestCase):
+    """The toolkit must be able to report coupling, not only the verification tool."""
+
+    def _runs(self, root: Path) -> list[str]:
+        from test_port_matrix_reader import make_run
+
+        return [f"{p}={make_run(root, p, 3)}" for p in (1, 2, 3)]
+
+    def test_coupling_reports_the_worst_pair(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            args = self._runs(Path(tmp))
+            result = run_cli(
+                "coupling",
+                "--ports", "3",
+                "--frequency", "2.45e9",
+                *[part for spec in args for part in ("--run", spec)],
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("worst coupling", result.stdout)
+        self.assertIn("0.05", result.stdout)
+
+    def test_coupling_refuses_to_quote_an_unconverged_run(self):
+        import tempfile
+        from pathlib import Path as _Path
+
+        from test_port_matrix_reader import make_run
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _Path(tmp)
+            specs = [f"1={make_run(root, 1, 2)}", f"2={make_run(root, 2, 2, converged=False)}"]
+            result = run_cli(
+                "coupling",
+                "--ports",
+                "2",
+                "--frequency",
+                "2.45e9",
+                *[part for spec in specs for part in ("--run", spec)],
+                expect_ok=False,
+            )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("convergence-policy", result.stderr)
+
+    def test_a_bad_run_spec_is_rejected_with_a_clear_message(self):
+        result = run_cli(
+            "coupling", "--ports", "2", "--frequency", "2.45e9", "--run", "nonsense",
+            expect_ok=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("PORT=DIR", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

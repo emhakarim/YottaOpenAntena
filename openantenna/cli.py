@@ -743,7 +743,89 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(handler=cmd_sweep_run)
 
+    coupling = sub.add_parser(
+        "coupling",
+        help="assemble the array coupling matrix from per-port runs (Phase 2 #4)",
+    )
+    coupling.add_argument(
+        "--run",
+        action="append",
+        default=[],
+        metavar="PORT=DIR",
+        help="one run per driven port, e.g. --run 1=runs/e1 --run 2=runs/e2",
+    )
+    coupling.add_argument("--ports", type=int, required=True, metavar="N", help="element ports")
+    coupling.add_argument(
+        "--frequency", type=float, required=True, metavar="HZ", help="design frequency [Hz]"
+    )
+    coupling.add_argument(
+        "--allow-unconverged",
+        action="store_true",
+        help="exploratory only: docs/convergence-policy.md forbids quoting such numbers",
+    )
+    coupling.add_argument("--json", metavar="PATH", help="write the matrix and the summary")
+    coupling.set_defaults(handler=cmd_coupling)
+
     return parser
+
+
+def cmd_coupling(args: argparse.Namespace) -> int:
+    """Report the coupling between array elements from per-port runs.
+
+    The trend against element distance is intentionally *not* printed here: it needs the real
+    layout order, and guessing the element order from a grid argument could silently pair the
+    wrong ports.  The module exposes it for the GUI, which knows the layout.
+    """
+    import json
+
+    from .postproc.port_matrix import assemble
+
+    runs = []
+    for spec in args.run:
+        # documented format is PORT=DIR: split on the FIRST '=' so a Windows path
+        # (which contains ':' and '\\') is not mistaken for the port
+        port, _, directory = spec.partition("=")
+        if not port.isdigit() or not directory:
+            print(f"error: --run expects PORT=DIR, got {spec!r}", file=sys.stderr)
+            return EXIT_ERROR
+        runs.append((directory, int(port)))
+    if not runs:
+        print("error: at least one --run PORT=DIR is required", file=sys.stderr)
+        return EXIT_ERROR
+
+    matrix = assemble(
+        runs, n_ports=args.ports, require_convergence=not args.allow_unconverged
+    )
+    summary = matrix.coupling_summary(args.frequency)
+
+    print(
+        f"coupling at {summary['frequency_hz'] / 1e9:.4f} GHz "
+        f"(nearest sample to the requested {args.frequency / 1e9:.4f} GHz)"
+    )
+    print(f"  ports          : {matrix.n_ports} (driven: {matrix.driven_ports})")
+    print(
+        f"  worst coupling : {summary['worst_magnitude']:.4g} "
+        f"({summary['worst_db']:.2f} dB)"
+    )
+    print(f"  mean coupling  : {summary['mean_magnitude']:.4g}")
+    if not summary["require_convergence"]:
+        print("  NOTE: exploratory mode - convergence was not enforced, do not quote this")
+    print(
+        "  A coupling number only means something if the runs differ in one variable "
+        "and converged."
+    )
+
+    if args.json:
+        payload = {
+            "frequency_hz": summary["frequency_hz"],
+            "n_ports": matrix.n_ports,
+            "driven_ports": matrix.driven_ports,
+            "converged": matrix.converged,
+            "summary": summary,
+        }
+        Path(args.json).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(f"  written to {args.json}")
+    return EXIT_OK
 
 
 def main(argv: Optional[List[str]] = None) -> int:
