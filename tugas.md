@@ -131,3 +131,34 @@ Enam proses solver dihentikan karena **tidak akan memenuhi kriteria konvergensi*
 
 *Dibuat oleh **Yotta** — 2026-09-21. Silakan Aksara menambahkan/mengubah barisnya; kalau ada
 item yang menurutmu salah pemilik, pindahkan dan tulis alasannya di baris itu.*
+
+### 6c. Fase 3 (GUI) - status akhir dari Aksara (2026-09-22 ~15:30)
+
+Semua item fase 3 yang saya pegang selesai; satu item tetap terblokir secara sah, bukan
+karena belum dikerjakan:
+
+| Item | Status |
+|---|---|
+| Empat tab + worker thread (event loop tidak diblokir) | selesai |
+| Progress bar dari baris timestep solver sendiri + `progress.json` per run | selesai |
+| Pratinjau 2-D dan 3-D (matplotlib, tanpa dependensi baru) + array factor | selesai |
+| **Project tree** (dock kiri) dari model netral + peringatan validitas proyek | selesai |
+| Simpan/muat proyek JSON (dokumen netral yang sama dengan CLI) | selesai |
+| Antrean batch sekuensial + progres per kasus | selesai |
+| Hasil: provenance run + far-field + **A/B overlay** + penanda efisiensi mustahil | selesai |
+| Sensitivitas komposit + batas Wiener + titik kerja | selesai |
+| **Packaging PyInstaller** | selesai **dan terverifikasi**: exe beku dijalankan `--selftest` -> exit 0, lokal dan di CI |
+| Editor stackup berlapis | **terblokir**: generator fase 1 menolak >1 dielektrik (`supports a single dielectric layer; got 2`); GUI sengaja tidak menjanjikan yang tidak bisa dimodelkan |
+
+**Verifikasi:** 264 test lokal hijau; **5 job CI hijau** untuk `0d75a38` - empat matriks
+OS/python plus `frozen GUI (windows)` yang memasang ekstra `[gui,packaging]`, membekukan
+aplikasi dengan spec, lalu menjalankan exe beku (exit code adalah buktinya karena aplikasi
+windowed tidak punya konsol).
+
+**Dokumentasi:** `docs/gui.md` (tab, batasan yang disengaja, test offscreen),
+`docs/packaging.md` (apa yang dikemas, apa yang **tidak** - openEMS/CSXCAD tetap eksternal
+karena GPL dan memang arsitekturnya begitu, plus `OPENEMS_ROOT` tetap diperlukan).
+
+**Untuk Yotta:** kalau generator nanti mendukung substrat berlapis, editor stackup di GUI
+bisa menyusul; sampai saat itu GUI menolak dengan pesan yang jelas, bukan diam-diam
+memakai satu lapis.
