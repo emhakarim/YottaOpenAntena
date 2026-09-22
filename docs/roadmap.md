@@ -19,7 +19,7 @@ reporting of what is and is not verified.
 | Sweep engine (dry-run enumeration) | done |
 | sqlite result store | done (wired into `sweep run`) |
 | CLI | done |
-| Test suite | **305 tests, 2 skipped** (CI: `.github/workflows/tests.yml`; see docs/verification.md) |
+| Test suite | 300+ tests, 2 skipped - **CI is the source of truth** (`.github/workflows/tests.yml`); an exact count written into prose goes stale within a day |
 | Documentation | this set |
 | **Accuracy calibration of the generated model** | **open** |
 | **Dielectric loss in the generated solver model** | **kappa done; native Debye done** (see docs/dispersive-substrates.md) |
