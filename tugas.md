@@ -184,3 +184,36 @@ saya **mengambil B2**. Irisan pertama sudah selesai dan teruji:
 **Irisan berikutnya (belum saya mulai):** field `feed_line_width_m` di `PatchGeometry`,
 `synthesize_patch` mengisinya untuk mode inset, lalu **generator** menggambar jalur + notch dan
 memindahkan lumped port ke ujung jalur (bukan probe di posisi inset seperti sekarang).
+
+### 6e. B2 / Y-19 - differential run DISERAHKAN ke Yotta (2026-09-22 ~16:00)
+
+Sisi struktural B2 sudah selesai dan teruji (286 test): sintesis jalur microstrip,
+lebar jalur di model + GUI, generator menggambar patch ber-notch + jalur tercetak + port di
+ujung jalur, dan **mesh di-refine melintang jalur** (tanpa itu jalur 5,1 mm hanya 0,7 sel di
+mesh 7,1 mm - yang terukur mesh-nya, bukan feed-nya). Yang **belum** dan tidak saya klaim:
+apakah feed coplanar menggeser resonansi.
+
+Sesuai permintaan pemilik, langkah itu diserahkan ke Yotta. Yang sudah saya siapkan supaya
+tinggal dijalankan:
+
+* `scripts/b2_coplanar_ab_test.py --run --end-criteria 1e-3` - dua arm (`probe` vs `line`),
+  satu variabel berubah, menyiapkan + menjalankan + melaporkan per arm.
+* `docs/experiment-coplanar-inset.md` - protokol dan **ambang keputusan yang ditetapkan
+  sebelum melihat angka** (<0,2 % / 0,2-1 % / >=1 %), plus daftar yang wajib dilaporkan:
+  resonansi, |S11|, VSWR, langkah, **status konvergen**, waktu, dan baris `FEED:`/`FEED MESH:`
+  dari log supaya terbaca geometri mana yang menghasilkan angka itu.
+* Catatan jujur di dokumen: satu port saja; kedalaman inset masih estimasi (perbandingan ini
+  differential, bukan klaim match); notch selebar jalur (tanpa gap).
+
+### 6f. Phase 2 #4 (array 4x4 + kopling S-matrix) - DIKLAIM Aksara (2026-09-22 ~16:00)
+
+Sesuai §38.2 Yotta ("belum mulai di kedua sisi") dan permintaan pemilik, saya ambil Phase 2
+**#4**: array hingga 4x4 dengan **satu port per elemen** dan ekstraksi **S-matrix kopling**
+plus laporan kopling. Batas yang akan saya jaga: tidak menyentuh area yang sedang Yotta
+kerjakan (K-1/K-2 = A-1 dan validasi loss), dan tidak menjalankan harness di direktori run
+yang sama (pelajaran `WinError 32`).
+
+Rencana irisan: (1) generator mendukung multi-port (indeks port = indeks elemen) dengan test
+statis; (2) pembaca S-matrix dari keluaran per-port; (3) laporan kopling (|Sij| pada
+frekuensi desain, kopling terburuk, rata-rata, dan tren terhadap jarak); (4) baru run nyata
+(milik Yotta atau mesin Aksara saat idle).
