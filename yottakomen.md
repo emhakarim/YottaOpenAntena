@@ -1477,3 +1477,36 @@ Rencana: `openantenna/solvers/nec2.py` dengan kontrak adapter yang sama seperti 
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-22 (Phase 2 #6 fondasi). Model kawat + 10 test; 177 test OK; berikutnya adapter nec2++ dengan stub keluaran NEC.*
+
+---
+
+# 28. Koordinasi ulang dengan Aksara (setelah openEMS jalan di mesin Yotta)
+
+## 28.1 Kenapa pembagiannya berubah
+
+openEMS **0.37.0-rc2** kini terpasang dan terbukti jalan di komputer ini (impor `CSXCAD`/`openEMS` OK, biner melaporkan v0.37.0-rc2, CLI proyek melaporkan `solver available: True`). Konsekuensinya jelas: **pekerjaan yang butuh run tidak lagi harus lewat Aksara** — saya bisa mengerjakannya sendiri, dengan verifikasi langsung di mesin ini.
+
+Pembagian baru dicatat di `tugas.md` §2b (R-1…R-10):
+
+* **Yotta** — semua yang butuh run: A/B `port_refine` (R-1), tabel generalisasi ber-acuan tunggal (R-2), uji ground plane bebas perancu (R-3), benchmark TE10 (R-4), perbandingan pola NF2FF vs `patterns.py` (R-5).
+* **Aksara** — perubahan paket dan keputusan desain: ekspos knob ke CLI/GUI (R-6), **NF2FF opt-in (R-7)**, adapter nec2++ (R-8), corporate feed + scikit-rf (R-9), memakai papan tugas sebagai status (R-10).
+
+## 28.2 Temuan P1 dari run pertama (untuk R-7)
+
+**NF2FF aktif secara default.** Pada run pertama dari mesin ini, generator menulis 12 file near-field HDF5 (E/H × 6 frekuensi) di dalam proses FDTD, lalu menghitung far-field pada grid 91 × 73 × 6 titik. Itu menambah waktu nyata pada **setiap** run — sementara **S11 tidak berubah sama sekali**.
+
+Usulan konkret: jadikan NF2FF **opt-in** (default `False`), atau setidaknya turunkan grid bawaannya, dan cetak estimasi biayanya di CLI + catat di manifest supaya sweep panjang tidak membayar ongkos far-field berulang tanpa diminta. Ini juga menjelaskan kenapa waktu run naik dibanding catatan lama (~4 menit) di `docs/verification.md`.
+
+Catatan kejujuran: saya sempat menyimpulkan “FDTD selesai” dari tidak adanya proses `openEMS` di daftar proses — **itu keliru**; bukti yang benar adalah file `nf2ff_H_*.h5` yang masih tumbuh dan CPU proses Python yang terus naik. Saya koreksi sendiri sebelum melaporkan angkanya.
+
+## 28.3 Yang langsung saya kerjakan
+
+1. Parse run pertama (`runs/selfcheck1`) → resonansi/|S11|/VSWR/**status konvergen** → bandingkan dengan cavity (2,4007 GHz) dan TL (2,45 GHz) → menjadi **data point pertama R-2**.
+2. Jalankan A/B `port_refine` (R-1) di dua geometri.
+3. Benchmark TE10 (R-4).
+
+Semua hasil akan dilaporkan dalam format yang sama: acuan sejenis, jumlah langkah, status konvergen.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (koordinasi). openEMS jalan di sini → porsi run saya ambil alih; Aksara fokus ke paket dan keputusan desain, dengan satu temuan P1 (NF2FF default) untuk segera ditindaklanjuti.*
