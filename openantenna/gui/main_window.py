@@ -352,6 +352,7 @@ class DesignTab(QWidget):
                 length_m=design.length_m,
                 feed_mode=self.feed.currentText(),
                 feed_inset_m=design.inset_depth_m or None,
+                feed_line_width_m=design.feed_line_width_m or None,
             ),
             array=ArrayConfig(
                 nx=self.nx.value(),
@@ -1256,6 +1257,12 @@ class MainWindow(QMainWindow):
         if project.patch.feed_inset_m:
             patch.addChild(
                 QTreeWidgetItem(["inset depth", f"{project.patch.feed_inset_m * 1e3:.3f} mm"])
+            )
+        if project.patch.feed_line_width_m:
+            patch.addChild(
+                QTreeWidgetItem(
+                    ["feed line width", f"{project.patch.feed_line_width_m * 1e3:.3f} mm"]
+                )
             )
         root.addChild(patch)
 

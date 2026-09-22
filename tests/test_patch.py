@@ -213,5 +213,22 @@ class TestMicrostripFeedLine(unittest.TestCase):
             patch.microstrip_impedance(4.4, 1.6e-3, 0.0)
 
 
+    def test_inset_feed_carries_a_fifty_ohm_line_width(self):
+        """B2/Y-19: the synthesis must hand the generator a feed *line*, not only a depth."""
+        design = patch.synthesize_patch(2.45e9, 2.1, 1.6e-3, "inset")
+        self.assertGreater(design.feed_line_width_m, 0.0)
+        # re-evaluating the impedance of that line must return the 50 ohm target
+        back = patch.microstrip_impedance(2.1, 1.6e-3, design.feed_line_width_m)
+        self.assertAlmostEqual(back, 50.0, delta=0.05)
+        self.assertIn("feed line width", design.summary())
+        self.assertIn("feed_line_width_m", design.to_dict())
+
+    def test_edge_feed_also_gets_a_line_but_a_probe_does_not(self):
+        edge = patch.synthesize_patch(2.45e9, 2.1, 1.6e-3, "edge")
+        self.assertGreater(edge.feed_line_width_m, 0.0)
+        probe = patch.synthesize_patch(2.45e9, 2.1, 1.6e-3, "probe")
+        self.assertEqual(probe.feed_line_width_m, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

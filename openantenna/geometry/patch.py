@@ -283,6 +283,10 @@ class PatchDesign:
     height_m: float
     feed_mode: str = "inset"
     inset_depth_m: float = 0.0
+    #: width of the microstrip feed line [m]; 0.0 when the feed is not a line (probe).
+    #: Added for review item Y-19 / B2: the synthesis describes a coplanar inset, which
+    #: needs a line, so the width belongs in the design record and in the project model.
+    feed_line_width_m: float = 0.0
     frequency_cavity_hz: float = 0.0
     warnings: List[str] = field(default_factory=list)
 
@@ -309,6 +313,7 @@ class PatchDesign:
             "height_m": self.height_m,
             "feed_mode": self.feed_mode,
             "inset_depth_m": self.inset_depth_m,
+            "feed_line_width_m": self.feed_line_width_m,
             "warnings": list(self.warnings),
         }
 
@@ -332,6 +337,11 @@ class PatchDesign:
         ]
         if self.feed_mode == "inset":
             lines.append(f"inset depth      : {self.inset_depth_m * 1e3:.3f} mm (approx., verify)")
+        if self.feed_line_width_m:
+            lines.append(
+                f"feed line width  : {self.feed_line_width_m * 1e3:.3f} mm "
+                "(microstrip line for the 50 ohm target)"
+            )
         for warning in self.warnings:
             lines.append(f"WARNING          : {warning}")
         return "\n".join(lines)
@@ -381,6 +391,14 @@ def synthesize_patch(
                 "probably a better match strategy."
             )
 
+    line_width = 0.0
+    if feed_mode in ("inset", "edge"):
+        # Both feeds are a microstrip line; only the inset depth differs.  The width is what
+        # the generator needs to draw the coplanar feed (review item Y-19 / B2).
+        line_width = microstrip_width_for_impedance(
+            epsilon_r, height_m, reference_impedance_ohm
+        )
+
     return PatchDesign(
         width_m=width,
         length_m=length,
@@ -396,5 +414,6 @@ def synthesize_patch(
         height_m=height_m,
         feed_mode=feed_mode,
         inset_depth_m=inset,
+        feed_line_width_m=line_width,
         warnings=warnings,
     )

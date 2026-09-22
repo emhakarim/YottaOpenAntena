@@ -507,5 +507,17 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_project_tree_shows_the_feed_line_width(self):
+        """B2/Y-19: the tree must show the feed line the generator will draw."""
+        window = self._window()
+        root = window.project_tree.topLevelItem(0)
+        patch_node = next(
+            root.child(i) for i in range(root.childCount()) if root.child(i).text(0) == "Patch"
+        )
+        labels = [patch_node.child(i).text(0) for i in range(patch_node.childCount())]
+        self.assertIn("feed line width", labels)
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()

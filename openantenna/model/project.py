@@ -102,11 +102,21 @@ class PatchGeometry:
     length_m: Optional[float] = None
     feed_mode: str = "inset"
     feed_inset_m: Optional[float] = None
+    #: microstrip feed-line width [m] (review item Y-19 / B2).  ``None`` means the project
+    #: predates the field, or the feed is a probe rather than a line.
+    feed_line_width_m: Optional[float] = None
     feed_edge_offset_m: Optional[float] = None
     slot_depth_m: Optional[float] = None
 
     def __post_init__(self) -> None:
-        for name in ("width_m", "length_m", "feed_inset_m", "feed_edge_offset_m", "slot_depth_m"):
+        for name in (
+            "width_m",
+            "length_m",
+            "feed_inset_m",
+            "feed_line_width_m",
+            "feed_edge_offset_m",
+            "slot_depth_m",
+        ):
             value = getattr(self, name)
             if value is not None:
                 setattr(self, name, _positive(value, name))
