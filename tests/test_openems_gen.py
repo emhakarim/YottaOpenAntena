@@ -420,5 +420,16 @@ class TestCoplanarInsetFeed(unittest.TestCase):
         self.assertIn("vertical lumped port (probe)", script)
 
 
+    def test_the_line_feed_also_refines_the_mesh_across_the_line(self):
+        """Drawing a 5 mm line on a 7 mm mesh would measure the mesh, not the feed."""
+        project = make_project()
+        project.patch.feed_line_width_m = 5.0e-3
+        project.patch.feed_inset_m = project.patch.feed_inset_m or 1.0e-2
+        script = OpenEMSSolver().render_script(project)
+        self.assertIn("FEED MESH", script)
+        self.assertIn('mesh.AddLine(\n        "x",', script)
+        self.assertIn("_line_cells = 4", script)
+
+
 if __name__ == "__main__":
     unittest.main()

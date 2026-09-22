@@ -360,6 +360,26 @@ if PORT_REFINE:
         % (_port_cell * 1e3, 2.0 * _port_half * 1e3)
     )
 
+if FEED_IS_LINE:
+    # A printed feed line needs cells *across* it.  At the default resolution
+    # (MESH_MAX_RES = c/(F_MAX * cells_per_lambda)) a 5.1 mm line on PTFE is less than one
+    # cell wide, so the line would be a stair-step artifact and any probe-vs-line
+    # comparison would measure the mesh, not the feed.  Four cells across the line, and
+    # four along the notch depth, keep the feed discretised like the port already is.
+    _line_cells = 4
+    mesh.AddLine(
+        "x",
+        np.linspace(
+            FEED_X - FEED_LINE_WIDTH / 2.0, FEED_X + FEED_LINE_WIDTH / 2.0, _line_cells + 1
+        ),
+    )
+    _patch_top = ELEMENTS[0][1] + L_PATCH / 2.0
+    mesh.AddLine("y", np.linspace(FEED_Y, _patch_top, 5))
+    print(
+        "FEED MESH: %d cells across the %.3f mm line (%.3f mm each)"
+        % (_line_cells, FEED_LINE_WIDTH * 1e3, FEED_LINE_WIDTH / _line_cells * 1e3)
+    )
+
 mesh.SmoothMeshLines("all", MESH_MAX_RES, MESH_SMOOTHING)
 
 print(
