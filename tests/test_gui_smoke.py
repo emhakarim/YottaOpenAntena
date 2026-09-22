@@ -457,5 +457,55 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_project_tree_shows_the_current_design(self):
+        """The tree describes the model: substrate, patch, array and sweep."""
+        window = self._window()
+        tree = window.project_tree
+        self.assertGreaterEqual(tree.topLevelItemCount(), 1)
+        root = tree.topLevelItem(0)
+        sections = [root.child(i).text(0) for i in range(root.childCount())]
+        for expected in ("Substrate", "Patch", "Array", "Sweep"):
+            self.assertIn(expected, sections)
+        substrate = root.child(sections.index("Substrate"))
+        self.assertIn("total thickness", [substrate.child(i).text(0) for i in range(substrate.childCount())])
+        window.close()
+
+    def test_project_tree_follows_design_changes(self):
+        """Changing the design must refresh the tree without a manual call."""
+        window = self._window()
+        design_tab = window.centralWidget().widget(1)
+        design_tab.nx.setValue(6)
+        design_tab.ny.setValue(2)
+        design_tab.synthesise()
+
+        root = window.project_tree.topLevelItem(0)
+        array_node = next(
+            root.child(i) for i in range(root.childCount()) if root.child(i).text(0) == "Array"
+        )
+        self.assertEqual(array_node.text(1), "6 x 2")
+        self.assertEqual(array_node.child(0).text(1), "12")
+        window.close()
+
+    def test_project_tree_marks_the_projects_own_warnings(self):
+        """If the model reports a validity warning, the tree must show it."""
+        window = self._window()
+        design_tab = window.centralWidget().widget(1)
+        # an electrically thick substrate is a real, computed warning
+        design_tab.frequency.setValue(0.9)
+        design_tab.height.setValue(12.0)
+        design_tab.synthesise()
+        expected = len(design_tab.current_project().check())
+
+        root = window.project_tree.topLevelItem(0)
+        labels = [root.child(i).text(0) for i in range(root.childCount())]
+        if expected:
+            self.assertIn("Warnings", labels)
+            warnings_node = root.child(labels.index("Warnings"))
+            self.assertEqual(warnings_node.text(1), str(expected))
+        else:
+            self.assertNotIn("Warnings", labels)
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()

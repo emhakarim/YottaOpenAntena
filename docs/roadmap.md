@@ -75,7 +75,7 @@ thread so simulations do not block the event loop; offscreen smoke tests; a solv
 progress bar driven by the solver's own timestep lines (plus `progress.json` per run); a
 to-scale array preview beside the array-factor plot **and a 3-D preview of the same
 model** (plain matplotlib, no new dependency; PyVista remains an option for the owner to
-decide); run provenance and the far-field cut in the results tab plus an **A/B overlay**
+decide); a **project tree dock** that mirrors the neutral model and its validity warnings; run provenance and the far-field cut in the results tab plus an **A/B overlay**
 comparing two runs on one panel with the resonance shift in MHz and %; project save/load
 through the neutral model JSON; a sensitivity plot of the mixing models against the
 Wiener bounds; and a sequential batch queue with per-case progress. Not done: packaging

@@ -11,12 +11,21 @@ python -m openantenna.gui
 
 ## The four tabs
 
+A **project tree** dock sits on the left of the window: substrate layers, patch dimensions
+and feed, array configuration, sweep range, and the project's own validity warnings. It is
+rebuilt from the neutral model whenever the design is re-synthesised, so it always
+describes what a run would use rather than what the widgets happen to say.
+
 | Tab | What it does |
 |---|---|
 | **Material & composite** | The built-in material library (reference values, not measurements), plus a two-phase composite explorer: mixing models, their validity warnings, and a sensitivity plot of ε_eff against filler loading with the Wiener bounds and the current operating point marked |
 | **Design** | Patch synthesis from the transmission-line model; array parameters; a **2-D layout drawn to scale** or a **3-D preview** of the same model; the array-factor cut; and **save/load of the neutral project JSON** (the same document the CLI reads) |
 | **Simulate** | Mesh, substrate cells, loss model, and the three A/B knobs (`port_refine`, `edge_snapping`, `nf2ff`); generate, run in a worker thread; a **progress bar driven by the solver's own timestep lines**; and a **sequential batch queue** |
 | **Results** | Load a run directory: S11 with its metrics, the run's own provenance (mesh, substrate, knobs, stop criteria, convergence), the far-field cut and summary, an **A/B overlay** of a second run with the resonance shift, and a warning when a number is physically impossible |
+
+The **project tree** dock (left of the window) mirrors the neutral model - substrate layers,
+patch dimensions and feed, array configuration, sweep, and the model's own validity
+warnings - and refreshes from a signal whenever the design is re-synthesised.
 
 ## Things that are deliberate, not missing
 

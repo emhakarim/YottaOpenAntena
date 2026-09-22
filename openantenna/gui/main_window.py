@@ -11,11 +11,12 @@ import json
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDockWidget,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -33,6 +34,8 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QTabWidget,
     QTextEdit,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -261,6 +264,9 @@ class MaterialTab(QWidget):
 class DesignTab(QWidget):
     """Patch synthesis and array layout, with an array-factor plot."""
 
+    #: emitted whenever the design is (re)synthesised, so the project tree can follow
+    design_changed = Signal()
+
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
@@ -470,6 +476,7 @@ class DesignTab(QWidget):
         factor_axes.set_ylim(-40, 2)
         factor_axes.grid(True)
         self.canvas.draw_idle()
+        self.design_changed.emit()
 
     @staticmethod
     def _draw_geometry_3d(axes, design, layout, substrate_mm: float) -> None:
@@ -1195,10 +1202,90 @@ class MainWindow(QMainWindow):
         tabs.addTab(ResultsTab(), "Results")
         self.setCentralWidget(tabs)
 
+        # The project tree: a shell-style view of the *model* (not of the widgets), so it
+        # cannot disagree with what will be simulated.  It refreshes from the design tab's
+        # signal instead of being rebuilt by hand at every call site.
+        self.project_tree = QTreeWidget()
+        self.project_tree.setColumnCount(2)
+        self.project_tree.setHeaderLabels(["property", "value"])
+        self.project_tree.setMinimumWidth(270)
+        dock = QDockWidget("Project", self)
+        dock.setObjectName("projectDock")
+        dock.setWidget(self.project_tree)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
+        self.design_tab.design_changed.connect(self._refresh_project_tree)
+        self._refresh_project_tree()
+
         status = self.statusBar()
         status.showMessage(
             "Phase 1 core: geometry/material results are analytic, the solver model is not calibrated yet."
         )
+
+    def _refresh_project_tree(self) -> None:
+        """Rebuild the tree from the design tab's current project.
+
+        Values come from the neutral model, so the tree describes exactly what a run would
+        use, including the project's own validity warnings.
+        """
+        tree = self.project_tree
+        tree.clear()
+        project = self.design_tab.current_project()
+        root = QTreeWidgetItem([project.name, ""])
+        tree.addTopLevelItem(root)
+
+        substrate = QTreeWidgetItem(
+            ["Substrate", f"{len(project.substrate.layers)} layer(s)"]
+        )
+        for index, layer in enumerate(project.substrate.layers, start=1):
+            substrate.addChild(
+                QTreeWidgetItem(
+                    [
+                        f"layer {index}: {layer.material}",
+                        f"{layer.thickness_m * 1e3:.3f} mm, {layer.role}",
+                    ]
+                )
+            )
+        total_mm = sum(layer.thickness_m for layer in project.substrate.layers) * 1e3
+        substrate.addChild(QTreeWidgetItem(["total thickness", f"{total_mm:.3f} mm"]))
+        root.addChild(substrate)
+
+        patch = QTreeWidgetItem(["Patch", ""])
+        patch.addChild(QTreeWidgetItem(["width W", f"{project.patch.width_m * 1e3:.3f} mm"]))
+        patch.addChild(QTreeWidgetItem(["length L", f"{project.patch.length_m * 1e3:.3f} mm"]))
+        patch.addChild(QTreeWidgetItem(["feed", str(project.patch.feed_mode)]))
+        if project.patch.feed_inset_m:
+            patch.addChild(
+                QTreeWidgetItem(["inset depth", f"{project.patch.feed_inset_m * 1e3:.3f} mm"])
+            )
+        root.addChild(patch)
+
+        array = QTreeWidgetItem(
+            ["Array", f"{project.array.nx} x {project.array.ny}"]
+        )
+        array.addChild(
+            QTreeWidgetItem(["elements", str(project.array.nx * project.array.ny)])
+        )
+        array.addChild(
+            QTreeWidgetItem(["spacing x", f"{project.array.spacing_x_lambda0:.3f} lambda0"])
+        )
+        array.addChild(
+            QTreeWidgetItem(["spacing y", f"{project.array.spacing_y_lambda0:.3f} lambda0"])
+        )
+        root.addChild(array)
+
+        sweep = QTreeWidgetItem(["Sweep", ""])
+        sweep.addChild(QTreeWidgetItem(["start", f"{project.sweep.start_hz / 1e9:.4f} GHz"]))
+        sweep.addChild(QTreeWidgetItem(["stop", f"{project.sweep.stop_hz / 1e9:.4f} GHz"]))
+        sweep.addChild(QTreeWidgetItem(["points", str(project.sweep.points)]))
+        root.addChild(sweep)
+
+        warnings = project.check()
+        if warnings:
+            warn_root = QTreeWidgetItem(["Warnings", str(len(warnings))])
+            for message in warnings:
+                warn_root.addChild(QTreeWidgetItem([message[:90], ""]))
+            root.addChild(warn_root)
+        tree.expandAll()
 
 
 def run_gui(argv: list[str] | None = None) -> int:
