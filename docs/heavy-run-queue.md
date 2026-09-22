@@ -42,3 +42,14 @@ python -m yotta_tools.heavy_queue --only k1c        # one job
 python -m yotta_tools.heavy_queue --list            # the plan and its time budgets
 python scripts/array_smatrix.py --nx 4 --ny 4 --run # the 4x4 follow-up (16 runs, resumable)
 ```
+
+## Live status in one command
+
+```
+python yotta_tools/status_snapshot.py --log <b2_e3.log> --log <b2_e4.log>
+```
+
+It scans every `runs/batch_*/run.stdout.log` (the queue's jobs), reads the last timestep and
+speed out of the engine output, prints one table and writes `runs/status_snapshot.json`. The
+progress percentage is relative to the timestep cap - a run usually stops earlier, when its
+`EndCriteria` is met - so read it as a ceiling, not a countdown.
