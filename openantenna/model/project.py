@@ -102,8 +102,11 @@ class PatchGeometry:
     length_m: Optional[float] = None
     feed_mode: str = "inset"
     feed_inset_m: Optional[float] = None
-    #: microstrip feed-line width [m] (review item Y-19 / B2).  ``None`` means the project
-    #: predates the field, or the feed is a probe rather than a line.
+    #: microstrip feed-line width [m] (review item Y-19 / B2).  Three states on purpose:
+    #: ``None`` = let the synthesis decide, ``0.0`` = no printed line (vertical probe),
+    #: ``> 0`` = an explicit width.  Without the explicit zero there is no way to express
+    #: "probe" in a project, and an A/B comparing probe against line silently runs the same
+    #: model twice - which is exactly what happened once.
     feed_line_width_m: Optional[float] = None
     feed_edge_offset_m: Optional[float] = None
     slot_depth_m: Optional[float] = None
@@ -113,13 +116,14 @@ class PatchGeometry:
             "width_m",
             "length_m",
             "feed_inset_m",
-            "feed_line_width_m",
             "feed_edge_offset_m",
             "slot_depth_m",
         ):
             value = getattr(self, name)
             if value is not None:
                 setattr(self, name, _positive(value, name))
+        if self.feed_line_width_m is not None and self.feed_line_width_m < 0.0:
+            raise ValueError("feed_line_width_m must be >= 0 (use 0.0 for a probe feed)")
         if self.feed_mode not in FEED_MODES:
             raise ValueError(f"feed_mode must be one of {FEED_MODES}, got {self.feed_mode!r}")
 

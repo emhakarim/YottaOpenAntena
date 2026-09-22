@@ -820,7 +820,9 @@ class OpenEMSSolver(SolverAdapter):
             FEED_Y=fmt(feed_y),
             FEED_INSET=fmt(project.patch.feed_inset_m or design.inset_depth_m),
             FEED_LINE_WIDTH=fmt(
-                project.patch.feed_line_width_m or design.feed_line_width_m or 0.0
+                design.feed_line_width_m
+                if project.patch.feed_line_width_m is None
+                else project.patch.feed_line_width_m
             ),
             FEED_MODE=project.patch.feed_mode,
             FEED_Z0=fmt(50.0),

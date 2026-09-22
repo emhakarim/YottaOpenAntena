@@ -28,8 +28,9 @@ MATERIAL = "PTFE"
 HEIGHT_M = 1.6e-3
 
 ARMS = {
-    # arm name -> line width in metres (None keeps the legacy vertical probe)
-    "probe": None,
+    # arm name -> line width: 0.0 means "no printed line" (the explicit probe state; None
+    # would mean "let the synthesis decide", which is what made both arms identical once).
+    "probe": 0.0,
     "line": "synthesised",
 }
 
@@ -45,7 +46,7 @@ def build_project(arm: str, end_criteria: float):
     )
 
     design = synthesize_patch(FREQUENCY_HZ, 2.1, HEIGHT_M, "inset")
-    width = design.feed_line_width_m if ARMS[arm] == "synthesised" else None
+    width = design.feed_line_width_m if ARMS[arm] == "synthesised" else ARMS[arm]
     return Project(
         name=f"b2_{arm}",
         substrate=SubstrateStackup.single(MATERIAL, HEIGHT_M),

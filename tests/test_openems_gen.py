@@ -431,5 +431,29 @@ class TestCoplanarInsetFeed(unittest.TestCase):
         self.assertIn("_line_cells = 4", script)
 
 
+    def test_the_two_ab_arms_differ_in_exactly_the_line_width(self):
+        """An A/B that runs the same model twice measures nothing - it happened once.
+
+        ``None`` means "let the synthesis decide", ``0.0`` means "no printed line".  The
+        probe arm must therefore carry an explicit zero, not ``None``.
+        """
+        probe = make_project()
+        probe.patch.feed_line_width_m = 0.0
+        line = make_project()
+        line.patch.feed_line_width_m = 5.1e-3
+
+        script_probe = OpenEMSSolver().render_script(probe)
+        script_line = OpenEMSSolver().render_script(line)
+        # fmt(0.0) renders as "0", so match the rendered form, with the trailing space that
+        # separates it from the inline comment (and from "0.0051...").
+        self.assertIn("FEED_LINE_WIDTH = 0 ", script_probe)
+        self.assertIn("FEED_LINE_WIDTH = 0.0051", script_line)
+        # and nothing else about the feed may differ between the arms
+        self.assertIn(
+            "FEED_INSET = %s" % script_probe.split("FEED_INSET = ")[1].split("\n")[0],
+            script_line,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
