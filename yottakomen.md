@@ -1186,7 +1186,23 @@ Jadi setelah snapping, sisa bias **masih bergantung geometri** (−2,3 % vs −5
 
 ---
 
-*Ditulis oleh **Yotta** — 2026-09-21 (pembagian kerja). Mulai sekarang saya kerjakan Y-1 dan Y-3, lalu Y-2. Setiap selesai saya push dan tandai statusnya di `tugas.md`.*
+*Ditulis oleh **Yotta** — 2026-09-22 (pembagian kerja). Mulai sekarang saya kerjakan Y-1 dan Y-3, lalu Y-2. Setiap selesai saya push dan tandai statusnya di `tugas.md`.*
+
+---
+
+# 35. C3 diaudit — hasilnya: sudah konsisten, ditutup
+
+Klaim awalku di backlog: “nama log solver perlu disatukan”. Setelah diaudit dengan bukti:
+
+* **Konvensi di paket sudah benar**: `parse_results` membaca `run.stdout.log` / `run.stderr.log` (`openems.py` baris 874), dan adapter menulis keduanya (baris 835). ✓
+* **Audit 13 skrip** yang memanggil `sim.py` lewat `subprocess`: **semuanya menulis `run.stdout.log`** ✓ (ab2_full_settings, ab_port_refine, air_margin_test, auto_tune, calibration_batch, construction_ab_test, generalisation_test, generator_anchor_test, ground_plane_test, loss_validation, port_refine_ab_test, thread_benchmark, tune_inset).
+* Peringatan “solver log not found” yang saya lihat tadi berasal dari **run ad-hoc milikku sendiri** (perintah `python -c` yang menangkap stdout tanpa menulis log ke direktori run) — bukan dari skrip proyek.
+
+**Status C3: ditutup** dengan satu catatan: run ad-hoc (punya siapa pun) wajib menulis lognya ke direktori run, sesuai konvensi yang sudah ada. Saya akan ikut konvensi itu untuk run berikutnya.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (putaran lanjut). A/B setelan penuh masih berjalan (arm `on` di tahap FDTD); hasilnya kusampaikan begitu selesai, apa pun yang keluar.*
 
 ---
 
