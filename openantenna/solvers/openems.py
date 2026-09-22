@@ -145,6 +145,8 @@ BOUNDARY_MODE = "$BOUNDARY_MODE"
 AIRBOX_LAMBDA = $AIRBOX_LAMBDA      # air margin around the structure, per side
 AIR_TOP_LAMBDA = $AIR_TOP_LAMBDA    # air margin above the patch
 UNIT_CELL = $UNIT_CELL
+ELEMENT_PORTS = $ELEMENT_PORTS    # one lumped port per array element (Phase 2 #4)
+EXCITE_PORT = int(os.environ.get("OPENANTENNA_EXCITE_PORT", "1"))
 MAX_TS = $MAX_TS
 END_CRITERIA = $END_CRITERIA
 
@@ -313,39 +315,65 @@ if METAL_EDGE_SNAPPING:
 # NOTE: a real NxM array also needs a feed network and one port per element (or a
 # proper corporate-feed model).  Phase 1 models ONE port only.
 print("CONDUCTOR: %s (conductor loss not modelled)" % CONDUCTOR_MODEL)
-if FEED_IS_LINE:
-    _feed_line = CSX.AddMetal("feed_line")
-    _feed_line.AddBox(
-        [FEED_X - FEED_LINE_WIDTH / 2.0, FEED_Y - FEED_INSET, 0.0],
-        [FEED_X + FEED_LINE_WIDTH / 2.0, GROUND_Y / 2.0, 0.0],
-        priority=4,
-    )
-    if METAL_EDGE_SNAPPING:
-        FDTD.AddEdges2Grid(
-            dirs="xy", properties=_feed_line, metal_edge_res=MESH_MAX_RES / 2.0
+if ELEMENT_PORTS:
+    # Phase 2 #4: one port per element, so a coupling matrix can be extracted.  Which port
+    # is driven comes from the environment, so ONE deck yields every row of the S-matrix by
+    # being run once per port - no per-run editing, and no risk of the decks drifting apart.
+    if FEED_IS_LINE:
+        raise SystemExit(
+            "element_ports=True with a printed feed line is not supported yet: per-element "
+            "lines belong to the corporate-feed work (Phase 2 #5)"
         )
-    _port_y = GROUND_Y / 2.0 - 2.0 * MESH_MAX_RES
+    for index, (x0, y0) in enumerate(ELEMENTS, start=1):
+        FDTD.AddLumpedPort(
+            index,
+            FEED_Z0,
+            [x0 + FEED_X, y0 + FEED_Y, -H_TOTAL],
+            [x0 + FEED_X, y0 + FEED_Y, 0.0],
+            "z",
+            1.0 if index == EXCITE_PORT else 0.0,
+            priority=5,
+            edges2grid="xy",
+        )
     print(
-        "FEED: coplanar inset line (Y-19), width %.3f mm, inset %.3f mm, port at y = %.3f mm"
-        % (FEED_LINE_WIDTH * 1e3, FEED_INSET * 1e3, _port_y * 1e3)
+        "PORTS: %d element ports (probe feed); exciting port %d "
+        "- set OPENANTENNA_EXCITE_PORT to excite another"
+        % (len(ELEMENTS), EXCITE_PORT)
     )
 else:
-    _port_y = FEED_Y
-    print("FEED: vertical lumped port (probe); inset depth = %.3f mm" % (FEED_INSET * 1e3))
+    if FEED_IS_LINE:
+        _feed_line = CSX.AddMetal("feed_line")
+        _feed_line.AddBox(
+            [FEED_X - FEED_LINE_WIDTH / 2.0, FEED_Y - FEED_INSET, 0.0],
+            [FEED_X + FEED_LINE_WIDTH / 2.0, GROUND_Y / 2.0, 0.0],
+            priority=4,
+        )
+        if METAL_EDGE_SNAPPING:
+            FDTD.AddEdges2Grid(
+                dirs="xy", properties=_feed_line, metal_edge_res=MESH_MAX_RES / 2.0
+            )
+        _port_y = GROUND_Y / 2.0 - 2.0 * MESH_MAX_RES
+        print(
+            "FEED: coplanar inset line (Y-19), width %.3f mm, inset %.3f mm, port at y = %.3f mm"
+            % (FEED_LINE_WIDTH * 1e3, FEED_INSET * 1e3, _port_y * 1e3)
+        )
+    else:
+        _port_y = FEED_Y
+        print("FEED: vertical lumped port (probe); inset depth = %.3f mm" % (FEED_INSET * 1e3))
+    port = FDTD.AddLumpedPort(
+        1,
+        FEED_Z0,
+        [FEED_X, _port_y, -H_TOTAL],
+        [FEED_X, _port_y, 0.0],
+        "z",
+        1.0,
+        priority=5,
+        edges2grid="xy",
+    )
 print(
     "GROUND: %.3f x %.3f mm (margin %.3f lambda0 per side; the ground plane is part "
     "of the radiating structure - review item N-01)"
     % (GROUND_X * 1e3, GROUND_Y * 1e3, GROUND_MARGIN_LAMBDA)
-)
-port = FDTD.AddLumpedPort(
-    1,
-    FEED_Z0,
-    [FEED_X, _port_y, -H_TOTAL],
-    [FEED_X, _port_y, 0.0],
-    "z",
-    1.0,
-    priority=5,
-    edges2grid="xy",
 )
 
 # ---------------------------------------------------------------- meshing
@@ -562,6 +590,10 @@ class OpenEMSSolver(SolverAdapter):
         nf2ff: bool = False,
         nf2ff_frequencies: int = 5,
         unit_cell: bool = False,
+        #: Phase 2 #4: one lumped port per array element.  The same deck produces every row
+        #: of the coupling matrix, because which port is driven comes from the environment
+        #: (``OPENANTENNA_EXCITE_PORT``) rather than from the file.
+        element_ports: bool = False,
         numthreads: int = 0,
         port_refine: bool = True,
         max_timesteps: int = 400000,
@@ -614,6 +646,7 @@ class OpenEMSSolver(SolverAdapter):
         # one lateral pair, PMC on the other.  That is exact at broadside and *cannot*
         # represent an oblique scan angle - say so rather than pretending otherwise.
         self.unit_cell = bool(unit_cell)
+        self.element_ports = bool(element_ports)
         if numthreads < 0:
             raise ValueError("numthreads must be >= 0 (0 lets openEMS decide)")
         self.numthreads = int(numthreads)
@@ -794,6 +827,20 @@ class OpenEMSSolver(SolverAdapter):
         def fmt(value: float) -> str:
             return f"{value:.10g}"
 
+        # One source of truth for the resolved feed-line width (three states: None = let the
+        # synthesis decide, 0.0 = probe, >0 = explicit).
+        resolved_line_width = (
+            design.feed_line_width_m
+            if project.patch.feed_line_width_m is None
+            else project.patch.feed_line_width_m
+        )
+        if self.element_ports and resolved_line_width:
+            raise ValueError(
+                "element_ports=True cannot be combined with a printed feed line yet: "
+                "per-element lines belong to the corporate-feed work (Phase 2 #5). "
+                "Use feed_line_width_m=0.0 for the probe-style element ports."
+            )
+
         return _SCRIPT_TEMPLATE.substitute(
             VERSION=GENERATOR_VERSION,
             PROJECT_NAME=project.name,
@@ -819,11 +866,7 @@ class OpenEMSSolver(SolverAdapter):
             FEED_X=fmt(feed_x),
             FEED_Y=fmt(feed_y),
             FEED_INSET=fmt(project.patch.feed_inset_m or design.inset_depth_m),
-            FEED_LINE_WIDTH=fmt(
-                design.feed_line_width_m
-                if project.patch.feed_line_width_m is None
-                else project.patch.feed_line_width_m
-            ),
+            FEED_LINE_WIDTH=fmt(resolved_line_width),
             FEED_MODE=project.patch.feed_mode,
             FEED_Z0=fmt(50.0),
             MESH_CELLS_PER_WAVELENGTH=self.mesh_cells_per_wavelength,
@@ -833,6 +876,7 @@ class OpenEMSSolver(SolverAdapter):
             NF2FF_ENABLED="True" if self.nf2ff else "False",
             NF2FF_FREQS=self.nf2ff_frequencies,
             UNIT_CELL="True" if self.unit_cell else "False",
+            ELEMENT_PORTS="True" if self.element_ports else "False",
             NUM_THREADS=self.numthreads,
             PORT_REFINE="True" if self.port_refine else "False",
             PML_CELLS=self.pml_cells,
@@ -891,6 +935,7 @@ class OpenEMSSolver(SolverAdapter):
             "metal_edge_snapping": self.metal_edge_snapping,
             "nf2ff": self.nf2ff,
             "nf2ff_frequencies": self.nf2ff_frequencies,
+            "element_ports": self.element_ports,
             "unit_cell": self.unit_cell,
             "numthreads": self.numthreads,
             "max_timesteps": self.max_timesteps,

@@ -455,5 +455,44 @@ class TestCoplanarInsetFeed(unittest.TestCase):
         )
 
 
+class TestElementPorts(unittest.TestCase):
+    """Phase 2 #4: one port per array element, so a coupling matrix can be extracted.
+
+    Which port is driven comes from the environment, so ONE deck produces every row of the
+    matrix by being run once per port - no per-run editing and no chance of the decks
+    drifting apart.
+    """
+
+    def test_element_ports_are_created_and_selected_from_the_environment(self):
+        project = make_project(nx=2, ny=2)
+        project.patch.feed_line_width_m = 0.0  # element ports are probe-style for now
+        script = OpenEMSSolver(element_ports=True).render_script(project)
+        self.assertIn("ELEMENT_PORTS = True", script)
+        self.assertIn('OPENANTENNA_EXCITE_PORT', script)
+        self.assertIn('1.0 if index == EXCITE_PORT else 0.0', script)
+        self.assertIn("PORTS: %d element ports", script)
+
+    def test_the_default_stays_a_single_port(self):
+        script = OpenEMSSolver().render_script(make_project())
+        self.assertIn("ELEMENT_PORTS = False", script)
+
+    def test_element_ports_with_a_printed_line_is_refused_up_front(self):
+        """Failing at generate time beats failing at run time, after the mesh is built."""
+        project = make_project(nx=2, ny=2)
+        project.patch.feed_line_width_m = 5.0e-3
+        project.patch.feed_inset_m = project.patch.feed_inset_m or 1.0e-2
+        with self.assertRaises(ValueError) as ctx:
+            OpenEMSSolver(element_ports=True).render_script(project)
+        self.assertIn("Phase 2 #5", str(ctx.exception))
+
+    def test_the_setting_is_recorded_in_the_manifest(self):
+        project = make_project(nx=2, ny=2)
+        project.patch.feed_line_width_m = 0.0  # element ports are probe-style for now
+        with tempfile.TemporaryDirectory() as tmp:
+            rundir = OpenEMSSolver(element_ports=True).prepare(project, tmp)
+            manifest = json.loads((Path(rundir) / "run_manifest.json").read_text(encoding="utf-8"))
+        self.assertTrue(manifest["element_ports"])
+
+
 if __name__ == "__main__":
     unittest.main()
