@@ -828,9 +828,23 @@ class OpenEMSSolver(SolverAdapter):
         )
         width = project.patch.width_m or design.width_m
         length = project.patch.length_m or design.length_m
+        # The ground plane must cover the whole radiating aperture.  Sizing it from a single
+        # patch is right for a 1x1 (and unchanged there), but a 4x4 at 0.5 lambda0 spans about
+        # 2 lambda0: elements would hang off the ground and the model would be physically
+        # wrong before the solver ever ran.  Computed from the array configuration rather than
+        # from ``layout`` (which is built further down and does not exist yet here).
+        _lam0 = C0 / project.sweep.center_hz
+        span_x = (project.array.nx - 1) * project.array.spacing_x_lambda0 * _lam0 + width
+        span_y = (project.array.ny - 1) * project.array.spacing_y_lambda0 * _lam0 + length
+        if project.array.nx * project.array.ny > 1:
+            print(
+                "GROUND: array footprint %.1f x %.1f mm (%d elements) - sized from the "
+                "layout, not from one patch"
+                % (span_x * 1e3, span_y * 1e3, project.array.nx * project.array.ny)
+            )
         ground_x, ground_y = ground_plane_size(
-            width,
-            length,
+            span_x,
+            span_y,
             project.sweep.center_hz,
             margin_lambda=self.ground_margin_lambda,
         )

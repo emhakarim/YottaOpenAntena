@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -492,6 +493,55 @@ class TestElementPorts(unittest.TestCase):
             rundir = OpenEMSSolver(element_ports=True).prepare(project, tmp)
             manifest = json.loads((Path(rundir) / "run_manifest.json").read_text(encoding="utf-8"))
         self.assertTrue(manifest["element_ports"])
+
+
+class TestArrayGroundPlane(unittest.TestCase):
+    """The ground must cover every element: a 4x4 hangs ~2 lambda0 wide, not one patch."""
+
+    def _ground(self, script: str) -> tuple[float, float]:
+        gx = float(re.search(r"GROUND_X = ([0-9.eE+-]+)", script).group(1))
+        gy = float(re.search(r"GROUND_Y = ([0-9.eE+-]+)", script).group(1))
+        return gx, gy
+
+    def test_a_four_by_four_ground_covers_the_array_footprint(self):
+        project = make_project(nx=4, ny=4)
+        width, length = 0.049, 0.041
+        project.patch.width_m = width
+        project.patch.length_m = length
+        project.patch.feed_line_width_m = 0.0
+        script = OpenEMSSolver().render_script(project)
+        ground_x, ground_y = self._ground(script)
+
+        spacing = 0.5 * (299792458.0 / 2.45e9)
+        span_x = 3 * spacing + width  # four elements at 0.5 lambda0
+        span_y = 3 * spacing + length
+        # the ground must exceed the footprint by the margin on each side
+        self.assertGreater(ground_x, span_x)
+        self.assertGreater(ground_y, span_y)
+        # NOTE: the "sized from the layout" message is printed by the generator at render
+        # time, not written into the deck, so it is checked by the caller - not here.  The
+        # numbers above are the real assertion.
+
+    def test_a_single_element_is_unchanged(self):
+        """The invariant: a 1x1 must still be sized exactly as before the array change."""
+        from openantenna.geometry.patch import ground_plane_size
+
+        solver = OpenEMSSolver()
+        project = make_project(nx=1, ny=1)
+        project.patch.width_m = 0.049
+        project.patch.length_m = 0.041
+        project.patch.feed_line_width_m = 0.0
+        script = solver.render_script(project)
+        ground_x, ground_y = self._ground(script)
+
+        expected_x, expected_y = ground_plane_size(
+            0.049,
+            0.041,
+            project.sweep.center_hz,
+            margin_lambda=solver.ground_margin_lambda,
+        )
+        self.assertAlmostEqual(ground_x, expected_x, delta=1e-9)
+        self.assertAlmostEqual(ground_y, expected_y, delta=1e-9)
 
 
 if __name__ == "__main__":
