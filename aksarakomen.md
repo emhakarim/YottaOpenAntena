@@ -765,3 +765,96 @@ Dua eksperimen solver berjalan (A-1 pasangan PTFE; validasi loss PTFE vs FR-4 vs
 FR-4-lossless via efisiensi NF2FF). Angkanya saya laporkan begitu masuk, termasuk
 status konvergennya.
 
+---
+
+## 21. Jalur GPU: kernel FDTD 2-D OpenCL tervalidasi (2026-09-22)
+
+Permintaanmu: *"tools ini bisa memaksimalkan GPU yang saya miliki dan bahkan GPU/VGA murah"*.
+
+### 21.1 Saya probe dulu, bukan mengira-ngira
+
+| | |
+|---|---|
+| Platform | AMD Accelerated Parallel Processing, OpenCL 2.1 (AMD-APP 3302.6) |
+| Device | `gfx90c` (iGPU Radeon pada Ryzen 7 5800HS) |
+| Compute units | 8 |
+| Clock | 2000 MHz |
+| Global memory | 6234 MB (berbagi dengan RAM sistem) |
+| Local memory | 32 KB |
+| FP64 | didukung (tetapi jauh lebih lambat dari FP32) |
+
+### 21.2 Kernel dan validasinya
+
+`openantenna/gpu/opencl_fdtd.py`: FDTD 2-D TMz (Ez, Hx, Hy), leapfrog staggered, dinding
+PEC, sumber lunak, dan probe direkam **di sisi device** (satu kali copy ke host).
+
+Validasi memakai cavity PEC persegi (a = 100 mm, 60 sel -> grid 61x61, 20000 langkah):
+
+| | |
+|---|---|
+| Resonansi terukur (TM11) | 2,1205151 GHz |
+| Analitik c/2*sqrt(2)/a | 2,1198528 GHz |
+| **Galat relatif** | **0,031 %** |
+| Faktor Courant | 1,000000 |
+
+Puncak spektral disempurnakan parabola; tanpa itu panjang rekaman hanya melokalisasi
+resonansi ke satu bin FFT (~0,6 % di sini).
+
+### 21.3 Throughput - dan koreksi klaim saya sendiri
+
+Grid 601x601 (361.201 sel), 800 langkah, float32, queue dikuras dengan `finish()`:
+
+| Engine | Throughput |
+|---|---|
+| OpenCL `gfx90c` (terintegrasi) | **~293 MCells/s** (291-295, 3 run) |
+| numpy float32 (CPU), skema sama | 12,3 MCells/s |
+| Rasio | ~24x |
+
+Dua catatan yang harus ikut dibaca:
+
+1. Baseline CPU di sini adalah **numpy**, bukan kernel C++ openEMS. "24x lebih cepat dari
+   numpy" **bukan** "24x lebih cepat dari openEMS". Perbandingan sepadan vs openEMS
+   **belum** dijalankan.
+2. Kedua angka diukur sementara dua run openEMS memakai ~10 dari 16 core. iGPU berbagi
+   jalur memori dengan CPU, jadi angka ini bisa berubah di mesin idle.
+
+**Koreksi:** saya sempat melaporkan 1.061 MCells/s (86x). Angka itu **gugur** -
+`throughput()` tidak memanggil `queue.finish()`, jadi yang terukur hanya waktu *enqueue*
+(OpenCL asinkron; GPU masih bekerja setelah loop selesai). Setelah diperbaiki: 293 MCells/s.
+Saya juga sebelumnya memperkirakan iGPU "tidak akan mengalahkan CPU" karena FDTD
+bandwidth-bound; pengukuran menolak perkiraan itu untuk kernel ini.
+
+### 21.4 Dua cacat yang ketemu karena mengukur ulang (bukan karena membaca kode)
+
+1. **`RepeatedKernelRetrieval`** - kernel diambil lewat atribut (`self.program.update_e`)
+   membuat ulang objek kernel tiap panggilan: ~2 ms overhead murni. Gejalanya: grid 61x61
+   dan 301x301 sama-sama ~2000 us/langkah, jadi GPU tampak ~100x lebih lambat dari
+   sebenarnya. Setelah kernel di-cache: 294 us dan 387 us/langkah; suite test 169 s -> 27 s.
+2. **Timing asinkron** (21.3).
+
+Pelajaran yang saya catat: klaim performa yang tidak direproduksi minimal dua kali bukan
+bukti. Kalau saya tidak mengukur ulang, saya akan menyimpulkan "GPU tidak berguna" dari
+bug saya sendiri.
+
+### 21.5 Batas jujur
+
+Belum ada: CPML/absorber, port lumped, geometri 3-D, material lossy/dispersif,
+array/unit-cell, NF2FF di jalur GPU. Jadi status hari ini adalah **kernel 2-D tervalidasi
++ throughput terukur**, bukan pengganti adapter openEMS. Rencana bertahap ada di
+`docs/gpu.md`.
+
+### 21.6 Yang saya minta dari kamu
+
+1. Tinjau `docs/gpu.md` dan tandai klaim mana yang `terverifikasi` / `gugur` di `tugas.md`.
+2. Kalau bisa, jalankan `python -m unittest tests.test_gpu_fdtd` di mesinmu. Kalau mesinmu
+   tidak punya OpenCL, test harus **skip**, bukan gagal - itu bagian kontraknya.
+3. Beri tahu prioritas pertama jalur GPU menurutmu: **perbandingan sepadan vs openEMS**
+   (menjawab pertanyaan kecepatan dengan jujur) atau **mode cepat 2-D** (langsung berguna
+   untuk scan eksploratif). Saya condong ke yang pertama.
+
+### 21.7 Status eksperimen solver
+
+Sampai 12:32 WIB kedua run A-1 PTFE + validasi loss masih berjalan (~25 menit, masing-masing
+~5 core; dikonfirmasi lewat sampel CPU, bukan lewat log - stdout ter-block-buffer, itu
+kesalahan setup saya dan akan saya perbaiki dengan `-u` + `progress.json` pada run berikut).
+

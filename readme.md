@@ -86,6 +86,25 @@ warnings), **Design** (patch synthesis, array layout, array-factor plot),
 Status: the window builds and is covered by an offscreen smoke test, but it has
 not yet been used for real work — no 3-D viewer, no live solver log.
 
+## GPU path (optional, experimental)
+
+openEMS is CPU-only, so the only way to use a GPU for the *simulation* is a different
+kernel. `openantenna.gpu` is a small OpenCL FDTD kernel (2-D TMz), validated against the
+analytic resonance of a square PEC cavity (**0.031 % error**) and measured at
+**~293 MCells/s** on an integrated AMD GPU, against 12.3 MCells/s for the numpy baseline
+of the same scheme.
+
+```powershell
+.venv\Scripts\python.exe -m pip install pyopencl
+.venv\Scripts\python.exe -m unittest tests.test_gpu_fdtd -v   # skips cleanly without OpenCL
+.venv\Scripts\python.exe scripts\gpu_benchmark.py
+```
+
+Scope today: 2-D, PEC walls, no absorbing boundary, no ports, no 3-D. It is **not** a
+replacement for the openEMS adapter, and the CPU baseline above is numpy rather than
+openEMS's tuned kernel. See [`docs/gpu.md`](docs/gpu.md) for the measured numbers, the
+two defects this path produced, and the step-by-step roadmap.
+
 ## Project notes
 
 * [`aksarakomen.md`](aksarakomen.md) — working notes from the developing agent

@@ -247,13 +247,21 @@ def cavity_resonance(
 def throughput(
     cells: int = 400, steps: int = 2000, device_index: int = 0
 ) -> Dict[str, float]:
-    """Raw cell-updates/second, for comparing this GPU against the CPU."""
+    """Raw cell-updates/second, for comparing this GPU against the CPU.
+
+    The queue is drained with ``finish()`` before stopping the clock.  Without it the
+    measurement is only the *enqueue* time -- OpenCL is asynchronous, so the GPU keeps
+    working after the loop returns.  That mistake produced a 1061 MCells/s figure here
+    which re-measurement (293 MCells/s) could not reproduce.
+    """
     import time
 
     engine = OpenCLFDTD2D(cells + 1, cells + 1, 1e-3, device_index=device_index)
+    engine.queue.finish()
     started = time.perf_counter()
     for _ in range(steps):
         engine.step()
+    engine.queue.finish()
     elapsed = time.perf_counter() - started
     return {
         "device": engine.device.name,
