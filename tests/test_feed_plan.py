@@ -102,7 +102,36 @@ class TestCorporateFeedPlan(unittest.TestCase):
         with self.assertRaises(ValueError):
             plan_corporate_feed_geometry(_feed(4), -1.0, _width_of)
         with self.assertRaises(ValueError):
-            plan_corporate_feed_geometry(_stub(4, 2, section_length_m=0.0), 60.0e-3, _width_of)
+            plan_corporate_feed_geometry(
+                _stub(4, 2, section_length_m=0.0), 60.0e-3, _width_of
+            )
+
+    def test_rectangles_cover_every_segment_with_its_width(self):
+        plan = plan_corporate_feed_geometry(_feed(4), 60.0e-3, _width_of)
+        rects = plan.rectangles()
+        self.assertEqual(len(rects), len(plan.segments))
+        for segment, rect in zip(plan.segments, rects):
+            if segment.x0 == segment.x1:  # vertical
+                self.assertAlmostEqual(rect[2] - rect[0], segment.width_m, places=12)
+                self.assertAlmostEqual(
+                    rect[3] - rect[1], abs(segment.y1 - segment.y0), places=12
+                )
+            else:  # horizontal
+                self.assertAlmostEqual(rect[3] - rect[1], segment.width_m, places=12)
+                self.assertAlmostEqual(
+                    rect[2] - rect[0], abs(segment.x1 - segment.x0), places=12
+                )
+            self.assertEqual(rect[5], segment.role)
+
+    def test_bounds_contain_every_rect(self):
+        plan = plan_corporate_feed_geometry(_feed(4), 60.0e-3, _width_of)
+        x_min, y_min, x_max, y_max = plan.bounds()
+        for x0, y0, x1, y1, _level, _role in plan.rectangles():
+            self.assertLessEqual(x_min, x0)
+            self.assertLessEqual(y_min, y0)
+            self.assertGreaterEqual(x_max, x1)
+            self.assertGreaterEqual(y_max, y1)
+        self.assertLessEqual(y_max, 0.0, "the tree grows downward from the input at y=0")
 
 
 if __name__ == "__main__":

@@ -39,6 +39,56 @@ class FeedPlan:
     junctions: tuple[tuple[float, float], ...]
     notes: str = ""
 
+    def rectangles(self) -> tuple[tuple[float, float, float, float, int, str], ...]:
+        """Filled rectangles ``(x_min, y_min, x_max, y_max, level, role)`` for drawing.
+
+        Segments are axis-aligned by construction, so the centre line plus the width gives the
+        filled shape a deck builder or a 2-D preview needs.  A non-axis-aligned segment would
+        mean the planner produced something the drawing half cannot honour, so it is refused
+        rather than silently straightened.
+        """
+        rects: list[tuple[float, float, float, float, int, str]] = []
+        for segment in self.segments:
+            half = segment.width_m / 2.0
+            if abs(segment.x1 - segment.x0) < 1e-15:  # vertical
+                rects.append(
+                    (
+                        segment.x0 - half,
+                        min(segment.y0, segment.y1),
+                        segment.x0 + half,
+                        max(segment.y0, segment.y1),
+                        segment.level,
+                        segment.role,
+                    )
+                )
+            elif abs(segment.y1 - segment.y0) < 1e-15:  # horizontal
+                rects.append(
+                    (
+                        min(segment.x0, segment.x1),
+                        segment.y0 - half,
+                        max(segment.x0, segment.x1),
+                        segment.y0 + half,
+                        segment.level,
+                        segment.role,
+                    )
+                )
+            else:
+                raise ValueError(
+                    f"segment {segment.role} (level {segment.level}) is not axis-aligned; "
+                    "the drawing half only renders axis-aligned feed routing"
+                )
+        return tuple(rects)
+
+    def bounds(self) -> tuple[float, float, float, float]:
+        """Overall ``(x_min, y_min, x_max, y_max)`` of the drawn feed tree."""
+        rects = self.rectangles()
+        return (
+            min(r[0] for r in rects),
+            min(r[1] for r in rects),
+            max(r[2] for r in rects),
+            max(r[3] for r in rects),
+        )
+
 
 def _require_power_of_two(n_elements: int, levels: int) -> None:
     if n_elements < 2 or levels < 1:
