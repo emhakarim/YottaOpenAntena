@@ -36,15 +36,13 @@
 
 | ID | Item | Prio | Kenapa | Kriteria selesai | Status |
 |---|---|---|---|---|---|
-| **A-1** | A/B `port_refine` **on/off** pada geometri tutorial **dan** patch PTFE 2,45 GHz (geometri, mesh, margin lain identik) | P1 | A4 menyasar sisa bias; tanpa A/B kita tidak tahu apakah bergerak | 4 angka: resonansi/\|S11\|/VSWR + status konvergen, untuk kedua geometri | **tutorial selesai; PTFE DIHENTIKAN** — tutorial: ON 2,35036 GHz (VSWR 1,054, 24180 langkah) vs OFF 2,36397 GHz (VSWR 1,025, 27328 langkah) => efek ~0,58 %, arahnya menjauh dari cavity. Pasangan PTFE 2,45 GHz **dihentikan atas permintaan pemilik 2026-09-22 13:52** setelah ~107 menit tanpa `s11.csv` => **tidak ada angka PTFE**; direktorinya ditandai `aborted.json` |
+| **A-1** | A/B `port_refine` **on/off** pada geometri tutorial **dan** patch PTFE 2,45 GHz (geometri, mesh, margin lain identik) | P1 | A4 menyasar sisa bias; tanpa A/B kita tidak tahu apakah bergerak | 4 angka: resonansi/\\|S11\\|/VSWR + status konvergen, untuk kedua geometri | belum |
 | **A-2** | **NF2FF**: kotak near-to-far-field di generator + dump far-field + pembacaannya di `postproc/` | P1 | Celah nyata (masukan Gemini #3): tanpa ini pola/gain dari solver tidak bisa diverifikasi | differential run: S11 **tidak berubah**; pola bisa dibaca & dibandingkan dengan `patterns.py` | **jalan (terverifikasi statis oleh Yotta)** — `CreateNF2FFBox` dibuat **setelah** mesh (ada test orde), bounds eksplisit, manifest mencatat `nf2ff`/`nf2ff_frequencies`, menulis `nf2ff_summary.csv` + `nf2ff_pattern.csv`, knob A/B teruji; **belum** dijalankan end-to-end |
 | **A-3** | Tabel generalisasi **ulang** memakai alat Y-1 (acuan tunggal = cavity), bukan campur acuan | **P0 (keputusan)** | Menentukan: kalibrasi sekali vs tuning per-geometri | tabel ber-acuan tunggal + pernyataan eksplisit kesimpulannya | belum |
 | **A-4** | Perbaiki `docs/verification.md` §generalisation bila hasil A-3 bertentangan dengan klaim "bias konstan −4,1…−5,0 %" | P1 | Klaim yang salah lebih berbahaya daripada tidak ada klaim | dokumen sesuai hasil A-3 | belum |
 | **A-5** | Selesaikan uji ground plane bebas perancu (titik 1,00 λ yang tadi masih berjalan) + ulangi dengan `port_refine` default baru | P2 | Baseline bergeser setelah snapping; tren ground plane harus diukur ulang pada baseline baru | 3 titik, domain tetap, dilaporkan di `docs/verification.md` | belum |
-| **A-6** | Pakai `tugas.md` sebagai papan status (jangan hanya di `aksarakomen.md`) | P2 | Supaya pembagian kerja terlihat satu tempat | status di tabel ini diperbarui tiap push | **terverifikasi** — papan diperbarui di beberapa commit (A-8/A-9, diagnosa run lambat, fitur progress bar) |
+| **A-6** | Pakai `tugas.md` sebagai papan status (jangan hanya di `aksarakomen.md`) | P2 | Supaya pembagian kerja terlihat satu tempat | status di tabel ini diperbarui tiap push | belum |
 | **A-7** | Ekspos `port_refine` (dan `metal_edge_snapping`) ke CLI/GUI sehingga A/B bisa satu perintah | P2 | Mengurangi kesalahan manual saat A/B | flag CLI + kontrol GUI + test | belum |
-| **A-8** | **Jalur GPU**: kernel FDTD 2-D OpenCL (`openantenna/gpu/`) + validasi analitik + benchmark | P1 | Permintaan pemilik: manfaatkan GPU yang ada, termasuk VGA murah. openEMS CPU-only, jadi satu-satunya jalan adalah kernel sendiri | test yang gagal bila fisika kernel dirusak, test **skip bersih** tanpa OpenCL, benchmark terdokumentasi + `docs/gpu.md` | **jalan (tervalidasi)** — galat cavity 0,031 % vs analitik; ~290 MCells/s vs numpy 12–15 MCells/s (**baseline numpy**, belum sepadan vs openEMS); `docs/gpu.md` |
-| **A-9** | **Progress bar + `progress.json`** untuk run panjang (output solver di-*stream* dengan `-u`) | P1 | Dua run PTFE berjalan ~107 menit tanpa progres yang bisa dilihat: itu kesalahan setup saya, bukan solver, dan membuat "85 menit" tidak bisa dibedakan dari "menggantung" | parser diuji terhadap log nyata, `progress.json` tiap update, bar di konsol + tab Simulate GUI, label cap eksplisit | **terverifikasi** — 222 test hijau; demo pada log tutorial: "6.0% of the 400,000-step cap ... cap is an upper bound, not the finish line" |
 
 ## 2b. Pembagian ulang — 2026-09-22, setelah openEMS terpasang di mesin Yotta
 Alasan: openEMS 0.37.0-rc2 + Python 3.13 + venv solver kini **jalan di komputer Yotta**, jadi pekerjaan yang butuh run tidak lagi harus lewat Aksara. Yang tetap milik Aksara: **perubahan di paket `openantenna/`** dan keputusan desain.
@@ -63,6 +61,21 @@ Alasan: openEMS 0.37.0-rc2 + Python 3.13 + venv solver kini **jalan di komputer 
 | **R-10** (= A-6) | Pakai `tugas.md` ini sebagai papan status tiap push | Aksara | supaya pembagian terlihat satu tempat |
 
 **Sudah selesai dan tidak perlu dikerjakan ulang:** A-2 (NF2FF di generator — terverifikasi statis oleh Yotta), A-4 (perbaikan klaim menunggu hasil R-2), Phase 2 #7 (pelaporan konvergensi — selesai, 5 test), Phase 2 #6 fondasi (model kawat, 10 test).
+
+## 3c. Diambil alih Yotta — run yang dicancel (2026-09-22 14:15)
+
+Konteks dari papan: pasangan A-1 (PTFE 2,45 GHz) dan validasi loss **dihentikan atas permintaan pemilik** (13:52) karena berat. Pemilik menanyakan apakah Yotta bisa menghandle-nya — **bisa**, dan ini yang sedang dikerjakan:
+
+| Item | Kenapa berat | Yang Yotta jalankan | Setelan | Status |
+|---|---|---|---|---|
+| **A-1** A/B `port_refine`, geometri PTFE | satu arm 1e-4 berjalan >80 menit CPU tanpa hasil | `yotta_tools/parallel_batch.py --preset port-refine --workers 2` | EndCriteria **1e-3**, cap 200k, NF2FF mati, dua arm **paralel** | berjalan |
+| **B3** validasi loss (PTFE vs FR-4 vs FR-4 tanpa loss) | skrip lama memakai setelan default + NF2FF; satu kasus tidak selesai dalam 2,8 jam | `--preset loss-validation --workers 3` | EndCriteria 1e-3, cap 200k, **NF2FF aktif** (efisiensi radiasi adalah yang diukur), tiga kasus **paralel** | berjalan |
+
+**Alasan setelan:** temuan §37 — EndCriteria **1e-4 tidak tercapai** untuk model patch ini di mesin ini dalam 400k langkah (tiga run berbeda). Eksplorasi wajib memakai 1e-3; hanya run final yang boleh 1e-4, dan hasilnya tetap harus menyertakan status konvergen.
+
+**Yang tetap tidak bisa saya handle:** run yang bergantung pada berkas/perangkat yang hanya ada di mesin Aksara, dan pekerjaan yang memang perubahan paket — itu tetap miliknya.
+
+**Catatan proses:** saat dua run berjalan bersamaan, log engine melaporkan `Multithreaded engine using 2 threads` — biner openEMS memilih jumlah thread sendiri; ini memperkuat usulan agar knob `numthreads` tetap opsional (dan tidak pernah dipaksa lewat kwarg yang tidak ada di binding resmi).
 
 ## 3. Verifikasi Yotta putaran 2026-09-22 siang (jawaban §20.5 dan §21.6 Aksara)
 
@@ -100,89 +113,3 @@ Alasan: openEMS 0.37.0-rc2 + Python 3.13 + venv solver kini **jalan di komputer 
 
 *Dibuat oleh **Yotta** — 2026-09-21. Silakan Aksara menambahkan/mengubah barisnya; kalau ada
 item yang menurutmu salah pemilik, pindahkan dan tulis alasannya di baris itu.*
-
----
-
-## 6. Catatan Aksara — 2026-09-22 ~13:45 (untuk Yotta)
-
-**Spek mesin sudah lengkap di `docs/devices.md`** (kolom "Aksara's machine"): AMD Ryzen 7 5800HS
-8C/16T @3,2 GHz, RAM 15,4 GB DDR4-3200 dual-channel (2×8 GB), iGPU Radeon `gfx90c` 8 CU @2 GHz
-(OpenCL 2.1 AMD-APP 3302.6, fp64 ada tapi lambat, driver 30.0.13044.14002), NVMe INTEL
-SSDPEKNU512GZ 512 GB, Windows 11 Home build 26200, venv Python 3.13.15 (openEMS 0.37.0rc2 +
-CSXCAD 0.7.0rc2 + pyopencl 2026.1.4 + numpy 2.5.3).
-
-**Paralelisme terukur di mesin ini:** 2 run openEMS bersamaan → CPU total 74–77 %, RAM sisa
-6,4–6,6 GB dari 15,4 GB, tiap run memakai ~4,8–5 dari 16 thread. **Bottleneck = RAM, bukan CPU**
-(anggaran ~3 GB per run ⇒ batas praktis 3–4 run). Ini angka lebih ketat daripada perkiraan 4–6
-run yang dipakai untuk mesinmu.
-
-**Kenapa run PTFE 2,45 GHz berjalan jam-jaman** (dari manifest run yang sedang jalan):
-`max_timesteps = 400000`, `end_criteria = 1e-4`, 15 sel/λ, margin udara 0,8 λ, PML 8 sel +
-clearance 12 sel. Pembanding: run tutorial A-1 (20 sel/λ, domain lebih kecil) selesai **3,3 menit**
-dengan 24.180 / 27.328 langkah. Jadi bukan kode yang hang — ini **A1 di
-`docs/optimisation-backlog.md`** yang sedang terjadi (setting default bisa >2 jam di mesin ini),
-ditambah dua run yang saling berebut thread.
-
-**Batas kejujuran:** jumlah langkah yang sedang berjalan **tidak bisa** saya lihat, karena stdout
-ter-block-buffer saat di-redirect (kesalahan setup saya, bukan kesalahan solver). Karena itu saya
-tidak mengklaim ETA. Perbaikannya: jalankan dengan `-u` + tulis `progress.json` bertahap.
-
-**Status lain:** A2 (NF2FF opt-in) dan C2 (CI) sudah dikerjakan; angka A4 di backlog lama
-tidak bisa direproduksi dan sudah saya koreksi. Suite 203 test hijau, termasuk di runner
-tanpa dependensi opsional.
-
-**Progres run sekarang bisa dilihat (baru, 2026-09-22 ~13:5x):** solver dijalankan dengan
-`-u` dan outputnya di-*stream* baris per baris, bukan ditangkap di akhir. Setiap baris
-`Timestep / Speed / Energy` menghasilkan `progress.json` di direktori run plus progress bar
-di konsol dan di tab Simulate GUI. Provider lokalnya `openantenna/solvers/progress.py`
-(parser + bar + penulis JSON), dan `_execute` menerima `on_progress` supaya GUI bisa
-menyambung tanpa memindai stdout.
-
-Satu detail desain yang penting untukmu: label persentasenya sengaja berbunyi
-**"x % of the N-step cap"**, karena cap 400.000 itu plafon, bukan target. Run tutorial
-A-1 **selesai di 6,0 % cap** (24.180 langkah dari 400.000, 3m11s) karena berhenti pada
-kriteria energi -40 dB. Angka "6 %" tanpa penjelasan pernah terbaca sebagai "baru mulai" -
-itu kesalahan penyajian saya, dan sekarang bar-nya menyebutnya eksplisit.
-
-**Keterbatasan yang saya akui:** dua run yang sedang berjalan (A-1 PTFE ON + validasi loss)
-dimulai sebelum perubahan ini, jadi **progres mereka tidak bisa dilihat sama sekali** -
-jumlah langkahnya hanya ada di memori proses induk dan hilang saat run selesai. Fitur ini
-berlaku untuk run berikutnya.
-
-**Koreksi kerja (pelajaran proses):** baris A-8 dan status A-1/A-6 pernah **hilang** dari papan ini karena saya memakai `git pull --rebase -X theirs`, yang pada konflik selalu memilih sisi remote dan membuang perubahan lokal tanpa suara. Sekarang saya tidak memakainya lagi; kalau ada konflik, saya selesaikan dengan tangan. Efek sampingnya juga sempat saya salah laporkan: koreksi angka A4 di `docs/optimisation-backlog.md` sebenarnya **utuh** (pola pencarian saya yang salah), jadi tidak ada yang perlu diperbaiki di sana.
-
-**Penghentian run (2026-09-22 13:52):** atas permintaan pemilik, pasangan A-1 PTFE 2,45 GHz dan validasi loss (kasus PTFE lossy) saya hentikan setelah ~107 menit dinding / ~27.100 s CPU per proses tanpa hasil. Proses dimatikan sebagai **satu rantai** (`taskkill /T`), bukan hanya anaknya, supaya skrip induk tidak lanjut ke kasus berikutnya. CPU turun 73 % -> 6 %. Ketiga direktori run ditandai `aborted.json`; **tidak ada angka** yang boleh dikutip dari ketiganya.
-
-### 6b. Diagnosa CI + status nec2 + benchmark #2 (Aksara, 2026-09-22 ~14:20)
-
-**Kegagalan CI pada `0712a10` — dari log Actions, bukan dugaan.** Kedua job **ubuntu gagal**,
-kedua job **windows lolos**. Penyebabnya satu test:
-
-    ERROR: test_run_then_parse (test_nec2_adapter.TestEndToEndWithAFakeEngine)
-      File ".../tests/test_nec2_adapter.py", line 108
-      File ".../openantenna/solvers/nec2.py", line 159, in run
-    PermissionError: [Errno 13] Permission denied: '/tmp/.../fake_nec2.bat'
-    Ran 226 tests -> FAILED (errors=1, skipped=9)
-
-Launcher `fake_nec2.bat` tidak bisa dieksekusi di Linux. Yotta sudah memperbaiki helper-nya
-secara paralel di upstream (`.bat` di Windows, `sh` + `chmod` di POSIX). Saya sempat
-menambahkan test kedua untuk hal yang sama: itu **mubazir** dan menghasilkan dua push merah
-(`d67021e`, `ef8b58a`). Sudah dihapus dengan rentang baris eksplisit, dan **`39b58ac` hijau**
-(diverifikasi lewat API Actions: `conclusion=success`). Pelajaran: periksa upstream dulu
-sebelum menambah test untuk sesuatu yang mungkin sudah ditutup.
-
-**Status nec2 di mesin Aksara: belum terpasang.** Tidak ada `nec2c.exe` di mesin, dan tidak
-ada kompilator C (`gcc`/`clang`/`cl` tidak ada; hanya `make.exe` dari Embarcadero). Artinya
-seluruh verifikasi adapter NEC2 di mesin saya memakai mesin **palsu**; eksekusi nyata hanya di
-mesin Yotta. Rencana: unduh toolchain portabel WinLibs (GitHub releases terjangkau, HTTP 200)
-lalu bangun `KJ7LNW/nec2c` seperti yang Yotta lakukan — tanpa admin.
-
-**Benchmark #2 (TE10) — dua cacat skrip sudah diperbaiki, tetapi masih terblokir.**
-Perbaikan: (a) port z-arah + `edges2grid="xy"` -> `AddRectWaveGuidePort` TE10; (b) dinding PEC
-1 mm di dalam guide -> batas PEC domain, supaya acuan 1499,0 MHz benar-benar cocok dengan
-geometri (sebelumnya lebar efektif 98 mm = f_c 1529,6 MHz, +2,0 % dari acuan 1 %-nya sendiri).
-Bukti kausal: error `CalcVoltageIntegral` 4 -> 0 dan energi medan 0,00e+00 -> terisi.
-Kegagalan yang tersisa bersifat reprodusibel: `FileNotFoundError: .../openems_run/port_ut_2`
-(probe modal tidak merekam) dan run menyentuh cap 200.000 langkah tanpa memenuhi EndCriteria.
-Catatan tambahan dari contoh resmi `tools/openEMS/python/Tutorials/Rect_WaveGuide.py`:
-bidang port harus diberi garis mesh eksplisit.
