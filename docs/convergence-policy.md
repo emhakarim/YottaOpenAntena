@@ -53,3 +53,24 @@ py -3 yotta_tools/parallel_batch.py --preset port-refine --workers 2 --end-crite
 A run that is not on track to satisfy this policy within its budget is **terminated**
 rather than left to burn CPU. The five runs killed on 2026-09-22 had consumed ~4 h of CPU
 without producing an acceptable number — that is the case this rule exists for.
+
+## Applying the policy mechanically
+
+The rule above used to be applied by hand, in prose - exactly the step that quietly changes meaning
+between two reports. `yotta_tools/two_setting_verdict.py` now applies it to a pair of run directories
+and prints *why*:
+
+```
+python -m yotta_tools.two_setting_verdict --a runs/run_setting_a --b runs/run_setting_b --json verdict.json
+```
+
+It reads the resonance from `s11.csv`, the convergence statement from the run's own
+`run.stdout.log` ("End criteria reached after N" versus "Max. number of timesteps was reached"),
+rejects a minimum within `EDGE_STEPS` of either end of the sweep, and only then applies the 0.2 % test.
+A rejected experiment exits **0**: a rejection is a valid outcome, and a tool that failed on one would
+tempt callers to ignore its output.
+
+Cross-check against the worked rejection: on the K-1 pair (`port_refine` on/off at 1e-3/60k) the tool
+reproduces the hand-written verdict - `rejected`, 29.96 % by band-mean, with **both** settings' minima
+on a sweep edge (2.8170 GHz at the top of the band, 2.0830 GHz at the bottom) and both runs
+cap-limited at 60000 timesteps. Four reasons, no number quotable.
