@@ -7,6 +7,7 @@ GUI cannot drift away from the scriptable core.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -38,6 +39,8 @@ from PySide6.QtWidgets import (
 
 from ..geometry.array import array_factor_plane, build_array_layout
 from ..geometry.patch import synthesize_patch
+from ..postproc.farfield import read_summary as read_farfield_summary
+from ..postproc.farfield import summary_text as farfield_summary_text
 from ..materials.library import get_material, list_material_names
 from ..materials.mixing import (
     compare_models,
@@ -304,16 +307,77 @@ class DesignTab(QWidget):
 
         if self.figure is None:
             return  # matplotlib missing; the numeric summary above is still shown
-        axes = self.figure.add_subplot(111)
-        axes.clear()
+
+        # Two panels: what the array *looks like* to scale, and what it radiates.
+        # A single array-factor curve told the user nothing about the geometry it came
+        # from, which is the one thing a layout preview is for.
+        self.figure.clear()
+        geometry_axes = self.figure.add_subplot(121)
+        self._draw_geometry(geometry_axes, design, layout)
+
+        factor_axes = self.figure.add_subplot(122)
         samples = array_factor_plane(layout.positions_m, frequency, n_points=361, plane="e")
-        axes.plot([a for a, _ in samples], [v for _, v in samples])
-        axes.set_title(f"Array factor, E-plane, {self.nx.value()}x{self.ny.value()} @ {self.frequency.value():g} GHz")
-        axes.set_xlabel("theta [deg]")
-        axes.set_ylabel("normalised [dB]")
-        axes.set_ylim(-40, 2)
-        axes.grid(True)
+        factor_axes.plot([a for a, _ in samples], [v for _, v in samples])
+        factor_axes.set_title(
+            f"Array factor, E-plane, {self.nx.value()}x{self.ny.value()} @ "
+            f"{self.frequency.value():g} GHz"
+        )
+        factor_axes.set_xlabel("theta [deg]")
+        factor_axes.set_ylabel("normalised [dB]")
+        factor_axes.set_ylim(-40, 2)
+        factor_axes.grid(True)
         self.canvas.draw_idle()
+
+    @staticmethod
+    def _draw_geometry(axes, design, layout) -> None:
+        """Draw the array to scale in millimetres: one rectangle per patch element.
+
+        The feed inset is *labelled*, not drawn as a point: the synthesised inset is a
+        transmission-line estimate, and drawing an exact feed point would imply a
+        precision the model does not have yet (the model still realises a probe).
+        """
+        from matplotlib.patches import Rectangle
+
+        width_mm = design.width_m * 1e3
+        length_mm = design.length_m * 1e3
+        for x_m, y_m in layout.positions_m:
+            axes.add_patch(
+                Rectangle(
+                    (x_m * 1e3 - width_mm / 2.0, y_m * 1e3 - length_mm / 2.0),
+                    width_mm,
+                    length_mm,
+                    fill=False,
+                    linewidth=0.9,
+                )
+            )
+        axes.add_patch(
+            Rectangle(
+                (-layout.size_x_m * 1e3 / 2.0, -layout.size_y_m * 1e3 / 2.0),
+                layout.size_x_m * 1e3,
+                layout.size_y_m * 1e3,
+                fill=False,
+                linestyle=":",
+                linewidth=0.7,
+            )
+        )
+        reach = max(layout.size_x_m, layout.size_y_m) * 1e3
+        axes.set_xlim(-reach, reach)
+        axes.set_ylim(-reach, reach)
+        axes.set_aspect("equal")
+        axes.set_title(f"Layout: {layout.element_count} patches, {width_mm:.2f} x {length_mm:.2f} mm")
+        axes.set_xlabel("x [mm]")
+        axes.set_ylabel("y [mm]")
+        axes.grid(True, linewidth=0.4)
+        inset = getattr(design, "inset_depth_m", None)
+        if inset:
+            axes.text(
+                0.02,
+                0.98,
+                f"feed: {design.feed_mode}, inset {inset * 1e3:.3f} mm (estimate)",
+                transform=axes.transAxes,
+                va="top",
+                fontsize=7,
+            )
 
 
 class SimulateTab(QWidget):
@@ -553,6 +617,9 @@ class ResultsTab(QWidget):
             fractional = trace.fractional_bandwidth(-10.0)
             if fractional:
                 lines.append(f"fractional BW     : {fractional * 100:.2f} %")
+            lines.extend(
+                self._run_details(candidate if candidate.is_dir() else candidate.parent)
+            )
             lines.append("")
             lines.append(
                 "Model output, not a measurement. See run_manifest.json for the mesh and "
@@ -568,15 +635,136 @@ class ResultsTab(QWidget):
 
         if self.figure is None:
             return  # matplotlib missing; the metrics above are still shown
-        axes = self.figure.add_subplot(111)
-        axes.clear()
+        self.figure.clear()
+        axes = self.figure.add_subplot(121)
         axes.plot([f / 1e9 for f in trace.frequencies_hz], trace.db())
         axes.axhline(-10.0, linestyle="--", linewidth=0.8)
         axes.set_xlabel("frequency [GHz]")
         axes.set_ylabel("|S11| [dB]")
         axes.set_title("Input matching")
         axes.grid(True)
+
+        # A run with NF2FF enabled carries a far-field cut too; showing both in one place
+        # is the point of a "results" tab (previously the far-field was invisible unless
+        # the user opened the CSV by hand).
+        pattern = self._pattern_cut(candidate if candidate.is_dir() else candidate.parent)
+        if pattern is not None:
+            theta_deg, gain_db, phi_deg = pattern
+            pattern_axes = self.figure.add_subplot(122, projection="polar")
+            pattern_axes.plot([t * 3.141592653589793 / 180.0 for t in theta_deg], gain_db)
+            pattern_axes.set_title(f"Far field, phi = {phi_deg:g} deg", fontsize=9)
+            pattern_axes.set_theta_zero_location("N")
+            pattern_axes.set_rlabel_position(135)
+            pattern_axes.grid(True, linewidth=0.4)
         self.canvas.draw_idle()
+
+    @staticmethod
+    def _run_details(run_dir: Path) -> list[str]:
+        """Read the run's own provenance and far-field summary, if the files exist.
+
+        Everything here comes from files the run wrote itself, so the panel says exactly
+        what a reviewed number would need: mesh, substrate, the A/B knob settings, the stop
+        criteria, and whether the run converged.
+        """
+        lines: list[str] = []
+        manifest = run_dir / "run_manifest.json"
+        if manifest.exists():
+            try:
+                data = json.loads(manifest.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                data = {}
+            substrate = data.get("substrate") or {}
+            mesh = data.get("mesh") or {}
+            if substrate or mesh:
+                lines.append("")
+                lines.append(
+                    f"substrate         : {substrate.get('material', '?')} "
+                    f"eps_r {substrate.get('epsilon_r', '?')}, "
+                    f"h {float(substrate.get('thickness_m') or 0.0) * 1e3:.2f} mm"
+                )
+                lines.append(
+                    f"mesh              : {mesh.get('cells_per_wavelength', '?')} "
+                    f"cells/wavelength, boundary {data.get('boundary', '?')}, "
+                    f"pml {data.get('pml_cells', '?')}"
+                )
+            if any(key in data for key in ("port_refine", "metal_edge_snapping", "nf2ff")):
+                lines.append(
+                    f"A/B knobs         : port_refine {data.get('port_refine')}, "
+                    f"edge_snapping {data.get('metal_edge_snapping')}, "
+                    f"nf2ff {data.get('nf2ff')}"
+                )
+            if "end_criteria" in data or "max_timesteps" in data:
+                lines.append(
+                    f"stop criteria     : end_criteria {data.get('end_criteria')}, "
+                    f"cap {data.get('max_timesteps')} steps"
+                )
+        summary = run_dir / "run_summary.json"
+        if summary.exists():
+            try:
+                data = json.loads(summary.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                data = {}
+            if "converged" in data or "timesteps" in data:
+                lines.append(
+                    f"convergence       : converged={data.get('converged', 'not recorded')}, "
+                    f"timesteps={data.get('timesteps', 'not recorded')}"
+                )
+        far_field = run_dir / "nf2ff_summary.csv"
+        if far_field.exists():
+            try:
+                lines.append("")
+                lines.append(farfield_summary_text(read_farfield_summary(far_field)))
+            except (OSError, ValueError) as exc:
+                lines.append(f"far field         : tidak bisa dibaca ({exc})")
+        progress = run_dir / "progress.json"
+        if progress.exists():
+            try:
+                data = json.loads(progress.read_text(encoding="utf-8"))
+                lines.append("")
+                lines.append(f"progress (last)   : {data.get('bar', '?')}")
+            except (OSError, ValueError):
+                pass
+        return lines
+
+    @staticmethod
+    def _pattern_cut(run_dir: Path):
+        """Return the most-sampled phi cut of nf2ff_pattern.csv as (theta_deg, dB, phi).
+
+        The file is a full theta/phi grid; plotting all of it as a single curve would be
+        meaningless, so the cut with the most samples is used (the principal plane).
+        """
+        import csv
+        import math
+        from collections import defaultdict
+
+        path = run_dir / "nf2ff_pattern.csv"
+        if not path.exists():
+            return None
+        cuts: dict[float, list[tuple[float, float]]] = defaultdict(list)
+        try:
+            with path.open(encoding="utf-8", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    try:
+                        theta = float(row["theta_deg"])
+                        phi = float(row["phi_deg"])
+                        magnitude = abs(float(row["e_norm"]))
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    cuts[phi].append((theta, magnitude))
+        except OSError:
+            return None
+        if not cuts:
+            return None
+        phi_deg, samples = max(cuts.items(), key=lambda item: len(item[1]))
+        samples.sort()
+        peak = max((magnitude for _, magnitude in samples), default=0.0)
+        if peak <= 0.0:
+            return None
+        return (
+            [theta for theta, _ in samples],
+            [20.0 * math.log10(max(magnitude / peak, 1e-6)) for _, magnitude in samples],
+            phi_deg,
+        )
 
 
 class MainWindow(QMainWindow):

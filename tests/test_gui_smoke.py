@@ -134,5 +134,87 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_design_tab_shows_a_layout_preview_next_to_the_array_factor(self):
+        """G-8: the plot must show the geometry it describes, not only a curve."""
+        window = self._window()
+        design_tab = window.centralWidget().widget(1)
+        if design_tab.figure is None:
+            self.skipTest("matplotlib is not installed")
+        design_tab.synthesise()
+        axes = design_tab.figure.axes
+        self.assertGreaterEqual(len(axes), 2, "expected a geometry panel and a factor panel")
+        geometry = axes[0]
+        # 4x4 patches plus the substrate outline
+        self.assertGreaterEqual(len(geometry.patches), 17)
+        self.assertEqual(geometry.get_aspect(), 1.0)
+        window.close()
+
+    def test_results_tab_reports_provenance_and_far_field(self):
+        """The run's own files must be summarised: settings, convergence, far field."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        window = self._window()
+        results_tab = window.centralWidget().widget(3)
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            (run / "s11.csv").write_text(
+                "freq_hz,s11_re,s11_im\n"
+                "2.40e9,-0.30,0.10\n"
+                "2.45e9,-0.02,0.01\n"
+                "2.50e9,-0.35,0.12\n",
+                encoding="utf-8",
+            )
+            (run / "run_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "substrate": {"material": "PTFE", "epsilon_r": 2.1, "thickness_m": 0.0016},
+                        "mesh": {"cells_per_wavelength": 15},
+                        "boundary": "PML",
+                        "pml_cells": 8,
+                        "port_refine": True,
+                        "metal_edge_snapping": True,
+                        "nf2ff": False,
+                        "end_criteria": 1e-4,
+                        "max_timesteps": 400000,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (run / "run_summary.json").write_text(
+                json.dumps({"converged": True, "timesteps": 24180}), encoding="utf-8"
+            )
+            (run / "nf2ff_summary.csv").write_text(
+                "freq_hz,directivity_lin,directivity_dbi,prad_w,p_acc_w,eta_rad\n"
+                "2.45e9,4.145114,6.175364,1.46e-29,2.66e-29,0.548602\n",
+                encoding="utf-8",
+            )
+            (run / "nf2ff_pattern.csv").write_text(
+                "theta_deg,phi_deg,e_norm\n"
+                "0.0,0.0,0.1\n"
+                "90.0,0.0,1.0\n"
+                "180.0,0.0,0.2\n"
+                "0.0,90.0,0.3\n"
+                "90.0,90.0,0.7\n",
+                encoding="utf-8",
+            )
+            results_tab.path.setText(str(run))
+            results_tab.load()
+            text = results_tab.metrics.toPlainText()
+            if results_tab.figure is not None:
+                self.assertTrue(
+                    any(getattr(axis, "name", "") == "polar" for axis in results_tab.figure.axes),
+                    "a pattern CSV must produce a polar cut",
+                )
+
+        self.assertIn("resonance", text)
+        self.assertIn("port_refine True", text)
+        self.assertIn("converged=True", text)
+        self.assertIn("24180", text)
+        self.assertIn("substrate", text)
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()
