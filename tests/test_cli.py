@@ -150,5 +150,36 @@ class TestSweepDryRun(unittest.TestCase):
             self.assertIn("error", result.stderr.lower())
 
 
+class TestNf2ffDefault(unittest.TestCase):
+    """A2 / R-7: the near-to-far-field box is opt-in through the real CLI too.
+
+    It costs every run (a far-field pass, and 12 near-field HDF5 files before the
+    DFT-only recording change) for data that S11 work never reads.
+    """
+
+    def test_gen_openems_leaves_nf2ff_off_unless_asked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_cli(
+                "gen-openems",
+                "--freq", "2.45e9", "--material", "PTFE", "--h", "0.0016",
+                "--start", "2.0e9", "--stop", "3.0e9", "--points", "21",
+                "--out", tmp,
+            )
+            script = (Path(tmp) / "sim.py").read_text(encoding="utf-8")
+            self.assertIn("NF2FF_ENABLED = False", script)
+
+    def test_gen_openems_enables_nf2ff_when_asked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_cli(
+                "gen-openems",
+                "--freq", "2.45e9", "--material", "PTFE", "--h", "0.0016",
+                "--start", "2.0e9", "--stop", "3.0e9", "--points", "21",
+                "--nf2ff",
+                "--out", tmp,
+            )
+            script = (Path(tmp) / "sim.py").read_text(encoding="utf-8")
+            self.assertIn("NF2FF_ENABLED = True", script)
+
+
 if __name__ == "__main__":
     unittest.main()

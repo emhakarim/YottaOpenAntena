@@ -458,7 +458,11 @@ class OpenEMSSolver(SolverAdapter):
         pml_cells: int = 8,
         mesh_smoothing_ratio: float = 1.4,
         metal_edge_snapping: bool = True,
-        nf2ff: bool = True,
+        # Off by default (backlog A2 / review item R-7): the box adds a far-field pass to
+        # every run -- and before the DFT-only recording change it wrote 12 near-field
+        # HDF5 files during the FDTD loop -- for data that S11 work never reads.  Opt in
+        # with ``nf2ff=True`` (CLI: ``--nf2ff``); the manifest always records the setting.
+        nf2ff: bool = False,
         nf2ff_frequencies: int = 5,
         unit_cell: bool = False,
         numthreads: int = 0,

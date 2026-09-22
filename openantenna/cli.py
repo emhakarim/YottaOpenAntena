@@ -520,8 +520,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--nf2ff",
         dest="nf2ff",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="record a near-to-far-field box and dump directivity + radiation efficiency (A-2)",
+        default=False,
+        help=(
+            "record a near-to-far-field box and dump directivity + radiation efficiency "
+            "(A-2).  Off by default: the box adds a far-field pass to every run (A2)"
+        ),
     )
     p.add_argument(
         "--unit-cell",
@@ -615,7 +618,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--nf2ff",
         dest="nf2ff",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=False,
     )
     p.add_argument("--numthreads", type=int, default=0, metavar="N")
     p.add_argument(

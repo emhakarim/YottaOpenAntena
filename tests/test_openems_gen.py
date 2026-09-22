@@ -370,5 +370,23 @@ class TestResultParsing(unittest.TestCase):
                 OpenEMSSolver().parse_results(tmp)
 
 
+class TestNf2ffDefault(unittest.TestCase):
+    """A2 / R-7: NF2FF is opt-in because it costs every run and S11 never reads it."""
+
+    def test_library_default_is_off(self):
+        self.assertFalse(OpenEMSSolver().nf2ff)
+
+    def test_default_script_omits_the_box(self):
+        script = OpenEMSSolver().render_script(make_project())
+        self.assertIn("NF2FF_ENABLED = False", script)
+
+    def test_explicit_enable_still_works(self):
+        solver = OpenEMSSolver(nf2ff=True, nf2ff_frequencies=3)
+        self.assertTrue(solver.nf2ff)
+        script = solver.render_script(make_project())
+        self.assertIn("NF2FF_ENABLED = True", script)
+        self.assertIn("NF2FF_FREQS = 3", script)
+
+
 if __name__ == "__main__":
     unittest.main()

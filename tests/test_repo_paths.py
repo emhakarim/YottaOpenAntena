@@ -31,6 +31,13 @@ REPO_PATH_SCRIPTS = [p for p in SCRIPTS if "sys.path.insert(0, str(ROOT))" in _t
 #: scripts written to be executed (not imported), i.e. with a main() guard
 GUARDED_SCRIPTS = [p for p in SCRIPTS if 'if __name__ == "__main__"' in _text(p)]
 
+#: Third-party packages a script may legitimately use at module scope.  A *missing* one
+#: means "this environment cannot run that script", not "this script requires the
+#: solver" -- on a clean CI runner numpy is absent, and this test used to fail there.
+#: The invariant it protects (importing a script never needs openEMS) is unchanged:
+#: openEMS/CSXCAD are deliberately NOT in this set, so importing them still fails.
+OPTIONAL_IMPORTS = frozenset({"numpy", "scipy", "matplotlib", "pyopencl", "PySide6", "skrf"})
+
 
 class TestResearchScriptsArePortable(unittest.TestCase):
     def test_the_scripts_are_actually_there(self):
@@ -90,6 +97,16 @@ class TestScriptsDoNotRequireTheSolverToImport(unittest.TestCase):
                 spec.loader.exec_module(module)
             except SystemExit:  # pragma: no cover - a script that exits on import
                 self.fail(f"{path.name} ran at import time instead of under main()")
+            except ImportError as exc:
+                missing = (getattr(exc, "name", None) or "").split(".")[0]
+                if not missing:
+                    # a hand-raised ImportError need not carry .name, so fall back to the
+                    # message the import system writes: "No module named 'x'"
+                    match = re.search(r"No module named '([^'.]+)", str(exc))
+                    missing = match.group(1) if match else ""
+                if missing in OPTIONAL_IMPORTS:
+                    continue  # optional dependency absent: nothing to assert about it here
+                raise
             self.assertTrue(
                 hasattr(module, "ROOT") or hasattr(module, "main"),
                 f"{path.name} exposes neither ROOT nor main()",

@@ -1,0 +1,37 @@
+name: tests
+
+# C2 from docs/optimisation-backlog.md: the suite is stdlib-only, so it runs anywhere.
+# Two static test suites once passed while every generated model was broken (the
+# numthreads knob), which is exactly what this job is here to catch.
+#
+# Nothing here needs openEMS, PySide6, pyopencl or numpy: those tests skip cleanly
+# when the optional dependency is missing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  suite:
+    name: ${{ matrix.os }} / python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Report the interpreter
+        run: python -VV
+      - name: Run the test suite (no solver, no optional dependencies)
+        env:
+          # `python -m` already puts the working directory on sys.path; setting this
+          # makes the requirement explicit instead of implicit.
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m unittest discover -s tests -v
