@@ -1,13 +1,14 @@
-"""Loss modelling where the engine cannot do dispersion (Phase 2, item 1).
+﻿"""Loss modelling where the engine cannot do dispersion (Phase 2, item 1).
 
-The installed CSXCAD exposes **no** dispersive-material API - verified by introspection:
+CORRECTION (this module was written on a wrong premise): the installed CSXCAD *does*
+support dispersive materials.  The classes live in the ``CSXCAD.CSProperties`` submodule, and
+``openantenna/solvers/openems.py`` now emits a native Debye substrate
+(``loss_model="debye"``; see ``docs/dispersive-substrates.md``).  Prefer that path when the
+engine supports dispersion - the machinery below stays for engines that only offer a constant
+conductivity, and for quantifying what such an approximation costs.
 
-    >>> [x for x in dir(CSXCAD) if 'ebye' in x or 'orentz' in x]   -> []
-
-so a single-pole Debye material cannot be handed to the solver, no matter how correct the
-model in ``openantenna.materials.dispersion`` is.  The engine's loss knob is a **constant**
-conductivity ``kappa`` [S/m], and the model script already converts a reference tan(delta)
-into it:
+For an engine whose only loss knob is a **constant** conductivity ``kappa`` [S/m] (the model
+script converts a reference tan(delta) into it):
 
     kappa = tan_delta * 2*pi*f_ref * eps0 * eps_r          (see openantenna/solvers/openems.py)
 
