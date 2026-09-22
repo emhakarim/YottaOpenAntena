@@ -1,4 +1,4 @@
-"""NEC2 solver adapter — the second solver family (Phase 2 #6).
+﻿"""NEC2 solver adapter — the second solver family (Phase 2 #6).
 
 Why this exists: the project's claim is that the *neutral model* is solver-independent.
 openEMS (FDTD, planar/dielectric) is one adapter; a wire antenna needs a method-of-moments
@@ -252,5 +252,8 @@ class Nec2Solver(SolverAdapter):
 
     @staticmethod
     def _vswr(z: complex, z0: float) -> float:
+        """VSWR of ``z`` against ``z0``; infinite for a short (z = -z0) or worse."""
+        if abs(z + z0) < 1e-12:
+            return float("inf")
         gamma = abs((z - z0) / (z + z0))
         return float("inf") if gamma >= 1.0 else (1.0 + gamma) / (1.0 - gamma)
