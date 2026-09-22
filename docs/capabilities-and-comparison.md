@@ -1,4 +1,4 @@
-# Capabilities, and how this compares
+﻿# Capabilities, and how this compares
 
 This document states what OpenAntenna Studio can actually do today, what it
 cannot, and how it relates to other open-source tools and to the published

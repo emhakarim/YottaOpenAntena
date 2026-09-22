@@ -1,4 +1,4 @@
-"""A/B test for the port-region mesh refinement (review item A4 / task A-1).
+﻿"""A/B test for the port-region mesh refinement (review item A4 / task A-1).
 
 Yotta added ``port_refine=True``: the mesh is refined in a small box around the
 lumped port.  Refining near a feed is not automatically an improvement - it changes
@@ -105,6 +105,9 @@ def run_case(spec: dict, port_refine: bool) -> dict:
         ground_margin_lambda=spec["ground_margin_lambda"],
         loss_model="kappa",
         port_refine=port_refine,
+        # This A/B compares resonances, so the far-field recording is off: with the
+        # NF2FF box enabled each case takes ~10x longer for data this test never reads.
+        nf2ff=False,
     )
     tag = f"portrefine_{spec['name']}_on" if port_refine else f"portrefine_{spec['name']}_off"
     rundir = ROOT / "runs" / tag

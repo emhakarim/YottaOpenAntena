@@ -1,4 +1,4 @@
-"""openEMS / CSXCAD adapter.
+﻿"""openEMS / CSXCAD adapter.
 
 PHASE 1 SCOPE - READ THIS FIRST
 -------------------------------
@@ -325,12 +325,18 @@ print(
 # have, and openEMS then raises "not enough lines in some direction".  The box is
 # placed just outside the ground plane and inside the absorber.
 NF_CLEAR = 0.05 * lambda_min
+# Only the DFT at these frequencies is recorded.  Without the ``frequency`` argument
+# the box records the raw time series on all six faces, which turns a minutes-long
+# run into an hours-long, I/O-bound one (observed: a single patch case still writing
+# nf2ff_*.h5 after 26 minutes).
+NF_FREQS = np.linspace(F_MIN, F_MAX, NF2FF_FREQS)
 nf2ff = None
 if NF2FF_ENABLED:
     nf2ff = FDTD.CreateNF2FFBox(
         name="nf2ff",
         start=[-GROUND_X / 2.0 - NF_CLEAR, -GROUND_Y / 2.0 - NF_CLEAR, -H_TOTAL - NF_CLEAR],
         stop=[GROUND_X / 2.0 + NF_CLEAR, GROUND_Y / 2.0 + NF_CLEAR, DOM_Z_TOP - NF_CLEAR],
+        frequency=NF_FREQS,
     )
     print(
         "NF2FF: box x=[%.1f, %.1f] y=[%.1f, %.1f] z=[%.1f, %.1f] mm"
@@ -374,7 +380,7 @@ def main():
 
     if nf2ff is not None:
         # --- far field -------------------------------------------------------
-        far_freqs = np.linspace(F_MIN, F_MAX, NF2FF_FREQS)
+        far_freqs = NF_FREQS  # must be the same array the box was created with
         theta_deg = np.arange(0.0, 181.0, 2.0)
         phi_deg = np.arange(0.0, 361.0, 5.0)
         print(

@@ -1,4 +1,4 @@
-"""Synthesis-to-tuning loop for the rectangular patch.
+﻿"""Synthesis-to-tuning loop for the rectangular patch.
 
 Why this exists: the analytic synthesis (transmission-line model) lands several
 percent below the target frequency on this geometry, and the calibration batch

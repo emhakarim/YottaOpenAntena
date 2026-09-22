@@ -1,4 +1,4 @@
-"""A/B test of model-construction settings on the tutorial geometry.
+﻿"""A/B test of model-construction settings on the tutorial geometry.
 
 The separating experiment showed that our generator lands 4.3 % below the
 openEMS-shipped tutorial model on identical geometry, so the bias is in our model

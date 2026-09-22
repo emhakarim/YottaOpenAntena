@@ -1,4 +1,4 @@
-"""Inset (feed) tuning at the length-converged geometry.
+﻿"""Inset (feed) tuning at the length-converged geometry.
 
 Why a second loop: ``auto_tune.py`` fixes the *resonance* by correcting the patch
 length, but the *match* is a separate question.  The analytic inset formula

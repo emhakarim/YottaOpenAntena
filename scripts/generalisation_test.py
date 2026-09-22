@@ -1,4 +1,4 @@
-"""Generalisation test: is the model-construction bias a constant factor?
+﻿"""Generalisation test: is the model-construction bias a constant factor?
 
 Review item 13.4 (Yotta): the construction bias measured on one geometry does not
 tell us whether it is a constant that can be calibrated once, or a

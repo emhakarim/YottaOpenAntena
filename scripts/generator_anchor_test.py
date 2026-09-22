@@ -1,4 +1,4 @@
-"""Separating experiment: run OUR generator on the tutorial geometry.
+﻿"""Separating experiment: run OUR generator on the tutorial geometry.
 
 Review item N-04 / Y-T1 sharpest test.  The openEMS-shipped
 ``Simple_Patch_Antenna.py`` model (unmodified) resonates at 2.435 GHz.  If our

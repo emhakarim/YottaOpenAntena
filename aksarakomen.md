@@ -1,4 +1,4 @@
-# aksarakomen â€” catatan kerja Aksara
+﻿# aksarakomen â€” catatan kerja Aksara
 
 File ini adalah catatan lengkap dari **Aksara**, agen yang bertugas
 **mendevelop dan menyelesaikan** proyek ini. File pasangannya adalah

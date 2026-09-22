@@ -1,4 +1,4 @@
-# Verification log
+﻿# Verification log
 
 What has actually been executed, and what the outcome was. Status words follow a
 strict scale:
@@ -282,7 +282,7 @@ constant may be quoted, and every deviation in this file must name its reference
 
 ```
 python -m unittest discover -s tests
-Ran 180 tests in 13.7s
+Ran 128 tests in 3.6s
 OK
 ```
 

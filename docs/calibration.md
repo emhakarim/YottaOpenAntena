@@ -86,7 +86,7 @@ recipe*; it must not be reused blindly for another design.
 | "The bias is not explained by mesh, feed loading or the air domain" | **stands**: each was varied and none moved the resonance materially |
 | "The 7.8 % offset is mostly metal-edge snapping" | **half of it** (4.31 % -> 2.26 % on that recipe) |
 | "The bias is roughly constant per recipe, -4.1 to -5.0 %" | **withdrawn**: it mixed two reference types; with one reference the spread is 2.7 points |
-| "port_refine breaks the model" | **withdrawn**: the failures were `WinError 32` file locks caused by an orphaned child process of an earlier launch still holding the run directory (killing a launcher does not kill its child). Port refinement itself is fine - see section 3. |
+| "port_refine breaks the model" | **withdrawn**: that was a Windows file lock from two concurrent harness instances, not the feature |
 
 ## 7. How to reproduce any row here
 
