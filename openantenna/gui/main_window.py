@@ -43,12 +43,17 @@ from ..postproc.farfield import read_summary as read_farfield_summary
 from ..postproc.farfield import summary_text as farfield_summary_text
 from ..materials.library import get_material, list_material_names
 from ..materials.mixing import (
+    bruggeman,
     compare_models,
     estimate_effective_tan_delta,
     format_comparison_table,
+    lichtenecker,
+    maxwell_garnett,
     maxwell_wagner_warning,
     percolation_warning,
     quasi_static_warning,
+    wiener_lower,
+    wiener_upper,
 )
 from ..model.project import (
     ArrayConfig,
@@ -138,7 +143,63 @@ class MaterialTab(QWidget):
         mix_layout.addLayout(right)
         layout.addWidget(mix_group)
 
+        try:
+            self.figure, self.canvas = _plot_canvas()
+            layout.addWidget(self.canvas)
+        except Exception as exc:  # matplotlib is optional
+            self.figure = None
+            self.canvas = None
+            layout.addWidget(QLabel(f"Plotting unavailable: {exc}"))
+
         self.reload()
+
+    def _plot_sensitivity(self) -> None:
+        """ε_eff against filler loading: the three models, the Wiener bounds, the point.
+
+        The bounds matter as much as the curves: a candidate result outside them is not a
+        mixing-rule prediction at all, it is an error.  The operating point of the form is
+        marked so the plot answers "where am I" as well as "what if".
+        """
+        if self.figure is None:
+            return
+        matrix = self.matrix.value()
+        filler = self.filler.value()
+        fractions = [0.02 * step for step in range(31)]  # 0.00 .. 0.60
+        models = {
+            "Lichtenecker": lichtenecker,
+            "Maxwell-Garnett": maxwell_garnett,
+            "Bruggeman": bruggeman,
+        }
+        curves: dict[str, list[float]] = {name: [] for name in models}
+        upper: list[float] = []
+        lower: list[float] = []
+        for vf in fractions:
+            for name, function in models.items():
+                try:
+                    curves[name].append(float(complex(function(matrix, filler, vf)).real))
+                except Exception:
+                    curves[name].append(float("nan"))
+            try:
+                upper.append(float(complex(wiener_upper(matrix, filler, vf)).real))
+                lower.append(float(complex(wiener_lower(matrix, filler, vf)).real))
+            except Exception:
+                upper.append(float("nan"))
+                lower.append(float("nan"))
+
+        self.figure.clear()
+        axes = self.figure.add_subplot(111)
+        axes.fill_between(fractions, lower, upper, alpha=0.15, label="Wiener bounds")
+        for name, values in curves.items():
+            axes.plot(fractions, values, linewidth=1.2, label=name)
+        axes.axvline(
+            self.volume_fraction.value(), color="0.4", linestyle="--", linewidth=0.8
+        )
+        axes.set_xlabel("filler volume fraction")
+        axes.set_ylabel("effective eps_r")
+        axes.set_title(f"Composite sensitivity (matrix {matrix:g}, filler {filler:g})")
+        axes.grid(True, linewidth=0.4)
+        axes.legend(fontsize=7)
+        self.canvas.draw_idle()
 
     def reload(self) -> None:
         names = list_material_names()
@@ -157,6 +218,10 @@ class MaterialTab(QWidget):
                 self.table.setItem(row, column, QTableWidgetItem(value))
 
     def evaluate(self) -> None:
+        try:
+            self._plot_sensitivity()
+        except Exception as exc:  # a plotting problem must not withhold the numbers
+            self.mix_output.append(f"plot failed: {type(exc).__name__}: {exc}")
         matrix = self.matrix.value()
         filler = self.filler.value()
         vf = self.volume_fraction.value()
@@ -239,7 +304,15 @@ class DesignTab(QWidget):
 
         button = QPushButton("Synthesise")
         button.clicked.connect(self.synthesise)
-        layout.addWidget(button)
+        row = QHBoxLayout()
+        row.addWidget(button)
+        save = QPushButton("Save project ...")
+        save.clicked.connect(self.save_project)
+        load = QPushButton("Load project ...")
+        load.clicked.connect(self.load_project)
+        row.addWidget(save)
+        row.addWidget(load)
+        layout.addLayout(row)
 
         self.summary = QTextEdit()
         self.summary.setReadOnly(True)
@@ -275,6 +348,53 @@ class DesignTab(QWidget):
             ),
             sweep=FrequencySweep.fractional(frequency, 0.15, points=201),
         )
+
+    def save_project(self, target: str | None = None) -> None:
+        """Write the neutral project model to JSON: the same document the CLI reads.
+
+        ``target`` is optional so a round-trip can be tested without a file dialog.
+        """
+        if not target:
+            target, _ = QFileDialog.getSaveFileName(
+                self, "Save project", "project.json", "JSON (*.json)"
+            )
+            if not target:
+                return
+        try:
+            payload = self.current_project().to_dict()
+            Path(target).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            self.summary.append(f"saved project: {target}")
+        except Exception as exc:
+            self.summary.append(f"save failed: {type(exc).__name__}: {exc}")
+
+    def load_project(self, source: str | None = None) -> None:
+        """Read a project document back into the widgets, then re-synthesise."""
+        if not source:
+            source, _ = QFileDialog.getOpenFileName(
+                self, "Load project", "project.json", "JSON (*.json)"
+            )
+            if not source:
+                return
+        try:
+            data = json.loads(Path(source).read_text(encoding="utf-8"))
+            project = Project.from_dict(data)
+            layer = project.substrate.layers[0]
+        except Exception as exc:
+            self.summary.append(f"load failed: {type(exc).__name__}: {exc}")
+            return
+        # A material that is not in the combo (e.g. a run-specific name such as
+        # "ab-ptfe245") is left alone rather than silently replaced by the first entry.
+        if self.material.findText(layer.material) >= 0:
+            self.material.setCurrentText(layer.material)
+        self.height.setValue(layer.thickness_m * 1e3)
+        self.feed.setCurrentText(project.patch.feed_mode)
+        self.nx.setValue(project.array.nx)
+        self.ny.setValue(project.array.ny)
+        self.spacing.setValue(project.array.spacing_x_lambda0)
+        self.frequency.setValue(0.5 * (project.sweep.start_hz + project.sweep.stop_hz) / 1e9)
+        self.synthesise()
+        # after synthesise(), which rewrites the panel: the note must survive it
+        self.summary.append(f"loaded project: {source}")
 
     def synthesise(self) -> None:
         frequency = self.frequency.value() * 1e9

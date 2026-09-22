@@ -300,5 +300,51 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_material_tab_plots_the_sensitivity_of_the_mixture(self):
+        """The composite explorer must show the models *and* the Wiener bounds."""
+        window = self._window()
+        material_tab = window.centralWidget().widget(0)
+        if material_tab.figure is None:
+            self.skipTest("matplotlib is not installed")
+        material_tab.evaluate()
+        axes = material_tab.figure.axes[0]
+        # three model curves plus the operating-point marker
+        self.assertGreaterEqual(len(axes.lines), 4)
+        self.assertIsNotNone(axes.get_legend())
+        window.close()
+
+    def test_design_tab_round_trips_a_project_document(self):
+        """Save/load uses the neutral model, so the CLI and the GUI share one document."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        window = self._window()
+        design_tab = window.centralWidget().widget(1)
+        design_tab.nx.setValue(6)
+        design_tab.ny.setValue(3)
+        design_tab.spacing.setValue(0.65)
+        design_tab.frequency.setValue(5.8)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "p.json"
+            design_tab.save_project(str(target))
+            payload = json.loads(target.read_text(encoding="utf-8"))
+            self.assertEqual(payload["kind"], "openantenna.project")
+            self.assertEqual(payload["array"]["nx"], 6)
+
+            design_tab.nx.setValue(2)
+            design_tab.ny.setValue(2)
+            design_tab.spacing.setValue(0.3)
+            design_tab.frequency.setValue(1.0)
+            design_tab.load_project(str(target))
+
+        self.assertEqual(design_tab.nx.value(), 6)
+        self.assertEqual(design_tab.ny.value(), 3)
+        self.assertAlmostEqual(design_tab.spacing.value(), 0.65, places=3)
+        self.assertAlmostEqual(design_tab.frequency.value(), 5.8, places=3)
+        self.assertIn("loaded project", design_tab.summary.toPlainText())
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()
