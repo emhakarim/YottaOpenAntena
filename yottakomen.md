@@ -1986,3 +1986,39 @@ Karena angka ringan di atas tidak sah, saya jalankan ulang **kedua arm `port_ref
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-22 (verifikasi + batch pertama). A2/C2 terverifikasi (203 test), mekanisme paralel terbukti (CPU 18 % → 74 %), dan dua angka yang tidak layak dikutip saya tolak sendiri sebelum orang lain menemukannya.*
+
+---
+
+## 41. Sinkronisasi 2026-09-22 16:31 (+07) - head `d8a2a87b`, suite 305 lulus
+
+**Aturan sinkronisasi yang kuadopsi (setelah insiden tabrakan berkas):**
+1. Tarik head segar SEBELUM bekerja; patch selalu diterapkan ke head itu, **tidak pernah menimpa
+   berkas dengan salinan pohon lama**. Dua kali insiden terjadi justru karena menyalin berkas
+   dari basis yang lebih tua (sekali oleh Yotta pada `openems.py`, sekali oleh Aksara).
+2. Jalankan suite penuh **di pohon hasil rakitan** sebelum push; dua tabrakan tertangkap begitu
+   (3 test feed-coplanar, lalu test "rendered script is valid python").
+3. Push per-berkas lewat Contents API dengan GET sha -> PUT, supaya tidak menimpa kerja pihak lain.
+
+**Status terverifikasi hari ini:**
+
+| Bidang | Status | Bukti |
+|---|---|---|
+| Loss dispersif (Phase 2 #1) | **SOLVED** | Debye asli via `CSXCAD.CSProperties`; engine cetak `Drude/Lorentz Dispersive Material Extension`, order N=1 |
+| Phase 2 #4 (array + kopling) | **tuntas** | port per elemen + dump `port_<n>.csv` + `yotta_tools/port_matrix.py`; bug NameError ditemukan & diregresi |
+| Cross-check microstrip | **lulus** | Z0 sepakat 0,075 %, lebar 0,11 % (dua implementasi independen) |
+| K-1 `port_refine` A/B | **DITOLAK** | |df|/f 26-35 %; minimum di 2,8170 GHz = 2 langkah dari tepi sweep -> `docs/experiment-k1-verdict.md` |
+| kappa vs Debye (tan_delta 0,02) | **belum terpisah** | mesin memakai material dispersif, tapi S11 identik (-12,49 vs -12,48 dB) -> setelan belum konvergen |
+| B2 / Y-19 feed coplanar | **SEDANG DIJALANKAN** | 2 setelan (1e-3, 1e-4/cap 400k) x 2 arm; ambang <0,2 % / 0,2-1 % / >=1 % ditetapkan lebih dulu oleh Aksara |
+| NEC2 | selesai | hanya mesin Yotta punya biner `nec2c.exe` |
+
+**Pelajaran teknis yang dicatat supaya tidak terulang:**
+* Klaim "CSXCAD tidak punya API dispersif" **salah** - kelasnya ada di submodul
+  `CSXCAD.CSProperties`, bukan di tingkat atas. Pemeriksaan introspeksi harus menyisir
+  submodul juga (`dir(module)` saja tidak cukup).
+* `SetDispersiveMaterialProperty(order, **kw)` menerima **indeks pole** sebagai argumen pertama,
+  dan `CSX.AddProperty(...)` wajib dipanggil; tanpa itu model XML kosong tanpa pesan kesalahan.
+* Test berbasis teks (memeriksa isi skrip hasil generate) **tidak bisa** menangkap NameError saat
+  runtime - `element_ports` sempat lolos karena itu. Perlu test yang benar-benar mengeksekusi
+  atau setidaknya memeriksa pengikatan nama.
+* Semua klaim akurasi butuh run konvergen. Setelan 20k/60k/120k menembus cap untuk geometri patch
+  ini; angka apa pun dari sana ditolak sesuai `docs/convergence-policy.md`.
