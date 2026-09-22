@@ -24,6 +24,9 @@ import sys
 from pathlib import Path
 
 EDGE_TOLERANCE_FRACTION = 0.01  # a minimum closer than 1 % of the span to an edge is suspicious
+#: a minimum within this many coarse samples of an edge is treated as a boundary artifact:
+#: the fine sweep would have no room around it, so the resonance is probably outside the band
+EDGE_STEPS = 2
 
 
 def load_s11(path: Path) -> list[tuple[float, float]]:
@@ -55,8 +58,12 @@ def plan(samples: list[tuple[float, float]], span_fraction: float = 0.10) -> dic
     step = span / (len(freqs) - 1)
     edge_zone = EDGE_TOLERANCE_FRACTION * span
 
-    at_edge = index in (0, len(dbs) - 1) or (freqs[index] - freqs[0] < edge_zone) or (
-        freqs[-1] - freqs[index] < edge_zone
+    at_edge = (
+        index in (0, len(dbs) - 1)
+        or index <= EDGE_STEPS - 1
+        or index >= len(dbs) - EDGE_STEPS
+        or (freqs[index] - freqs[0] < edge_zone)
+        or (freqs[-1] - freqs[index] < edge_zone)
     )
     result = {
         "samples": len(samples),
@@ -69,9 +76,9 @@ def plan(samples: list[tuple[float, float]], span_fraction: float = 0.10) -> dic
     if at_edge:
         result["status"] = "invalid-edge-minimum"
         result["reason"] = (
-            "the minimum sits at (or within 1 % of) the sweep edge - that is a boundary "
+            "the minimum sits at (or within %d samples of) the sweep edge - that is a boundary "
             "artifact, not a resonance. Widen the band and re-run the coarse sweep; do not "
-            "quote this frequency as a resonance."
+            "quote this frequency as a resonance." % EDGE_STEPS
         )
         return result
 
