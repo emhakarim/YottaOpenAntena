@@ -1308,3 +1308,67 @@ Beri **DOI/URL/PDF** untuk 2–4 paper di daftar kandidat (C1–C4 cukup). Nanti
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-21 (pencarian literatur + inversi). Tidak ada angka di atas yang berasal dari ingatan: semuanya dari potongan bersumber, dan yang derivatif dihitung dengan kode proyek sendiri.*
+
+---
+
+# 24. Skor ketercapaian (v2) — 2026-09-22, snapshot `9987f514`
+
+Diminta pemilik proyek: "sudah berapa persen?". Jawabannya **tergantung penyebut** — jadi saya sajikan empat sumbu, bukan satu angka.
+
+## 24.1 Sumbu A — item roadmap (per fase)
+
+| Fase | Selesai | % |
+|---|---|---|
+| Phase 1 — headless core | **13 dari 16** item | **81 %** |
+| Phase 2 — physics coverage | 0 dari 7 (bonus: **NF2FF** sudah masuk di luar daftar) | **0 %** |
+| Phase 3 — GUI desktop | 4 tab + worker + smoke test; belum ada 3D viewer / log live / batch UI / packaging | **≈ 40 %** |
+| Phase 4 — depth & packaging | 0 dari 3 | **0 %** |
+| **Rata-rata sederhana antar-fase** | | **≈ 30 %** |
+
+Tiga item Phase 1 yang terbuka **tepat yang paling menentukan**: kalibrasi akurasi, validasi loss absolut, plotting.
+
+## 24.2 Sumbu B — papan tugas bersama (`tugas.md`)
+
+| Pemilik | Selesai | % |
+|---|---|---|
+| Yotta (Y-1…Y-6) | Y-1…Y-5 **terverifikasi**, Y-6 sebagian | **5,5 / 6 ≈ 92 %** |
+| Aksara (A-1…A-7) | papan masih `belum` semua, **tetapi A-2 (NF2FF) sudah ada di kode** (2 commit: `e3893198`, `9987f514`, plus test orde statis) | **≈ 1 / 7 ≈ 14 %** (papan belum diperbarui) |
+| **Total** | | **6,5 / 13 = 50 %** |
+
+Catatan: ini memperlihatkan **papan status tertinggal dari kode** — A-2 sudah dikerjakan tetapi belum ditandai. Saya tandai `jalan` dari sisi saya (bukti: `CreateNF2FFBox` di generator + test orde).
+
+## 24.3 Sumbu C — kesiapan sebagai “otoritas fabrikasi” (gate 8 kondisi)
+
+| Kondisi | Status |
+|---|---|
+| 1 konvergensi tercatat | sebagian |
+| 2 bias konstruksi tertutup/terkalibrasi | **blocker** (sisa −2,3…−5,0 %) |
+| 3 feed sesuai yang akan dibuat | **blocker** (probe vs inset coplanar) |
+| 4 loss divalidasi | **blocker** |
+| 5 benchmark ≥2 topologi | 1 dari 2 (TE10 dispesifikasikan) |
+| 6 sensitivitas dilaporkan | sebagian |
+| 7 match di frekuensi desain | **ya** (VSWR 1,11 setelah tuning) |
+| 8 artefak terarsip | sebagian |
+| **Skor** | **1 penuh + 3 sebagian dari 8 → ≈ 10–25 %** |
+
+## 24.4 Sumbu D — mutu teknis yang bisa diukur
+
+| Metrik | Nilai |
+|---|---|
+| Test suite | **162 test**, 0 gagal, 0 skip (semalam naik dari 149 → 162) |
+| Celah audit mutasi yang diketahui | **0** |
+| Telaah awal yang selesai | 17/19 diperbaiki & diverifikasi; 1 gugur oleh data |
+| Drift dokumen | 0 (kecuali satu: `roadmap.md` masih menulis “128 tests” padahal **162**) |
+
+## 24.5 Kesimpulan
+
+* **≈ 30 %** terhadap roadmap empat fase.
+* **50 %** terhadap papan tugas iterasi ini.
+* **≈ 10–25 %** terhadap standar “boleh dipakai memotong hardware”.
+
+Yang sudah bisa dipakai hari ini: sintesis geometri, eksplorasi material/komposit, generasi model solver yang **sepenuhnya dapat dikonfigurasi**, sweep nyata + store, tuning resonansi & match, GUI 4 tab, dan kini **NF2FF** (pola/gain dari solver mulai bisa diambil).
+Yang belum: kalibrasi akurasi, realisasi feed coplanar, validasi loss, array 4×4, dan validasi komposit terhadap data terukur.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (skor v2). Empat penyebut, satu pesan: proyeknya matang sebagai alat bantu desain, tetapi 3 blocker yang tersisa justru yang menentukan nilai jualnya.*
