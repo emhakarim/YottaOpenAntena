@@ -20,10 +20,12 @@ import argparse
 import datetime as _dt
 import json
 import re
+import time
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+STALE_AFTER_S = 600  # a log that has not moved in 10 minutes belongs to a dead run
 TIMESTEP_RE = re.compile(r"Timestep:\s*([\d,]+)")
 SPEED_RE = re.compile(r"Speed:\s*([\d.]+)\s*MC/s")
 B2_STEP_RE = re.compile(r"step\s+([\d,]+)/([\d,]+)")
@@ -84,9 +86,14 @@ def main(argv: list[str] | None = None) -> int:
         state = engine_state(tail_lines(log))
         if state["step"] is None:
             continue
+        # A killed run leaves its last progress line in the log for ever.  Without this the
+        # tool reports dead runs as live - which is exactly how a monitoring job was fooled
+        # into staying silent for five hours on 2026-09-22.
+        age_s = time.time() - log.stat().st_mtime
         cap = 400_000  # the queue's converged-setting cap; 1e-3 jobs stop earlier on their own
         rows.append({
             "run": log.parent.name, "step": state["step"], "cap": cap,
+            "log_age_s": round(age_s), "live": age_s < STALE_AFTER_S,
             "progress": pct(state["step"], cap),
             "speed_mc_s": state["speed_mc_s"],
             "source": str(log),
@@ -96,8 +103,10 @@ def main(argv: list[str] | None = None) -> int:
         state = b2_state(tail_lines(path))
         if state["step"] is None:
             continue
+        age_s = time.time() - path.stat().st_mtime
         rows.append({
             "run": path.stem.replace(".out", ""), "step": state["step"], "cap": state["cap"],
+            "log_age_s": round(age_s), "live": age_s < STALE_AFTER_S,
             "progress": pct(state["step"], state["cap"]),
             "speed_mc_s": state["speed_mc_s"], "eta_left": state["eta_left"],
             "source": str(path),
@@ -112,15 +121,18 @@ def main(argv: list[str] | None = None) -> int:
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
 
-    print(f"live status ({snapshot['generated_utc']}):")
+    live = [row for row in rows if row.get("live")]
+    print(f"live status ({snapshot['generated_utc']}): {len(live)} live / {len(rows) - len(live)} stale")
     for row in rows:
         speed = row.get("speed_mc_s")
         eta = f"  sisa ~{row['eta_left']}" if row.get("eta_left") else ""
+        mark = "" if row.get("live") else f"  <-- BASI ({row['log_age_s'] // 60} mnt tanpa progres)"
         print(f"  {row['run']:<26} {row['progress']:>7}  "
               f"step {row['step']}/{row['cap']}  "
-              f"{speed if speed else '-'} MC/s{eta}")
+              f"{speed if speed else '-'} MC/s{eta}{mark}")
     if not rows:
         print("  (no engine progress lines found - nothing is running, or logs are elsewhere)")
+    snapshot["live_count"] = len(live)
     print(f"written: {out}")
     return 0
 
