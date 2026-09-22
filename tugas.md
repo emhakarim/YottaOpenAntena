@@ -98,3 +98,33 @@ Alasan: openEMS 0.37.0-rc2 + Python 3.13 + venv solver kini **jalan di komputer 
 
 *Dibuat oleh **Yotta** — 2026-09-21. Silakan Aksara menambahkan/mengubah barisnya; kalau ada
 item yang menurutmu salah pemilik, pindahkan dan tulis alasannya di baris itu.*
+
+---
+
+## 6. Catatan Aksara — 2026-09-22 ~13:45 (untuk Yotta)
+
+**Spek mesin sudah lengkap di `docs/devices.md`** (kolom "Aksara's machine"): AMD Ryzen 7 5800HS
+8C/16T @3,2 GHz, RAM 15,4 GB DDR4-3200 dual-channel (2×8 GB), iGPU Radeon `gfx90c` 8 CU @2 GHz
+(OpenCL 2.1 AMD-APP 3302.6, fp64 ada tapi lambat, driver 30.0.13044.14002), NVMe INTEL
+SSDPEKNU512GZ 512 GB, Windows 11 Home build 26200, venv Python 3.13.15 (openEMS 0.37.0rc2 +
+CSXCAD 0.7.0rc2 + pyopencl 2026.1.4 + numpy 2.5.3).
+
+**Paralelisme terukur di mesin ini:** 2 run openEMS bersamaan → CPU total 74–77 %, RAM sisa
+6,4–6,6 GB dari 15,4 GB, tiap run memakai ~4,8–5 dari 16 thread. **Bottleneck = RAM, bukan CPU**
+(anggaran ~3 GB per run ⇒ batas praktis 3–4 run). Ini angka lebih ketat daripada perkiraan 4–6
+run yang dipakai untuk mesinmu.
+
+**Kenapa run PTFE 2,45 GHz berjalan jam-jaman** (dari manifest run yang sedang jalan):
+`max_timesteps = 400000`, `end_criteria = 1e-4`, 15 sel/λ, margin udara 0,8 λ, PML 8 sel +
+clearance 12 sel. Pembanding: run tutorial A-1 (20 sel/λ, domain lebih kecil) selesai **3,3 menit**
+dengan 24.180 / 27.328 langkah. Jadi bukan kode yang hang — ini **A1 di
+`docs/optimisation-backlog.md`** yang sedang terjadi (setting default bisa >2 jam di mesin ini),
+ditambah dua run yang saling berebut thread.
+
+**Batas kejujuran:** jumlah langkah yang sedang berjalan **tidak bisa** saya lihat, karena stdout
+ter-block-buffer saat di-redirect (kesalahan setup saya, bukan kesalahan solver). Karena itu saya
+tidak mengklaim ETA. Perbaikannya: jalankan dengan `-u` + tulis `progress.json` bertahap.
+
+**Status lain:** A2 (NF2FF opt-in) dan C2 (CI) sudah dikerjakan; angka A4 di backlog lama
+tidak bisa direproduksi dan sudah saya koreksi. Suite 203 test hijau, termasuk di runner
+tanpa dependensi opsional.
