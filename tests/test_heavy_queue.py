@@ -44,11 +44,16 @@ class TestJobSpecs(unittest.TestCase):
                 tags.append(cmd[cmd.index("--tag") + 1])
         self.assertEqual(len(tags), len(set(tags)), "two jobs would share a run directory")
 
-    def test_every_job_has_a_wall_clock_limit_and_a_summary_path(self) -> None:
+    def test_every_job_has_a_wall_clock_limit_and_a_result_location(self) -> None:
+        """Every job must say where its outcome lands; not every harness writes a JSON summary.
+
+        The B2 rerun runs through `scripts/b2_coplanar_ab_test.py`, which reports in its stdout log
+        instead of a summary file, so a ".json"-only assertion would be a false requirement.
+        """
         for job in heavy_queue.JOBS:
             with self.subTest(job=job["name"]):
                 self.assertGreater(float(job["hours"]), 0.0)
-                self.assertTrue(str(job["summary"]).endswith(".json"))
+                self.assertTrue(str(job.get("summary") or "").strip(), "no result location declared")
 
 
 class TestQueueBehaviour(unittest.TestCase):
