@@ -91,8 +91,10 @@ PRESETS: dict[str, list[dict]] = {
 }
 
 
-def run_case(case: dict, workers_timeout: float, common: dict) -> dict:
-    rundir = REPO_ROOT / "runs" / f"batch_{case['name']}"
+def run_case(case: dict, workers_timeout: float, common: dict, tag: str = "") -> dict:
+    # `tag` keeps two batches of the same preset (e.g. the two convergence settings) in
+    # separate run directories - never let two harnesses share one directory.
+    rundir = REPO_ROOT / "runs" / f"batch_{tag}{case['name']}"
     if rundir.exists():
         shutil.rmtree(rundir, ignore_errors=True)
     kwargs = {**common, **case["kwargs"]}
@@ -119,6 +121,7 @@ def main() -> int:
     parser.add_argument("--end-criteria", type=float, default=1e-3)
     parser.add_argument("--max-ts", type=int, default=20000)
     parser.add_argument("--timeout-s", type=float, default=3600.0)
+    parser.add_argument("--tag", default="", help="prefix for run directories (keeps two settings apart)")
     args = parser.parse_args()
 
     if not os.environ.get("OPENEMS_ROOT"):
@@ -143,7 +146,7 @@ def main() -> int:
         while pending and len(running) < args.workers:
             case = pending.pop(0)
             print(f"  start {case['name']}: {case['label']}")
-            running.append(run_case(case, args.timeout_s, common))
+            running.append(run_case(case, args.timeout_s, common, args.tag))
         time.sleep(2.0)
         for entry in list(running):
             code = entry["proc"].poll()
@@ -187,7 +190,7 @@ def main() -> int:
         "reference_cavity_hz": cavity,
         "cases": done,
     }
-    out = REPO_ROOT / "runs" / f"batch_{args.preset}_summary.json"
+    out = REPO_ROOT / "runs" / f"batch_{args.tag}{args.preset}_summary.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(summary, indent=2, default=str) + "\n", encoding="utf-8")
 
