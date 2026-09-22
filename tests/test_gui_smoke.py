@@ -216,5 +216,60 @@ class TestMainWindow(unittest.TestCase):
         window.close()
 
 
+    def test_results_tab_flags_an_impossible_efficiency(self):
+        """eta_rad > 1 is physically impossible: the panel must say so, not print it.
+
+        The real tutorial run reports eta_rad = 55.15 at its own resonance, so this is an
+        observed case, not a hypothetical one.
+        """
+        import json
+        import tempfile
+        from pathlib import Path
+
+        window = self._window()
+        results_tab = window.centralWidget().widget(3)
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            (run / "s11.csv").write_text(
+                "freq_hz,s11_re,s11_im\n2.45e9,-0.02,0.01\n", encoding="utf-8"
+            )
+            (run / "nf2ff_summary.csv").write_text(
+                "freq_hz,directivity_lin,directivity_dbi,prad_w,p_acc_w,eta_rad\n"
+                "2.45e9,4.145114,6.175364,1.28e-27,2.33e-29,55.1513\n",
+                encoding="utf-8",
+            )
+            results_tab.path.setText(str(run))
+            results_tab.load()
+            text = results_tab.metrics.toPlainText()
+
+        self.assertIn("WARNING: radiation efficiency outside (0, 1]", text)
+        self.assertIn("55.15", text)
+        window.close()
+
+    def test_results_tab_does_not_cry_wolf_for_a_valid_efficiency(self):
+        """A sane efficiency (0.55) must not trigger the warning."""
+        import tempfile
+        from pathlib import Path
+
+        window = self._window()
+        results_tab = window.centralWidget().widget(3)
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            (run / "s11.csv").write_text(
+                "freq_hz,s11_re,s11_im\n2.45e9,-0.02,0.01\n", encoding="utf-8"
+            )
+            (run / "nf2ff_summary.csv").write_text(
+                "freq_hz,directivity_lin,directivity_dbi,prad_w,p_acc_w,eta_rad\n"
+                "2.45e9,4.145114,6.175364,1.28e-29,2.33e-29,0.5513\n",
+                encoding="utf-8",
+            )
+            results_tab.path.setText(str(run))
+            results_tab.load()
+            text = results_tab.metrics.toPlainText()
+
+        self.assertNotIn("WARNING: radiation efficiency", text)
+        window.close()
+
+
 if __name__ == "__main__":
     unittest.main()

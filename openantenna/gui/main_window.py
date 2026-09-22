@@ -688,10 +688,14 @@ class ResultsTab(QWidget):
                     f"pml {data.get('pml_cells', '?')}"
                 )
             if any(key in data for key in ("port_refine", "metal_edge_snapping", "nf2ff")):
+                knobs = {
+                    key: ("not recorded" if data.get(key) is None else data.get(key))
+                    for key in ("port_refine", "metal_edge_snapping", "nf2ff")
+                }
                 lines.append(
-                    f"A/B knobs         : port_refine {data.get('port_refine')}, "
-                    f"edge_snapping {data.get('metal_edge_snapping')}, "
-                    f"nf2ff {data.get('nf2ff')}"
+                    f"A/B knobs         : port_refine {knobs['port_refine']}, "
+                    f"edge_snapping {knobs['metal_edge_snapping']}, "
+                    f"nf2ff {knobs['nf2ff']}"
                 )
             if "end_criteria" in data or "max_timesteps" in data:
                 lines.append(
@@ -712,8 +716,26 @@ class ResultsTab(QWidget):
         far_field = run_dir / "nf2ff_summary.csv"
         if far_field.exists():
             try:
+                points = read_farfield_summary(far_field)
                 lines.append("")
-                lines.append(farfield_summary_text(read_farfield_summary(far_field)))
+                lines.append(farfield_summary_text(points))
+                # An efficiency above 1 means the far-field data is not trustworthy (the
+                # tutorial run reports eta_rad = 55 at its own resonance).  Showing the
+                # number without saying so would be worse than not showing it at all.
+                out_of_range = []
+                for point in points:
+                    eta = getattr(point, "eta_rad", None)
+                    if eta is None and hasattr(point, "to_dict"):
+                        eta = point.to_dict().get("eta_rad")
+                    if eta is not None and not (0.0 < float(eta) <= 1.0):
+                        out_of_range.append(float(eta))
+                if out_of_range:
+                    lines.append("")
+                    lines.append(
+                        "WARNING: radiation efficiency outside (0, 1] in this run "
+                        f"(max {max(out_of_range):.3g}) - physically impossible, so treat "
+                        "the far-field numbers as unconverged / not usable."
+                    )
             except (OSError, ValueError) as exc:
                 lines.append(f"far field         : tidak bisa dibaca ({exc})")
         progress = run_dir / "progress.json"
