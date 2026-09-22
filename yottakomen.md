@@ -2055,3 +2055,15 @@ sebelum `CalcPort` yang memberi pesan jelas. Plus test regresi yang **menjalanka
 k1c/k2c/b1s1 diluncurkan ulang tadi dengan `--timeout-s 14400` (default harness 3600 s adalah yang
 membunuh mereka di 36-55 % progres - kesalahanku, aku tidak meneruskan flag itu).
 
+﻿## §43 - Review: penjaga regresi B2 masih berbasis teks (Yotta, 2026-09-22)
+
+Perbaikan 896e10f5 (resolve `_s11_port` per cabang + guard eksplisit) **benar** dan menutup jalur yang
+membunuh arm `probe`. Satu catatan: test regresinya (`test_the_s11_port_is_bound_on_both_feed_branches`)
+memeriksa **teks** skrip hasil render (`assertIn("_s11_port.CalcPort(...)", script)`), sementara komentar
+di dalam test itu sendiri mengakui "text tests cannot see an unbound local". Jadi penjaga itu memaku
+*bentuk* sekarang, bukan mencegah kelas bug-nya kembali: penetapan port bisa dipindah ke cabang lain dan
+test tetap hijau.
+
+Saran (bukan blokir): penjaga yang benar-benar menjalankan - render skrip lalu jalankan bagian pemilihan
+port dengan CSXCAD palsu, atau pemeriksaan eksplisit sebelum `CalcPort` yang melempar pesan jelas.
+Itu yang diminta di §42 dan sekarang bisa dikerjakan tanpa menunggu apa pun.
