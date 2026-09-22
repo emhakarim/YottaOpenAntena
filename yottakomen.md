@@ -1607,3 +1607,37 @@ Saat memeriksa, saya menemukan Aksara sudah menambahkan mode **UNIT_CELL** (PEC/
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-22 (P0 diperbaiki). Pelajarannya: menjalankan model yang di-generate di instalasi resmi adalah satu-satunya cara menemukan kelas bug ini — dan itu sekarang rutin di meja saya.*
+
+---
+
+# 31. Jalur GPU (OpenCL) — diverifikasi di mesin ini, plus satu pertanyaan stabilitas
+
+Commit `9dfdf769` menambah jalur GPU: `openantenna/gpu/opencl_fdtd.py` (kernel FDTD 2-D), `scripts/gpu_benchmark.py`, dan `tests/test_gpu_fdtd.py`. Saya jalankan semuanya di mesin ini (yang memang punya GPU).
+
+## 31.1 Hasil verifikasi (nyata, bukan klaim)
+
+* **pyopencl 2026.1.4** mendeteksi `platform: NVIDIA CUDA (OpenCL 3.0 CUDA 13.1)` → **NVIDIA GeForce GTX 1650**, 14 compute unit, 1755 MHz, 4096 MB, `fp64 = True`.
+* **3 test GPU lulus**, termasuk `test_square_cavity_resonance_matches_the_analytic_value`.
+* **Benchmark** (`scripts/gpu_benchmark.py`, setelah saya membuat folder `runs/`):
+
+| Ukuran | Nilai |
+|---|---|
+| Throughput GPU | **1.173 × 10⁹** sel-langkah/detik |
+| Throughput CPU (numpy float32) | **1.276 × 10⁸** sel-langkah/detik |
+| **Rasio GPU/CPU** | **9,19×** |
+| Validasi cavity (20000 langkah) | terukur **2,120515 GHz** vs analitik **2,119853 GHz** → **galat 0,031 %** |
+
+Jadi klaim “GPU mempercepat kernel FDTD 2-D” **sahih di mesin ini**, dan akurasinya bagus. Ini juga mengoreksi jawaban awal saya soal GPU: untuk kernel 2-D milik proyek ini GPU **memang dipakai** (9,19×); yang tidak bisa memakai GPU adalah openEMS 3-D (build resminya tanpa jalur GPU).
+
+## 31.2 Dua temuan
+
+1. **P2 — bug kecil yang menghambat pemakaian pertama kali:** `scripts/gpu_benchmark.py` menulis `runs/gpu_benchmark.json` **tanpa membuat direktori `runs/`** → `FileNotFoundError` di checkout bersih (persis yang saya alami). Perbaikan satu baris: `out.parent.mkdir(parents=True, exist_ok=True)` sebelum menulis.
+2. **P1 — pertanyaan stabilitas:** laporan benchmark menyebut `courant_factor = 1.0`. Untuk skema FDTD 2-D standar (leapfrog), batas stabilitas Courant adalah 1/√2 ≈ 0,707; nilai 1,0 berada **di atas** batas itu dan biasanya tidak stabil. Namun uji cavity cocok sampai 0,031 %, jadi kemungkinan besar kernelnya **bukan** leapfrog standar (mis. ADI-FDTD yang tak bersyarat stabil), atau definisi faktornya berbeda. Yang saya minta: satu paragraf di dokumen yang menyatakan skema yang dipakai, plus demonstrasi stabilitas (mis. energi tidak tumbuh selama 100k langkah). Ini pertanyaan, bukan tuduhan — hasil akurasinya justru bagus.
+
+## 31.3 Sinkronisasi
+
+Verifikasi hash isi (git blob SHA) lokal vs remote untuk 11 berkas kunci: **11 identik, 0 berbeda**. Scratch lokal (`runs/`, `tools/`, venv) memang **tidak** masuk repo — itu by design; resep membangun ulang nec2c/openEMS ada di §29 dan §30.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (verifikasi GPU). Jalur OpenCL: lulus 3 test, 9,19× lebih cepat dari numpy, galat cavity 0,031 %. Dua tindak lanjut: mkdir `runs/` dan penjelasan skema/Courant.*
