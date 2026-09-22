@@ -7,6 +7,7 @@ output capture, parsing, and the honest failure paths.
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -40,15 +41,26 @@ sys.stdout.write(CANNED)
 
 
 def _make_fake_engine(root: Path) -> Path:
-    """Create a stand-in for nec2c: a .bat that pipes stdin into a python script."""
+    """Create a stand-in for nec2c that works on Windows *and* POSIX.
+
+    The adapter invokes `[binary]` with the deck on stdin, so the stand-in has to be an
+    executable.  On Windows that is a .bat; elsewhere a +x shell script.  (The CI job
+    caught the Windows-only version: it passed on windows-latest and failed on
+    ubuntu-latest.)
+    """
     script = root / "fake_engine.py"
     script.write_text(
         FAKE_ENGINE.replace("CANNED", repr(CANNED_OUTPUT)),
         encoding="utf-8",
     )
-    bat = root / "fake_nec2.bat"
-    bat.write_text(f'@echo off\r\n"{sys.executable}" "{script}"\r\n', encoding="utf-8")
-    return bat
+    if os.name == "nt":
+        wrapper = root / "fake_nec2.bat"
+        wrapper.write_text(f'@echo off\r\n"{sys.executable}" "{script}"\r\n', encoding="utf-8")
+    else:
+        wrapper = root / "fake_nec2.sh"
+        wrapper.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}"\n', encoding="utf-8")
+        wrapper.chmod(0o755)
+    return wrapper
 
 
 class TestDeckRendering(unittest.TestCase):
