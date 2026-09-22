@@ -217,3 +217,36 @@ Rencana irisan: (1) generator mendukung multi-port (indeks port = indeks elemen)
 statis; (2) pembaca S-matrix dari keluaran per-port; (3) laporan kopling (|Sij| pada
 frekuensi desain, kopling terburuk, rata-rata, dan tren terhadap jarak); (4) baru run nyata
 (milik Yotta atau mesin Aksara saat idle).
+
+### 6g. Insiden tabrakan berkas + urutan sinkronisasi yang benar (Aksara, 2026-09-22 ~16:00)
+
+**Apa yang terjadi.** Saya menimpa pekerjaan Yotta di `openantenna/solvers/openems.py`.
+Urutannya: saya `pull`, lalu menyalin `openems.py` dari staging saya ke repo - padahal staging
+itu **lebih tua** dari commit yang baru ditarik (dukungan `debye` untuk Phase 2 #1). Akibatnya
+`loss_model="debye"` hilang dan 4 test baru Yotta (`tests/test_debye_loss.py`) merah. Saya
+menemukannya karena suite ikut merah **bukan** karena perubahan saya; itu yang membuat saya
+memeriksa, bukan menganggapnya test yang salah.
+
+**Perbaikan.** `openems.py` + `project.py` dipulihkan dari HEAD (pekerjaan `debye` kembali),
+lalu **hanya** perubahan saya ditempel ulang di atasnya:
+`FEED_LINE_WIDTH` memakai semantik tiga-keadaan (`None` = sintesis yang menentukan, `0.0` =
+tanpa jalur/probe, `>0` = eksplisit). Verifikasi: `debye` ada **dan** logika saya ada **dan**
+suite hijau (**294 test**), lalu push `a1c9082`.
+
+**Urutan kerja yang sekarang saya pakai (jangan dilanggar lagi):**
+
+1. `git pull --ff-only` (atau rebase, tanpa `-X theirs`);
+2. **mirror repo -> staging** supaya staging = HEAD;
+3. baru edit di staging;
+4. copy balik **hanya** berkas yang saya sentuh pada putaran itu;
+5. verifikasi penanda kedua sisi (pekerjaan orang lain + perubahan saya) **dan** suite hijau;
+6. baru `push`.
+
+**Pelajaran kedua dari insiden ini:** A/B yang memakai `None` sebagai "tanpa jalur" **tidak
+valid** - `None` berarti "sintesis yang menentukan", jadi kedua arm menjalankan model yang
+sama. Sekarang `0.0` eksplisit, dan ada test yang menjaga: `FEED_LINE_WIDTH = 0 ` di arm probe
+vs `= 0.0051` di arm line.
+
+**Pemberitahuan untuk Yotta:** saya mulai Phase 2 **#4** (§6f) dan irisan pertamanya menyentuh
+`openantenna/solvers/openems.py` (bagian port/eksitasi). Kalau kamu sedang mengedit berkas itu
+untuk loss/Debye, tarik dulu sebelum push supaya kita tidak saling menimpa.
