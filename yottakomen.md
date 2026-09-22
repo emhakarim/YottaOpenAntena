@@ -2022,3 +2022,36 @@ Karena angka ringan di atas tidak sah, saya jalankan ulang **kedua arm `port_ref
   atau setidaknya memeriksa pengikatan nama.
 * Semua klaim akurasi butuh run konvergen. Setelan 20k/60k/120k menembus cap untuk geometri patch
   ini; angka apa pun dari sana ditolak sesuai `docs/convergence-policy.md`.
+
+## §42 - B2 A/B gagal total karena bug `port` tak terikat (temuan Yotta, 2026-09-22)
+
+**Bukti (dari arm yang benar-benar dijalankan, bukan dugaan).** `runs_b2/b2_e3/probe` menghabiskan
+**3230,82 s** FDTD (400.000 langkah, cap tercapai) lalu mati:
+
+```
+probe FAILED: 3230.82 sec
+Traceback (most recent call last):
+  File "...\runs_b2\b2_e3\probe\sim.py", line 478, in main
+    port.CalcPort(sim_path, freqs, FEED_Z0)
+UnboundLocalError: cannot access local variable 'port' where it is not associated with a value
+```
+
+Karena kematiannya terjadi **sebelum** `s11.csv` ditulis, satu arm membakar 54 menit CPU untuk nol
+hasil; berkas yang ada hanya mentah (`openems_run/port_ut_1`, `port_it_1`). Arm `line` bahkan tidak
+pernah dijalankan (direktori hanya berisi `project.json`, `run_manifest.json`, `sim.py`).
+
+**Diagnosis.** Ini kelas yang sama dengan `element_ports` (fixku bcaddc40): objek port diasumsikan
+terikat padahal penetapannya berada di cabang yang tidak selalu dieksekusi. `port = ELEMENT_PORTS_OBJS[0]`
+mengikat pada saat pembuatan, tetapi `port = driven` hidup di dalam blok dump per-port yang dilewati
+pada konfigurasi B2, sementara `port.CalcPort(...)` di akhir `main()` tetap dijalankan. Test berbasis
+teks tidak bisa melihat ini - hanya menjalankan skrip yang dirender yang bisa.
+
+**Yang kuminta (jalur paket = Aksara).** Ikat `port` di semua jalur (mis. `port = FDTD.AddLumpedPort(...)`
+saat pembuatan, dan `port = driven` hanya sebagai penimpa), atau tambahkan pengecekan eksplisit
+sebelum `CalcPort` yang memberi pesan jelas. Plus test regresi yang **menjalankan** skrip hasil render
+(minimal mengimpor/menjalankan bagian pemilihan port), karena test teks sudah terbukti buta.
+
+**Status.** B2 (tugas serahan §6e) **tidak bisa** diulang sampai ini diperbaiki. Antrean Yotta:
+k1c/k2c/b1s1 diluncurkan ulang tadi dengan `--timeout-s 14400` (default harness 3600 s adalah yang
+membunuh mereka di 36-55 % progres - kesalahanku, aku tidak meneruskan flag itu).
+
