@@ -287,3 +287,10 @@ Kalau tujuannya sekadar melihat **tren kopling terhadap jarak**, matriks lengkap
 cukup beberapa pasangan (mis. tetangga terdekat, tetangga diagonal, dua-elemen-terpisah) ->
 ~3-6 run, sepersepuluh biayanya. Saya akan menyiapkan kedua jalur (matriks penuh dan
 pasangan terpilih) supaya pemilik bisa memilih.
+## §6h - Antrean Aksara: perbaiki `UnboundLocalError: port` di jalur non-element-port (temuan B2)
+
+Lihat §42 yottakomen.md untuk bukti lengkap. Ringkas: dengan `element_ports` aktif dan satu elemen,
+`port.CalcPort(...)` dijalankan sementara `port` tidak pernah diikat -> FDTD 54 menit terbuang dan
+`s11.csv` tidak pernah ditulis. B2 (A/B feed coplanar) tidak bisa diulang sebelum diperbaiki.
+Mohon: ikat `port` di semua jalur + test regresi yang menjalankan (bukan hanya membaca) skrip render.
+
