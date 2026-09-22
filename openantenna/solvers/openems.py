@@ -112,7 +112,10 @@ EPS_SUB = $EPS_SUB         # substrate relative permittivity
 KAPPA_SUB = $KAPPA_SUB     # substrate conductivity [S/m] (loss)
 TAN_D_SUB = $TAN_D_SUB     # substrate loss tangent at F0 (reference value)
 MU_SUB = $MU_SUB
-LOSS_MODEL = "$LOSS_MODEL"  # "kappa" (equivalent conductivity) or "none"
+LOSS_MODEL = "$LOSS_MODEL"  # "kappa" (conductivity), "debye" (dispersive) or "none"
+DEBYE_EPS_INF = $DEBYE_EPS_INF        # Debye eps_inf (high-frequency permittivity)
+DEBYE_EPS_DELTA = $DEBYE_EPS_DELTA    # Debye pole strength (eps_s - eps_inf)
+DEBYE_TAU = $DEBYE_TAU                # Debye relaxation time [s]
 EPS0 = 8.8541878128e-12
 
 W_PATCH = $W_PATCH         # patch width along x [m]
@@ -191,6 +194,18 @@ def implied_tan_delta(frequency_hz):
     return KAPPA_SUB / (2.0 * np.pi * frequency_hz * EPS0 * EPS_SUB)
 
 
+def debye_tan_delta(frequency_hz):
+    """tan_delta(f) of the single-pole Debye used when LOSS_MODEL == "debye".
+
+    Unlike the constant-conductivity model this is correct *everywhere*: it rises as f
+    below the relaxation and falls as 1/f above it.
+    """
+    w = 2.0 * np.pi * frequency_hz
+    num = w * DEBYE_TAU * DEBYE_EPS_DELTA
+    den = DEBYE_EPS_INF * (1.0 + (w * DEBYE_TAU) ** 2) + DEBYE_EPS_DELTA
+    return num / den
+
+
 print("LOSS MODEL: %s" % LOSS_MODEL)
 if LOSS_MODEL == "kappa" and KAPPA_SUB > 0:
     print("  target tan_delta at F0 = %.6g" % TAN_D_SUB)
@@ -199,11 +214,34 @@ if LOSS_MODEL == "kappa" and KAPPA_SUB > 0:
         % (F_MIN, F0, F_MAX, implied_tan_delta(F_MIN), implied_tan_delta(F0), implied_tan_delta(F_MAX))
     )
     print("  NOTE: constant-sigma approximation; it is exact at F0 only.")
+elif LOSS_MODEL == "debye" and DEBYE_EPS_DELTA > 0:
+    print(
+        "  Debye pole: eps_inf=%.6g  eps_delta=%.6g  tau=%.6g s"
+        % (DEBYE_EPS_INF, DEBYE_EPS_DELTA, DEBYE_TAU)
+    )
+    print(
+        "  tan_delta at %.4g / %.4g / %.4g Hz: %.6g / %.6g / %.6g"
+        % (F_MIN, F0, F_MAX, debye_tan_delta(F_MIN), debye_tan_delta(F0), debye_tan_delta(F_MAX))
+    )
+    print("  NOTE: dispersive by construction - no 1/f drift to correct for.")
 else:
     print("  lossless substrate (kappa = 0): no dielectric loss in this model.")
 
 # ---------------------------------------------------------------- geometry
-substrate = CSX.AddMaterial("substrate", epsilon=EPS_SUB, mue=MU_SUB, kappa=KAPPA_SUB)
+if LOSS_MODEL == "debye":
+    # Dispersive substrate.  The dispersive classes live in the CSXCAD.CSProperties
+    # submodule (not at the CSXCAD top level), SetDispersiveMaterialProperty takes the
+    # 0-based pole index *first*, and the property must be registered via AddProperty()
+    # or the structure will not write it.
+    from CSXCAD import CSProperties as _CSProp
+
+    substrate = _CSProp.CSPropDebyeMaterial(CSX.GetParameterSet(), "substrate")
+    substrate.SetDispersionOrder(1)
+    substrate.SetDispersiveMaterialProperty(0, eps_delta=DEBYE_EPS_DELTA, eps_relax=DEBYE_TAU)
+    substrate.SetMaterialProperty(epsilon=DEBYE_EPS_INF, mue=MU_SUB)
+    CSX.AddProperty(substrate)
+else:
+    substrate = CSX.AddMaterial("substrate", epsilon=EPS_SUB, mue=MU_SUB, kappa=KAPPA_SUB)
 substrate.AddBox(
     [-GROUND_X / 2.0, -GROUND_Y / 2.0, -H_TOTAL],
     [GROUND_X / 2.0, GROUND_Y / 2.0, 0.0],
@@ -549,8 +587,8 @@ class OpenEMSSolver(SolverAdapter):
             raise ValueError("substrate_cells must be >= 2")
         if air_margin_lambda <= 0 or air_top_lambda <= 0:
             raise ValueError("air margins must be > 0")
-        if loss_model not in ("kappa", "none"):
-            raise ValueError("loss_model must be 'kappa' or 'none'")
+        if loss_model not in ("kappa", "debye", "none"):
+            raise ValueError("loss_model must be 'kappa', 'debye' or 'none'")
         if ground_margin_lambda <= 0:
             raise ValueError("ground_margin_lambda must be > 0")
         if boundary not in ("PML", "MUR"):
@@ -585,6 +623,7 @@ class OpenEMSSolver(SolverAdapter):
         self.ground_margin_lambda = float(ground_margin_lambda)
         self.loss_model = loss_model
         self.last_kappa = 0.0
+        self.last_debye = (0.0, 0.0, 0.0)
         self.last_reference_frequency_hz = None
         self.mesh_cells_per_wavelength = int(mesh_cells_per_wavelength)
         self.substrate_cells = int(substrate_cells)
@@ -692,6 +731,24 @@ class OpenEMSSolver(SolverAdapter):
         self.last_kappa = kappa_sub
         self.last_reference_frequency_hz = project.sweep.center_hz
 
+        # Dispersive (Debye) equivalent of the same loss level.  If the material carries a
+        # Debye description in the library we use it verbatim; otherwise a single pole is
+        # placed at omega*tau = 1 at the reference frequency with
+        # eps_delta = 2*tan_delta*eps_r, which reproduces the requested tan(delta) there
+        # (from tan(d) = (delta/2) / (eps_inf + delta/2)).
+        eps_inf_d, eps_delta_d, tau_d = epsilon_r, 0.0, 0.0
+        if self.loss_model == "debye" and tan_delta > 0.0:
+            spec = material.dispersion if getattr(material, "dispersion", None) else None
+            if spec and spec.get("model") == "debye" and "delta_eps" in spec and "tau_s" in spec:
+                eps_inf_d = float(spec.get("eps_inf", epsilon_r))
+                eps_delta_d = float(spec["delta_eps"])
+                tau_d = float(spec["tau_s"])
+            else:
+                eps_inf_d = epsilon_r
+                eps_delta_d = 2.0 * tan_delta * epsilon_r
+                tau_d = 1.0 / (2.0 * math.pi * project.sweep.center_hz)
+        self.last_debye = (eps_inf_d, eps_delta_d, tau_d)
+
         design = synthesize_patch(
             frequency_hz=project.sweep.center_hz,
             epsilon_r=epsilon_r,
@@ -750,6 +807,9 @@ class OpenEMSSolver(SolverAdapter):
             TAN_D_SUB=fmt(tan_delta),
             MU_SUB=fmt(mu_r),
             LOSS_MODEL=self.loss_model,
+            DEBYE_EPS_INF=fmt(eps_inf_d),
+            DEBYE_EPS_DELTA=fmt(eps_delta_d),
+            DEBYE_TAU=fmt(tau_d),
             W_PATCH=fmt(width),
             L_PATCH=fmt(length),
             GROUND_X=fmt(ground_x),
