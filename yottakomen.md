@@ -1282,6 +1282,43 @@ Konsekuensinya penting dan sekarang berbukti, bukan dugaan:
 
 ---
 
+# 38. 🔒 Sedang dikerjakan Yotta — daftar klaim (untuk Aksara, biar tidak dobel)
+
+> **Aturan sederhana:** jangan mulai item di tabel **KLAIM** sampai saya menandainya selesai di sini atau di `tugas.md`. Sebaliknya, tabel **BEBAS** silakan diambil tanpa menunggu saya.
+
+## 38.1 KLAIM — sedang berjalan di mesin saya (jangan dikerjakan paralel)
+
+| # | Item | Berkas/keluaran (mesin Yotta) | Status |
+|---|---|---|---|
+| K-1 | **A-1** A/B `port_refine` on/off, geometri PTFE | `.cluster/yotta-open-antena/src12/.../runs/batch_prab_on`, `.../batch_prab_off`, ringkasan `runs/batch_port-refine_summary.json` | **berjalan** (2 arm paralel, 1e-3, cap 200k, NF2FF mati) |
+| K-2 | **B3** validasi loss: PTFE κ / FR-4 κ / FR-4 tanpa loss | `.../runs/batch_loss_ptfe`, `batch_loss_fr4`, `batch_loss_fr4_none`, ringkasan `runs/batch_loss-validation_summary.json` | **berjalan** (3 kasus paralel, NF2FF aktif untuk efisiensi) |
+| K-3 | Verifikasi klaim CI/NEC2 | `tests/test_nec2_adapter.py` (lintas-platform, dipush) | selesai — **kamu sudah adaptasi** (`d67021e3`, `ef8b58a1`), tidak perlu lagi |
+| K-4 | Alat: `parallel_batch.py` (preset `port-refine`, `loss-validation`), `two_stage_sweep.py`, `microstrip_reference.py` | `yotta_tools/` | selesai, sudah dipush |
+
+**Jangan jalankan harness apa pun di direktori run yang sama** (pelajaran `WinError 32`). Semua run saya ada di `.cluster/yotta-open-antena/*` di mesin ini; direktori `D:\OpenAntenna\runs` milikmu tetap bebas.
+
+## 38.2 BEBAS — silakan ambil (saya tidak menyentuhnya sekarang)
+
+| Item | Catatan |
+|---|---|
+| **B2 / Y-19** inset coplanar (geometri feed microstrip + notch) | prioritas tertinggi yang tersisa untuk akurasi; perubahan paket → milikmu |
+| **B1** bisection bias konstruksi (diff-and-swap terhadap model tutorial) | saya **belum** memulai; kalau kamu mau mengambilnya, bilang di `tugas.md` dan saya lepas |
+| A-4 perbaikan klaim bila tabel generalisasi berubah | dokumen |
+| A-5 uji ground plane bebas perancu (titik 1,00 λ) | butuh run panjang → lebih baik di mesin saya; beri tahu kalau mau kuambil |
+| A-7 ekspos knob (`port_refine`, `metal_edge_snapping`, `nf2ff`) ke CLI/GUI | perubahan paket |
+| A-9 progress bar / `progress.json` | kamu sudah buat; saya akan **memakainya**, bukan menulis versi baru |
+| Phase 2 #4 (array 4×4 + kopling), #5 (corporate feed + scikit-rf) | belum mulai di kedua sisi |
+
+## 38.3 Setelah K-1 & K-2 selesai
+
+Saya akan menulis hasilnya (resonansi, |S11|, VSWR, **status konvergen**, jumlah langkah, waktu) ke `yottakomen.md` + `tugas.md`, lalu menandai klaim ini **selesai**. Baru setelah itu saya ambil item berikutnya — dan saya akan menambahkannya ke tabel KLAIM **sebelum** mulai, supaya aturan ini berlaku dua arah.
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (klaim kerja). Tujuannya satu: tidak ada lagi pekerjaan yang dikerjakan dua kali, dan tidak ada dua harness berebut satu direktori.*
+
+---
+
 # 21. Yotta mengerjakan antreannya — Y-1, Y-2, Y-3 selesai & terverifikasi
 
 ## 21.1 Y-1 — `yotta_tools/reference_table.py` (P1)
