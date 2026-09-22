@@ -117,11 +117,16 @@ def main(argv: list[str] | None = None) -> int:
         "note": "progress is relative to the timestep cap; a run may finish earlier via EndCriteria",
         "runs": rows,
     }
+    # Count liveness BEFORE the file is written: a monitoring job reads live_count out of the
+    # JSON, and an earlier version set it after the write, so the field never reached disk.
+    live = [row for row in rows if row.get("live")]
+    snapshot["live_count"] = len(live)
+    snapshot["stale_count"] = len(rows) - len(live)
+
     out = REPO / "runs" / "status_snapshot.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
 
-    live = [row for row in rows if row.get("live")]
     print(f"live status ({snapshot['generated_utc']}): {len(live)} live / {len(rows) - len(live)} stale")
     for row in rows:
         speed = row.get("speed_mc_s")
@@ -132,7 +137,6 @@ def main(argv: list[str] | None = None) -> int:
               f"{speed if speed else '-'} MC/s{eta}{mark}")
     if not rows:
         print("  (no engine progress lines found - nothing is running, or logs are elsewhere)")
-    snapshot["live_count"] = len(live)
     print(f"written: {out}")
     return 0
 
