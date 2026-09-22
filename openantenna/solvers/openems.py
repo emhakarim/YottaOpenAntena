@@ -146,8 +146,19 @@ END_CRITERIA = $END_CRITERIA
 # ---------------------------------------------------------------- FDTD setup
 # The excitation must cover the whole sweep; use F0 as centre and half of F0 as
 # the Gaussian half-width (the convention used by the openEMS tutorials).
-FDTD = openEMS(NrTS=MAX_TS, EndCriteria=END_CRITERIA, numthreads=NUM_THREADS)
-print("THREADS: %s" % ("auto" if NUM_THREADS == 0 else str(NUM_THREADS)))
+# The published openEMS Windows wheel (0.37.0-rc2) does NOT accept a ``numthreads``
+# keyword - it raises "AssertionError: Unknown keyword arguments" - and none of its
+# Python methods set a thread count.  Ask for it, then fall back cleanly so the model
+# still runs on the official build.  (Yotta review: P0 regression, found by running a
+# generated model against openEMS 0.37.0-rc2.)
+try:
+    FDTD = openEMS(NrTS=MAX_TS, EndCriteria=END_CRITERIA, numthreads=NUM_THREADS)
+    print("THREADS: %s (accepted by this openEMS build)"
+          % ("auto" if NUM_THREADS == 0 else str(NUM_THREADS)))
+except (TypeError, AssertionError) as _threads_exc:
+    FDTD = openEMS(NrTS=MAX_TS, EndCriteria=END_CRITERIA)
+    print("THREADS: this openEMS build has no numthreads support (%s); "
+          "using the solver default" % type(_threads_exc).__name__)
 FDTD.SetGaussExcite(F0, 0.5 * F0)
 if BOUNDARY_MODE == "UNIT_CELL":
     # Infinite-array unit cell at broadside: PEC on the x pair, PMC on the y pair, an
