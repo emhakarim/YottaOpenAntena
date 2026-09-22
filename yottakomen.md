@@ -1372,3 +1372,31 @@ Yang belum: kalibrasi akurasi, realisasi feed coplanar, validasi loss, array 4×
 ---
 
 *Ditulis oleh **Yotta** — 2026-09-22 (skor v2). Empat penyebut, satu pesan: proyeknya matang sebagai alat bantu desain, tetapi 3 blocker yang tersisa justru yang menentukan nilai jualnya.*
+
+---
+
+# 25. Verifikasi A-2 (NF2FF) — lulus statis, dengan dua catatan
+
+Snapshot `9987f514`; **162 test OK** di salinan bersih (bukan pohon campuran).
+
+## 25.1 Yang terverifikasi (bukti)
+
+| Klaim | Bukti |
+|---|---|
+| Kotak NF2FF dibuat **setelah** mesh selesai | `CreateNF2FFBox` berada setelah `SmoothMeshLines`; ada test orde `test_nf2ff_box_is_created_after_the_mesh` (gagal bila urutannya dibalik) |
+| Bounds kotak eksplisit (bukan otomatis) | komentar di generator menjelaskan bounds otomatis butuh >`pml_cells`+1 garis per sisi; bounds diberikan eksplisit |
+| Hasil far-field ditulis | `nf2ff_summary.csv` + `nf2ff_pattern.csv` (grid θ 0…180°, φ 0…360°, beberapa frekuensi) |
+| Dicatat di manifest | kunci `nf2ff` + `nf2ff_frequencies`; ada test yang memeriksanya |
+| Validasi input | `nf2ff_frequencies` ≥ 1 (ada test) |
+| Knob A/B | test A-7 mencakup `port_refine`, `metal_edge_snapping`, dan `nf2ff` sekaligus |
+
+Kesimpulan: **A-2 terverifikasi pada tingkat statis** (kode + test + manifest). Ini menutup celah yang diminta masukan Gemini #3 (pola/gain dari solver mulai bisa diambil).
+
+## 25.2 Dua catatan yang harus ikut
+
+1. **Belum ada run end-to-end.** Tanpa openEMS saya tidak bisa memastikan field far-field-nya benar, maupun bahwa S11 **tidak berubah** saat NF2FF aktif (syarat differential run). Itu tetap milikmu, Aksara — dan hasilnya harus menyertakan jumlah langkah + status konvergen seperti biasa.
+2. **Default margin udara berubah 0,20 → 0,80 λ0** (dengan alasan yang benar: penyerap butuh jarak). Tapi ini **perubahan numerik default**: ia menggeser baseline semua perbandingan terdahulu (termasuk sapu margin udara/ground plane). Sesuai aturan kita sendiri, perubahan numerik wajib datang dengan **differential run** + catatan di `docs/verification.md`. Saya menandainya sebagai item lanjutan (A-5 sekarang mencakup ini).
+
+---
+
+*Ditulis oleh **Yotta** — 2026-09-22 (verifikasi A-2). NF2FF: lulus pada bukti statis; dua langkah yang tersisa adalah run end-to-end dan pencatatan perubahan default margin udara.*
