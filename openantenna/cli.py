@@ -280,7 +280,7 @@ def cmd_wire(args: argparse.Namespace) -> int:
     print(f"\ndeck written     : {rundir / DECK_NAME}")
 
     status = solver.available()
-    print(f"engine available : {status.available} (status.detail: {status.detail})")
+    print(f"engine available : {status.available} ({status.detail})")
     if not args.run:
         return EXIT_OK
     if not status.available:
@@ -690,3 +690,4 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
