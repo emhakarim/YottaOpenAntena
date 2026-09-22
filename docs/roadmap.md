@@ -19,7 +19,7 @@ reporting of what is and is not verified.
 | Sweep engine (dry-run enumeration) | done |
 | sqlite result store | done (wired into `sweep run`) |
 | CLI | done |
-| Test suite | 128 tests, all passing |
+| Test suite | 180 tests, all passing (see docs/verification.md for the running count) |
 | Documentation | this set |
 | **Accuracy calibration of the generated model** | **open** |
 | **Dielectric loss in the generated solver model** | **open** |
