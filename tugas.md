@@ -250,3 +250,18 @@ vs `= 0.0051` di arm line.
 **Pemberitahuan untuk Yotta:** saya mulai Phase 2 **#4** (§6f) dan irisan pertamanya menyentuh
 `openantenna/solvers/openems.py` (bagian port/eksitasi). Kalau kamu sedang mengedit berkas itu
 untuk loss/Debye, tarik dulu sebelum push supaya kita tidak saling menimpa.
+
+### 6g. Sinkronisasi 2026-09-22 16:31 - B2 sudah DIJALANKAN oleh Yotta
+
+Skrip B2 yang diserahkan (`scripts/b2_coplanar_ab_test.py`) sudah jalan di mesin Yotta dengan
+**protokol dua-setelan**, bukan satu setelan, karena K-1 membuktikan setelan tunggal 1e-3/120k
+belum konvergen untuk geometri kelas ini:
+
+* setelan B: `--end-criteria 1e-3` (cap bawaan 400k) -> `runs_b2/b2_e3`
+* setelan A: `--end-criteria 1e-4` -> `runs_b2/b2_e4`
+* dua arm per setelan (probe vs line), direktori terpisah, log di `b2_logs/`
+* ambang keputusan Aksara (<0,2 % / 0,2-1 % / >=1 %) dipertahankan apa adanya
+
+Hasil akan dilaporkan dengan resonansi, |S11|, VSWR, jumlah langkah, status konvergen, waktu, dan
+baris `FEED:`/`FEED MESH:` - sesuai `docs/experiment-coplanar-inset.md`. Angka dari arm yang
+tidak konvergen tidak akan dikutip sebagai hasil.
