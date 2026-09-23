@@ -33,6 +33,33 @@ class TestMainWindow(unittest.TestCase):
 
         return MainWindow()
 
+    def test_the_import_tab_reads_a_dxf_outline(self):
+        """A DXF arrives as edges, so the tab must stroke them and say that is what it shows."""
+        import tempfile
+        from pathlib import Path
+
+        nl = chr(10)
+        entities = (
+            "0" + nl + "LWPOLYLINE" + nl + "8" + nl + "0" + nl + "70" + nl + "1" + nl
+            + "10" + nl + "0" + nl + "20" + nl + "0" + nl
+            + "10" + nl + "20" + nl + "20" + nl + "0" + nl
+            + "10" + nl + "20" + nl + "20" + nl + "10" + nl
+            + "10" + nl + "0" + nl + "20" + nl + "10" + nl
+        )
+        body = "0" + nl + "SECTION" + nl + "2" + nl + "ENTITIES" + nl + entities + "0" + nl + "ENDSEC" + nl
+        tabs = self.window.centralWidget()
+        import_tab = tabs.widget(5)
+        self.assertEqual(tabs.tabText(5), "Import")
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "outline.dxf"
+            target.write_text(body, encoding="utf-8")
+            import_tab.load(str(target), 1e-3)
+            self.assertEqual(import_tab.loaded[0], "outline")
+            import_tab.show_loaded(str(target))
+        text = import_tab.summary.text()
+        self.assertIn("DXF outline", text)
+        self.assertIn("not filled metal", text)
+
     def test_every_3d_camera_preset_can_be_selected(self):
         """The preset combo drives a redraw, so switching it must not raise.
 

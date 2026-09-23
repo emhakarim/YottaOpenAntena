@@ -1733,24 +1733,24 @@ class ImportTab(QWidget):
         layout.addWidget(self.figure.canvas)
 
     def choose_file(self) -> None:
-        from openantenna.geometry.cad import read_mesh
+        from openantenna.geometry.cad import read_dxf, read_mesh
 
         target, _filter = QFileDialog.getOpenFileName(
-            self, "Open mesh", "", "Meshes (*.stl *.obj);;STL (*.stl);;OBJ (*.obj);;All files (*)"
+            self, "Open mesh or outline", "",
+            "Meshes (*.stl *.obj);;Outlines (*.dxf);;STL (*.stl);;OBJ (*.obj);;All files (*)"
         )
         if not target:
             return
         try:
-            mesh = read_mesh(target)
             factor = 1e-3 if self.units.currentText() == "mm" else 1.0
-            self.mesh = mesh.scaled(factor)
+            self.load(target, factor)
         except (ValueError, FileNotFoundError, OSError) as exc:
             self.mesh = None
             self.summary.setText("could not read that file: %s" % exc)
             self.axes.clear()
             self.figure.canvas.draw_idle()
             return
-        self.show_mesh(target)
+        self.show_loaded(target)
 
     def show_mesh(self, source: str) -> None:
         from openantenna.geometry.cad import occupancy_fraction, staircase_occupancy
@@ -1789,6 +1789,79 @@ class ImportTab(QWidget):
             interpolation="nearest",
         )
         self.axes.set_title("Staircase occupancy (xy)")
+        self.axes.set_xlabel("x cells")
+        self.axes.set_ylabel("y cells")
+        self.figure.canvas.draw_idle()
+
+    def load(self, target: str, factor: float) -> None:
+        """Read a mesh or an outline, whichever the file actually is, at the chosen unit scale.
+
+        Format is decided by inspecting the file, never the extension: a DXF is text holding an
+        ENTITIES section, everything else is handed to the mesh reader.
+        """
+        from openantenna.geometry.cad import read_dxf, read_mesh
+
+        head = ""
+        try:
+            with open(target, "r", encoding="utf-8", errors="replace") as handle:
+                head = handle.read(8192)
+        except OSError:
+            head = ""
+        if "ENTITIES" in head and "SECTION" in head:
+            segments = read_dxf(target)
+            self.loaded = ("outline", [(a, b, factor) for a, b in segments])
+        else:
+            mesh = read_mesh(target)
+            mesh = mesh.scaled(factor)
+            self.mesh = mesh
+            self.loaded = ("mesh", mesh)
+
+    def show_loaded(self, source: str) -> None:
+        kind, payload = self.loaded
+        if kind == "outline":
+            scaled = [((a[0] * f, a[1] * f), (b[0] * f, b[1] * f)) for a, b, f in payload]
+            self.show_outline(source, scaled)
+        else:
+            self.show_mesh(source)
+
+    def show_outline(self, source: str, segments) -> None:
+        """Stroke a DXF outline onto the solver grid and show which cells its edges cross."""
+        from openantenna.geometry.cad import rasterise_segments, stroke_fraction
+
+        cell_m = self.cell_mm.value() * 1e-3
+        try:
+            shape, rows = rasterise_segments(segments, cell_m)
+        except ValueError as exc:
+            self.summary.setText("%s: %s" % (source, exc))
+            self.axes.clear()
+            self.figure.canvas.draw_idle()
+            return
+        xs = [x for start, end in segments for x in (start[0], end[0])]
+        ys = [y for start, end in segments for y in (start[1], end[1])]
+        self.summary.setText(
+            "%s\nDXF outline: %d segments  |  bounds %.2f x %.2f mm  |  grid %d x %d cells of "
+            "%.2f mm  |  edges cross %.1f %% of the grid\n"
+            "NOTE: a DXF is an outline, not a surface - these are stroked edges, not filled metal. "
+            "Quote the cell size with any result."
+            % (
+                source,
+                len(segments),
+                (max(xs) - min(xs)) * 1e3,
+                (max(ys) - min(ys)) * 1e3,
+                shape[0],
+                shape[1],
+                self.cell_mm.value(),
+                stroke_fraction(rows) * 100.0,
+            )
+        )
+        self.axes.clear()
+        self.axes.imshow(
+            [[1.0 if cell else 0.0 for cell in row] for row in rows],
+            origin="lower",
+            cmap="Oranges",
+            interpolation="nearest",
+        )
+        self.axes.set_title("Stroked outline (xy)")
         self.axes.set_xlabel("x cells")
         self.axes.set_ylabel("y cells")
         self.figure.canvas.draw_idle()
