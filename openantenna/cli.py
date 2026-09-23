@@ -487,6 +487,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"openantenna {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
+    optimise = sub.add_parser(
+        "optimise",
+        help="tune a patch dimension so a chosen resonance predictor hits a target (no solver)",
+    )
+    optimise.add_argument("--target-hz", type=float, required=True, help="wanted resonance")
+    optimise.add_argument("--epsilon-r", type=float, default=3.4)
+    optimise.add_argument("--height-mm", type=float, default=1.6)
+    optimise.add_argument(
+        "--predictor",
+        choices=("transmission-line", "cavity"),
+        default="cavity",
+        help="which analytic predictor the search minimises the error of",
+    )
+    optimise.add_argument("--length-span", type=float, default=0.25, help="fraction of L0 to search")
+    optimise.add_argument("--generations", type=int, default=120)
+    optimise.add_argument("--seed", type=int, default=0)
+    optimise.add_argument("--json", type=str, default=None, help="write the result to this file")
+    optimise.set_defaults(handler=cmd_optimise)
+
     feed_plan = sub.add_parser(
         "feed-plan",
         help="export the corporate-feed tree plan (drawing geometry, no solver needed)",
@@ -935,6 +954,90 @@ def cmd_feed_plan(args: argparse.Namespace) -> int:
     print("      of the 2-D row trees is still open (docs/feed-network-2d-design.md).")
 
     if args.json:
+        Path(args.json).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(f"  written to {args.json}")
+    return EXIT_OK
+
+
+def cmd_optimise(args: argparse.Namespace) -> int:
+    """Tune the patch length so one of the analytic predictors hits ``--target-hz``.
+
+    This is a **targeting** search: it reports where the chosen model wants the design to sit.  It
+    is not evidence that a solver run agrees (that is the 2-5 % model bias in docs/calibration.md),
+    so the output says which predictor produced it and refuses to look like a measured result.
+    """
+    from openantenna.geometry.patch import (
+        delta_length,
+        effective_permittivity,
+        patch_length,
+        patch_width,
+        resonant_frequency,
+        resonant_frequency_cavity,
+    )
+    from openantenna.sweep.optimise import minimise_resonance_error
+
+    if args.target_hz <= 0.0:
+        raise ValueError("--target-hz must be positive")
+    if args.height_mm <= 0.0:
+        raise ValueError("--height-mm must be positive")
+    if args.length_span <= 0.0 or args.length_span >= 1.0:
+        raise ValueError("--length-span must be between 0 and 1")
+
+    height_m = args.height_mm * 1e-3
+    width_m = patch_width(args.target_hz, args.epsilon_r)
+    epsilon_eff = effective_permittivity(args.epsilon_r, height_m, width_m)
+    d_l = delta_length(height_m, epsilon_eff, width_m)
+    length0 = patch_length(args.target_hz, epsilon_eff, d_l)
+
+    predictor_fn = (
+        resonant_frequency if args.predictor == "transmission-line" else resonant_frequency_cavity
+    )
+
+    def predict(params):
+        return predictor_fn(args.epsilon_r, height_m, width_m, params["length_m"])
+
+    result = minimise_resonance_error(
+        args.target_hz,
+        predict,
+        {
+            "length_m": (
+                length0 * (1.0 - args.length_span),
+                length0 * (1.0 + args.length_span),
+            )
+        },
+        max_generations=args.generations,
+        seed=args.seed,
+    )
+
+    achieved = predict(result.best_params)
+    print(f"predictor     : {args.predictor} (analytic - a targeting result, not a measurement)")
+    print(f"target        : {args.target_hz / 1e9:.6f} GHz")
+    print(f"width         : {width_m * 1e3:.4f} mm (from synthesis)")
+    print(f"length start  : {length0 * 1e3:.4f} mm (from synthesis)")
+    print(f"length tuned  : {result.best_params['length_m'] * 1e3:.4f} mm")
+    print(f"predicted     : {achieved / 1e9:.6f} GHz  (error {result.best_value * 100.0:.6f} %)")
+    print(f"search        : {result.evaluations} evaluations, {result.generations} generations, "
+          f"converged={result.converged}")
+    if result.notes:
+        print(f"notes         : {result.notes}")
+
+    if args.json:
+        payload = {
+            "kind": "openantenna.optimise",
+            "predictor": args.predictor,
+            "target_hz": args.target_hz,
+            "width_m": width_m,
+            "length_start_m": length0,
+            "length_tuned_m": result.best_params["length_m"],
+            "predicted_hz": achieved,
+            "relative_error": result.best_value,
+            "evaluations": result.evaluations,
+            "generations": result.generations,
+            "converged": result.converged,
+            "failed_evaluations": result.failed_evaluations,
+            "notes": result.notes,
+            "warning": "analytic predictor: a targeting result, not a solver measurement",
+        }
         Path(args.json).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         print(f"  written to {args.json}")
     return EXIT_OK
