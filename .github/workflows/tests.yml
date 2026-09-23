@@ -36,6 +36,27 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: python -m unittest discover -s tests -v
 
+  gui:
+    name: GUI (qt, offscreen)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install the project with the GUI extra
+        run: python -m pip install ".[gui]"
+      - name: Run the GUI tests with no display
+        env:
+          # A runner has no display; offscreen keeps Qt from needing one.
+          QT_QPA_PLATFORM: offscreen
+          PYTHONPATH: ${{ github.workspace }}
+        # By file, not by module: the module name path drags in a sibling test module that this
+        # job deliberately does not install.
+        run: python -m unittest discover -s tests -p "test_gui_smoke.py" -v
+
   frozen-gui:
     name: frozen GUI (windows)
     runs-on: windows-latest

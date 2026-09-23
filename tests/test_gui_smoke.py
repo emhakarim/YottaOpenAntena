@@ -61,6 +61,20 @@ class TestMainWindow(unittest.TestCase):
         self.assertIn("DXF outline", text)
         self.assertIn("not filled metal", text)
 
+    def test_the_optimise_tab_targets_a_frequency(self):
+        """The tab must run the existing search and report the model that produced the number."""
+        window = self._window()
+        tabs = window.centralWidget()
+        self.assertEqual(tabs.count(), 7)
+        self.assertEqual(tabs.tabText(6), "Optimise")
+        tab = tabs.widget(6)
+        tab.generations.setValue(8)
+        tab.run()
+        text = tab.result.text()
+        self.assertIn("transmission-line", text)
+        self.assertIn("best length", text)
+        self.assertIn("not solver results", tab.status.text())
+
     def test_every_3d_camera_preset_can_be_selected(self):
         """The preset combo drives a redraw, so switching it must not raise.
 
@@ -78,13 +92,13 @@ class TestMainWindow(unittest.TestCase):
                 design_tab.view_preset.setCurrentText(preset)
                 self.assertEqual(design_tab.view_preset.currentText(), preset)
 
-    def test_window_builds_with_six_tabs(self):
+    def test_window_builds_with_seven_tabs(self):
         window = self._window()
         tabs = window.centralWidget()
-        self.assertEqual(tabs.count(), 6)
+        self.assertEqual(tabs.count(), 7)
         titles = [tabs.tabText(i) for i in range(tabs.count())]
         self.assertEqual(
-            titles, ["Material & composite", "Design", "Simulate", "Results", "Sweep", "Import"]
+            titles, ["Material & composite", "Design", "Simulate", "Results", "Sweep", "Import", "Optimise"]
         )
         window.close()
 

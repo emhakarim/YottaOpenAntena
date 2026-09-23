@@ -1372,6 +1372,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(ResultsTab(), "Results")
         tabs.addTab(SweepTab(), "Sweep")
         tabs.addTab(ImportTab(), "Import")
+        tabs.addTab(OptimiseTab(), "Optimise")
         self.setCentralWidget(tabs)
 
         # The project tree: a shell-style view of the *model* (not of the widgets), so it
@@ -1879,4 +1880,175 @@ class ImportTab(QWidget):
         if getattr(self.figure, "axes", None):
             return self.figure.axes[0]
         return self.figure.add_subplot(111)
+
+class OptimiseTab(QWidget):
+    """Target a resonance frequency by searching the patch length, with the model named up front.
+
+    The search itself lives in openantenna.sweep.optimise and is already covered by its own tests;
+    this tab only chooses the predictor, runs it, and reports where the chosen model wants the
+    design to sit - never as a measurement.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        from PySide6.QtWidgets import (
+            QComboBox,
+            QDoubleSpinBox,
+            QFormLayout,
+            QGroupBox,
+            QHBoxLayout,
+            QLabel,
+            QPlainTextEdit,
+            QPushButton,
+            QSpinBox,
+            QVBoxLayout,
+        )
+
+        layout = QVBoxLayout(self)
+
+        controls = QGroupBox("Target")
+        form = QFormLayout(controls)
+
+        self.target_ghz = QDoubleSpinBox()
+        self.target_ghz.setRange(0.1, 6.0)
+        self.target_ghz.setDecimals(3)
+        self.target_ghz.setSingleStep(0.05)
+        self.target_ghz.setValue(2.45)
+        self.target_ghz.setSuffix(" GHz")
+        form.addRow("target", self.target_ghz)
+
+        self.epsilon_r = QDoubleSpinBox()
+        self.epsilon_r.setRange(1.0, 30.0)
+        self.epsilon_r.setDecimals(3)
+        self.epsilon_r.setValue(2.2)
+        form.addRow("epsilon_r", self.epsilon_r)
+
+        self.height_mm = QDoubleSpinBox()
+        self.height_mm.setRange(0.05, 20.0)
+        self.height_mm.setDecimals(3)
+        self.height_mm.setValue(1.6)
+        self.height_mm.setSuffix(" mm")
+        form.addRow("substrate height", self.height_mm)
+
+        self.predictor = QComboBox()
+        self.predictor.addItems(["transmission-line", "cavity"])
+        form.addRow("predictor", self.predictor)
+
+        self.length_span_pct = QDoubleSpinBox()
+        self.length_span_pct.setRange(1.0, 40.0)
+        self.length_span_pct.setDecimals(1)
+        self.length_span_pct.setValue(10.0)
+        self.length_span_pct.setSuffix(" %")
+        form.addRow("length search span", self.length_span_pct)
+
+        self.generations = QSpinBox()
+        self.generations.setRange(5, 500)
+        self.generations.setValue(60)
+        form.addRow("generations", self.generations)
+
+        self.seed = QSpinBox()
+        self.seed.setRange(0, 99999)
+        self.seed.setValue(0)
+        form.addRow("seed", self.seed)
+
+        layout.addWidget(controls)
+
+        buttons = QHBoxLayout()
+        self.run_button = QPushButton("Optimise")
+        self.run_button.clicked.connect(self.run)
+        buttons.addWidget(self.run_button)
+        buttons.addStretch(1)
+        layout.addLayout(buttons)
+
+        self.result = QLabel(
+            "Set a target and press Optimise. This searches the analytic predictor; it is not "
+            "evidence that a solver run agrees."
+        )
+        self.result.setWordWrap(True)
+        layout.addWidget(self.result)
+
+        self.history = QPlainTextEdit()
+        self.history.setReadOnly(True)
+        layout.addWidget(self.history)
+
+        self.status = QLabel(
+            "These are analytic targeting numbers from the chosen predictor, not solver results."
+        )
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+
+    def run(self) -> None:
+        from openantenna.geometry.patch import (
+            delta_length,
+            effective_permittivity,
+            patch_length,
+            patch_width,
+            resonant_frequency,
+            resonant_frequency_cavity,
+        )
+        from openantenna.sweep.optimise import minimise_resonance_error
+
+        target = self.target_ghz.value() * 1e9
+        if target <= 0.0:
+            self.result.setText("target must be positive")
+            return
+        height_m = self.height_mm.value() * 1e-3
+        if height_m <= 0.0:
+            self.result.setText("substrate height must be positive")
+            return
+        span = self.length_span_pct.value() / 100.0
+        if not 0.0 < span < 1.0:
+            self.result.setText("search span must be between 0 and 100 %")
+            return
+
+        epsilon_r = self.epsilon_r.value()
+        width_m = patch_width(target, epsilon_r)
+        epsilon_eff = effective_permittivity(epsilon_r, height_m, width_m)
+        d_l = delta_length(height_m, epsilon_eff, width_m)
+        length0 = patch_length(target, epsilon_eff, d_l)
+        predictor_name = self.predictor.currentText()
+        predictor = resonant_frequency if predictor_name == "transmission-line" else resonant_frequency_cavity
+
+        def predict(params):
+            return predictor(epsilon_r, height_m, width_m, params["length_m"])
+
+        try:
+            result = minimise_resonance_error(
+                target,
+                predict,
+                {"length_m": (length0 * (1.0 - span), length0 * (1.0 + span))},
+                max_generations=self.generations.value(),
+                seed=self.seed.value(),
+                on_generation=None,
+            )
+        except Exception as exc:  # a search that cannot run must say so, not vanish
+            self.result.setText("the search did not run: %s: %s" % (type(exc).__name__, exc))
+            return
+
+        best = result.best_params.get("length_m")
+        if best is None:
+            self.result.setText("no usable result: %s" % "; ".join(result.notes))
+            return
+        achieved = predict(result.best_params)
+        self.result.setText(
+            "predictor %s\nbest length %.6f mm (start %.6f mm)\ntarget %.4f GHz -> model says "
+            "%.4f GHz\ngenerations %d, evaluations %d, converged %s"
+            % (
+                predictor_name,
+                best * 1e3,
+                length0 * 1e3,
+                target / 1e9,
+                achieved / 1e9,
+                result.generations,
+                result.evaluations,
+                "yes" if result.converged else "no",
+            )
+        )
+        lines = ["%d history entries recorded (seed %d)" % (len(result.history), self.seed.value())]
+        for index, entry in enumerate(result.history[:20], 1):
+            lines.append("  gen %d: %s" % (index, str(entry)[:160]))
+        if len(result.history) > 20:
+            lines.append("  ... %d more" % (len(result.history) - 20))
+        self.history.setPlainText("\n".join(lines))
 
