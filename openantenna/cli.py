@@ -504,6 +504,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cad_inspect.add_argument("--json", type=str, default=None, help="write the report to this file")
     cad_inspect.set_defaults(handler=cmd_cad_inspect)
+    dxf_inspect = sub.add_parser(
+        "dxf-inspect", help="read a DXF outline and report what a stroked grid would see"
+    )
+    dxf_inspect.add_argument("file", help="path to a .dxf file")
+    dxf_inspect.add_argument("--cell-mm", type=float, default=2.0, help="solver cell size in mm")
+    dxf_inspect.add_argument("--units", choices=("mm", "m"), default="mm", help="units of the DXF")
+    dxf_inspect.add_argument("--json", action="store_true", help="emit JSON")
+    dxf_inspect.set_defaults(handler=cmd_dxf_inspect)
+
 
     optimise = sub.add_parser(
         "optimise",
@@ -1059,6 +1068,44 @@ def cmd_optimise(args: argparse.Namespace) -> int:
         Path(args.json).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         print(f"  written to {args.json}")
     return EXIT_OK
+
+
+def cmd_dxf_inspect(args) -> int:
+    """Report what a DXF outline is, and what the solver grid would see of it."""
+    from openantenna.geometry.cad import rasterise_segments, read_dxf, stroke_fraction
+
+    try:
+        segments = read_dxf(args.file)
+        factor = 1e-3 if args.units == "mm" else 1.0
+        if factor != 1.0:
+            segments = [((a[0] * factor, a[1] * factor), (b[0] * factor, b[1] * factor)) for a, b in segments]
+        cell_m = args.cell_mm * 1e-3
+        shape, rows = rasterise_segments(segments, cell_m)
+    except (ValueError, FileNotFoundError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    xs = [x for start, end in segments for x in (start[0], end[0])]
+    ys = [y for start, end in segments for y in (start[1], end[1])]
+    payload = {
+        "file": str(args.file),
+        "units": args.units,
+        "segments": len(segments),
+        "bounds_m": [min(xs), min(ys), max(xs), max(ys)],
+        "grid": {"cols": shape[0], "rows": shape[1], "cell_mm": args.cell_mm},
+        "stroke_fraction": stroke_fraction(rows),
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+    print(f"file            : {args.file}")
+    print(f"units           : {args.units}" + (" (coordinates scaled by 0.001 to metres)" if factor != 1.0 else ""))
+    print(f"segments        : {len(segments)}")
+    print(f"bounds          : ({min(xs):.4f}, {min(ys):.4f}) .. ({max(xs):.4f}, {max(ys):.4f}) m")
+    print(f"grid            : {shape[0]} x {shape[1]} cells of {args.cell_mm} mm")
+    print(f"stroke coverage : {stroke_fraction(rows) * 100:.1f} % of the grid")
+    print("NOTE: DXF is an outline, not a surface - these are stroked edges, not filled metal.")
+    return 0
 
 
 def cmd_cad_inspect(args: argparse.Namespace) -> int:

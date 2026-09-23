@@ -331,6 +331,14 @@ class DesignTab(QWidget):
         self.view_mode = QComboBox()
         self.view_mode.addItems(["2-D layout", "3-D preview"])
         layout.addWidget(self.view_mode)
+        self.view_mode.setToolTip(
+            "3-D preview: drag with the mouse to rotate, scroll to zoom."
+        )
+        self.view_preset = QComboBox()
+        self.view_preset.addItems(["isometric", "top", "front", "side"])
+        self.view_preset.setToolTip("camera preset for the 3-D preview")
+        self.view_preset.currentIndexChanged.connect(self.synthesise)
+        layout.addWidget(self.view_preset)
 
         try:
             self.figure, self.canvas = _plot_canvas()
@@ -462,6 +470,13 @@ class DesignTab(QWidget):
         if self.view_mode.currentText() == "3-D preview":
             geometry_axes = self.figure.add_subplot(121, projection="3d")
             self._draw_geometry_3d(geometry_axes, design, layout, self.height.value())
+            _presets = {
+                "isometric": (25.0, -60.0),
+                "top": (89.0, -90.0),
+                "front": (0.0, -90.0),
+                "side": (0.0, 0.0),
+            }
+            geometry_axes.view_init(*_presets[self.view_preset.currentText()])
         else:
             geometry_axes = self.figure.add_subplot(121)
             self._draw_geometry(geometry_axes, design, layout, self._corporate_plan())
@@ -1692,7 +1707,7 @@ class ImportTab(QWidget):
         layout = QVBoxLayout(self)
         controls = QGroupBox("CAD import")
         controls_layout = QHBoxLayout(controls)
-        self.choose = QPushButton("Choose STL\u2026")
+        self.choose = QPushButton("Choose mesh\u2026")
         self.choose.clicked.connect(self.choose_file)
         self.units = QComboBox()
         self.units.addItems(["mm", "m"])
@@ -1707,7 +1722,10 @@ class ImportTab(QWidget):
         controls_layout.addWidget(self.cell_mm)
         layout.addWidget(controls)
 
-        self.summary = QLabel("No mesh loaded. STL carries no units, so pick the one your CAD used.")
+        self.summary = QLabel(
+            "No mesh loaded. Neither STL nor OBJ carries units, so pick the one your CAD used. "
+            "ASCII and binary STL, and OBJ, are read."
+        )
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
 
@@ -1715,13 +1733,15 @@ class ImportTab(QWidget):
         layout.addWidget(self.figure.canvas)
 
     def choose_file(self) -> None:
-        from openantenna.geometry.cad import read_stl
+        from openantenna.geometry.cad import read_mesh
 
-        target, _filter = QFileDialog.getOpenFileName(self, "Open STL", "", "STL (*.stl);;All files (*)")
+        target, _filter = QFileDialog.getOpenFileName(
+            self, "Open mesh", "", "Meshes (*.stl *.obj);;STL (*.stl);;OBJ (*.obj);;All files (*)"
+        )
         if not target:
             return
         try:
-            mesh = read_stl(target)
+            mesh = read_mesh(target)
             factor = 1e-3 if self.units.currentText() == "mm" else 1.0
             self.mesh = mesh.scaled(factor)
         except (ValueError, FileNotFoundError, OSError) as exc:

@@ -201,6 +201,152 @@ def read_mesh(path: str | Path) -> Mesh:
 
 
 
+def _dxf_pairs(text: str):
+    """DXF is a flat stream of (group code, value) pairs on alternating lines."""
+    lines = text.splitlines()
+    for index in range(0, len(lines) - 1, 2):
+        raw = lines[index].strip()
+        if not raw:
+            continue
+        try:
+            code = int(raw)
+        except ValueError as exc:
+            raise ValueError(f"line {index + 1}: expected a numeric group code, got {raw!r}") from exc
+        yield code, lines[index + 1].strip()
+
+
+def _polygonise_arc(cx: float, cy: float, radius: float, start_deg: float, end_deg: float, steps: int = 48):
+    import math
+
+    span = (end_deg - start_deg) % 360.0
+    if span == 0.0:
+        span = 360.0
+    points = []
+    for step in range(steps + 1):
+        angle = math.radians(start_deg + span * step / steps)
+        points.append((cx + radius * math.cos(angle), cy + radius * math.sin(angle)))
+    return points
+
+
+def read_dxf(path: str | Path) -> List[Tuple[Tuple[float, float], Tuple[float, float]]]:
+    """Read a DXF's ENTITIES section as a list of 2-D segments (drawing units, mm by convention).
+
+    Supports the entities a board outline actually uses: LINE, LWPOLYLINE (closed or open),
+    CIRCLE and ARC.  Anything else - splines, text, hatches, blocks - is left alone and said so
+    in the returned note rather than silently flattened.
+    """
+    target = Path(path)
+    text = target.read_text(encoding="utf-8", errors="replace")
+    segments: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
+    in_entities = False
+    kind: str | None = None
+    values = {}
+    flags = 0
+    ignored: Dict[str, int] = {}
+
+    def flush() -> None:
+        nonlocal kind, values, flags
+        if kind == "LINE" and 10 in values and 11 in values:
+            segments.append(((values[10][0], values[20][0]), (values[11][0], values[21][0])))
+        elif kind == "LWPOLYLINE":
+            points = list(zip(values.get(10, []), values.get(20, [])))
+            for index in range(len(points) - 1):
+                segments.append((points[index], points[index + 1]))
+            if flags & 1 and len(points) > 2:
+                segments.append((points[-1], points[0]))
+        elif kind == "CIRCLE" and 10 in values and 40 in values:
+            points = _polygonise_arc(values[10][0], values[20][0], values[40][0], 0.0, 0.0)
+            for index in range(len(points) - 1):
+                segments.append((points[index], points[index + 1]))
+        elif kind == "ARC" and 10 in values and 40 in values:
+            points = _polygonise_arc(
+                values[10][0], values[20][0], values[40][0],
+                values.get(50, [0.0])[0], values.get(51, [0.0])[0],
+            )
+            for index in range(len(points) - 1):
+                segments.append((points[index], points[index + 1]))
+        elif kind:
+            ignored[kind] = ignored.get(kind, 0) + 1
+        kind, values, flags = None, {}, 0
+
+    for code, value in _dxf_pairs(text):
+        if code == 0:
+            flush()
+            if value == "SECTION":
+                continue
+            if value == "ENDSEC":
+                in_entities = False
+                continue
+            if in_entities:
+                kind = value
+            continue
+        if code == 2 and value == "ENTITIES":
+            in_entities = True
+            continue
+        if not in_entities:
+            continue
+        if code == 70:
+            try:
+                flags = int(float(value))
+            except ValueError:
+                flags = 0
+        elif code in (10, 20, 11, 21, 40, 50, 51):
+            try:
+                values.setdefault(code, []).append(float(value))
+            except ValueError:
+                raise ValueError(f"{target.name}: group code {code} carried a non-numeric value {value!r}")
+    flush()
+
+    if not segments:
+        detail = ", ".join(f"{name} x{count}" for name, count in sorted(ignored.items()))
+        raise ValueError(
+            f"{target.name}: no LINE/LWPOLYLINE/CIRCLE/ARC entities found"
+            + (f" (ignored: {detail})" if detail else "")
+        )
+    return segments
+
+
+def rasterise_segments(
+    segments, cell_m: float, *, max_cells: int = 2000, margin_m: float = 0.0
+) -> Tuple[Tuple[int, int], List[List[bool]]]:
+    """Stroke 2-D segments onto a square grid.  Samples at half-cell steps so a diagonal
+    outline cannot slip between two rows of cells the way a single endpoint test would.
+    """
+    if cell_m <= 0.0:
+        raise ValueError("cell size must be positive")
+    xs = [x for start, end in segments for x in (start[0], end[0])]
+    ys = [y for start, end in segments for y in (start[1], end[1])]
+    low_x, high_x = min(xs) - margin_m, max(xs) + margin_m
+    low_y, high_y = min(ys) - margin_m, max(ys) + margin_m
+    width = int((high_x - low_x) / cell_m) + 1
+    height = int((high_y - low_y) / cell_m) + 1
+    if width > max_cells or height > max_cells:
+        raise ValueError(
+            f"a {width} x {height} grid exceeds the {max_cells} cells/axis cap - enlarge cell_m"
+        )
+    rows = [[False] * width for _ in range(height)]
+    for start, end in segments:
+        span = max(abs(end[0] - start[0]), abs(end[1] - start[1]))
+        steps = max(1, int(span / (cell_m / 2.0)) + 1)
+        for step in range(steps + 1):
+            fraction = step / steps
+            x = start[0] + (end[0] - start[0]) * fraction
+            y = start[1] + (end[1] - start[1]) * fraction
+            column = int((x - low_x) / cell_m)
+            row = int((y - low_y) / cell_m)
+            if 0 <= row < height and 0 <= column < width:
+                rows[row][column] = True
+    return (width, height), rows
+
+
+def stroke_fraction(rows) -> float:
+    """Fraction of the grid the outline touches - the outline analogue of occupancy_fraction."""
+    total = sum(len(row) for row in rows)
+    if not total:
+        return 0.0
+    return sum(1 for row in rows for cell in row if cell) / total
+
+
 def read_stl(path: str | Path) -> Mesh:
     """Read an STL, binary or ASCII, choosing by measurement rather than by extension."""
     target = Path(path)
