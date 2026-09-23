@@ -337,7 +337,7 @@ class DesignTab(QWidget):
         self.view_preset = QComboBox()
         self.view_preset.addItems(["isometric", "top", "front", "side"])
         self.view_preset.setToolTip("camera preset for the 3-D preview")
-        self.view_preset.currentIndexChanged.connect(self.synthesise)
+        self.view_preset.currentIndexChanged.connect(lambda _index: self.synthesise())
         layout.addWidget(self.view_preset)
 
         try:
