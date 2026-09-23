@@ -26,12 +26,20 @@ def _project() -> Project:
 
 class TestRenderedScript(unittest.TestCase):
     def test_the_driven_port_is_bound_so_main_can_run(self):
-        """Regression: the element loop used to discard the port objects -> NameError."""
+        """Regression: the port objects used to be discarded, then the fix shadowed `port`.
+
+        History, because both failures cost a full FDTD each: the element loop first threw the
+        port objects away (NameError), then `port = driven` was added inside `main()` - which made
+        `port` a *local* of main() and left the probe path unbound (UnboundLocalError after
+        3230 s, twice).  The driven port is now selected without shadowing the module-scope name.
+        """
         script = OpenEMSSolver(element_ports=True).render_script(_project())
         self.assertIn("ELEMENT_PORTS_OBJS = []", script)
         self.assertIn("ELEMENT_PORTS_OBJS.append(", script)
         self.assertIn("port = ELEMENT_PORTS_OBJS[0]", script)
-        self.assertIn("port = driven", script)
+        # The s11 port comes from the list, and `port` is never rebound inside main().
+        self.assertIn("_s11_port = ELEMENT_PORTS_OBJS[EXCITE_PORT - 1]", script)
+        self.assertNotIn("port = driven", script)
 
     def test_every_port_is_dumped(self):
         script = OpenEMSSolver(element_ports=True).render_script(_project())
