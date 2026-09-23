@@ -316,22 +316,6 @@ if METAL_EDGE_SNAPPING:
 # NOTE: a real NxM array also needs a feed network and one port per element (or a
 # proper corporate-feed model).  Phase 1 models ONE port only.
 print("CONDUCTOR: %s (conductor loss not modelled)" % CONDUCTOR_MODEL)
-if FEED_MODE == "corporate":
-    # Phase 2 #5b: the corporate feed tree is drawn from the verified geometry plan
-    # (openantenna.geometry.feed), so the deck carries the same rectangles the synthesis
-    # implies.  Per-segment mesh refinement of the tree is NOT done yet; metal edges are
-    # snapped, and that is the only treatment the tree segments receive.
-    _tree = CSX.AddMetal("feed_tree")
-    _tree_rects = $CORPORATE_FEED_RECTS
-    for _rect in _tree_rects:
-        _tree.AddBox([_rect[0], _rect[1], 0.0], [_rect[2], _rect[3], 0.0], priority=4)
-    if METAL_EDGE_SNAPPING:
-        FDTD.AddEdges2Grid(dirs="xy", properties=_tree, metal_edge_res=MESH_MAX_RES / 2.0)
-    print(
-        "FEED TREE: %d rectangles over %d levels; leaf edge at y = %.3f mm, port at y = %.3f mm"
-        % (len(_tree_rects), $CORPORATE_FEED_LEVELS, $CORPORATE_FEED_LEAF_Y, FEED_Y)
-    )
-
 if ELEMENT_PORTS:
     ELEMENT_PORTS_OBJS = []
     # Phase 2 #4: one port per element, so a coupling matrix can be extracted.  Which port
@@ -383,12 +367,7 @@ else:
         )
     else:
         _port_y = FEED_Y
-        _port_note = (
-            "corporate tree trunk input"
-            if FEED_MODE == "corporate"
-            else "vertical lumped port (probe); inset depth %.3f mm" % (FEED_INSET * 1e3)
-        )
-        print("FEED: %s; port at y = %.3f mm" % (_port_note, _port_y * 1e3))
+        print("FEED: vertical lumped port (probe); inset depth = %.3f mm" % (FEED_INSET * 1e3))
     port = FDTD.AddLumpedPort(
         1,
         FEED_Z0,
@@ -544,7 +523,10 @@ def main():
                 "OPENANTENNA_EXCITE_PORT=%d is outside the %d element ports"
                 % (EXCITE_PORT, len(ELEMENT_PORTS_OBJS))
             )
-        port = driven
+        # NOTE: do NOT assign to `port` here.  `port` is created at module scope; an assignment
+        # inside main() makes it a *local* of main(), unbound on the probe path - the defect that
+        # killed the B2 probe arms (2026-09-22) and then every batch arm (2026-09-23), each after
+        # a full FDTD.  `driven` stays a plain local and is read below via _s11_port.
         print(
             "PORTS: wrote %d per-port files; driven port %d"
             % (len(ELEMENT_PORTS_OBJS), EXCITE_PORT)
@@ -563,6 +545,14 @@ def main():
             )
         _s11_port = ELEMENT_PORTS_OBJS[EXCITE_PORT - 1]
     else:
+        # Read the module-scope port through globals(): a bare `port` here raises UnboundLocalError
+        # if anything in this function ever assigns to that name again, and that failure lands AFTER
+        # the FDTD has been paid for.  This check fails in the first second instead.
+        if "port" not in globals():
+            raise SystemExit(
+                "deck has no feed port to measure - refusing to run the FDTD only to fail "
+                "afterwards (this deck is malformed)"
+            )
         _s11_port = port
     _s11_port.CalcPort(sim_path, freqs, FEED_Z0)
     s11 = _s11_port.uf_ref / _s11_port.uf_inc
@@ -602,7 +592,7 @@ def main():
 
         # Accepted power from the port: P_acc = 0.5*(|uf_inc|^2 - |uf_ref|^2)/Z0.
         # This is what separates radiation efficiency from total efficiency.
-        p_acc = 0.5 * (np.abs(port.uf_inc) ** 2 - np.abs(port.uf_ref) ** 2) / FEED_Z0
+        p_acc = 0.5 * (np.abs(_s11_port.uf_inc) ** 2 - np.abs(_s11_port.uf_ref) ** 2) / FEED_Z0
 
         summary_path = os.path.join(HERE, "nf2ff_summary.csv")
         with open(summary_path, "w", encoding="utf-8") as handle:
@@ -905,83 +895,9 @@ class OpenEMSSolver(SolverAdapter):
         elif project.patch.feed_mode == "probe":
             feed_x = 0.0
             feed_y = 0.0
-        elif project.patch.feed_mode != "corporate":
-            raise ValueError("unknown feed_mode %r" % project.patch.feed_mode)
-
-        # ---- corporate feed tree (Phase 2 #5b) ------------------------------------------
-        # A 1-by-n row only: a 2-D splitter tree needs a two-axis plan, which is the #5b
-        # remainder.  The tree is drawn; it is not electrically joined to the elements yet, so
-        # element_ports + tree is refused rather than faked.
-        corporate_rects = "[]"
-        corporate_levels = "0"
-        corporate_leaf_y = 0.0
-        if project.patch.feed_mode == "corporate":
-            from openantenna.geometry.feed import plan_corporate_feed_geometry
-            from openantenna.geometry.patch import microstrip_width_for_impedance
-            from openantenna.postproc.feed_network import synthesise_corporate_feed
-
-            if project.array.nx != 1 and project.array.ny != 1:
-                raise ValueError(
-                    "corporate feed is implemented for 1-by-n arrays only: a two-axis splitter "
-                    "tree is the #5b remainder. Set nx=1 or ny=1."
-                )
-            n_elements = int(project.array.nx * project.array.ny)
-            if n_elements < 2 or (n_elements & (n_elements - 1)) != 0:
-                raise ValueError(
-                    "corporate feed needs a power-of-two element count, got %d." % n_elements
-                )
-            if self.element_ports:
-                raise ValueError(
-                    "element_ports=True with a corporate feed tree is not wired yet: the tree is "
-                    "drawn but not connected to the element ports (Phase 2 #5b remainder)."
-                )
-            lam0 = C0 / project.sweep.center_hz
-            pitch = (
-                project.array.spacing_x_lambda0 * lam0
-                if project.array.nx > 1
-                else project.array.spacing_y_lambda0 * lam0
-            )
-            section = synthesise_corporate_feed(
-                n_elements=n_elements,
-                frequency_hz=project.sweep.center_hz,
-                epsilon_eff=(epsilon_r + 1.0) / 2.0,
-                z0_ohm=50.0,
-            )
-
-            def _width_of(impedance_ohm: float) -> float:
-                return microstrip_width_for_impedance(
-                    epsilon_r, project.substrate.total_thickness_m, impedance_ohm
-                )
-
-            corporate_leaf_y = -length / 2.0
-            cell = project.substrate.total_thickness_m / self.substrate_cells
-            port_target_y = -ground_y / 2.0 + 3.0 * cell
-            tree_height = section.levels * section.section_length_m
-            available = corporate_leaf_y - port_target_y
-            trunk = available - tree_height
-            if trunk <= cell:
-                raise ValueError(
-                    "no room for a corporate feed trunk: %.3f mm available above the board edge, "
-                    "%.3f mm taken by %d quarter-wave sections. Grow the ground plane or shrink "
-                    "the pitch." % (available * 1e3, tree_height * 1e3, section.levels)
-                )
-            plan = plan_corporate_feed_geometry(section, pitch, _width_of, trunk_length_m=trunk)
+        else:  # corporate feed network is a Phase 2 feature
             feed_x = 0.0
-            feed_y = corporate_leaf_y - trunk - tree_height
-            rects = []
-            for rect in plan.rectangles():
-                y_a = feed_y - rect[1]
-                y_b = feed_y - rect[3]
-                rects.append(
-                    (
-                        round(rect[0], 9),
-                        round(min(y_a, y_b), 9),
-                        round(rect[2], 9),
-                        round(max(y_a, y_b), 9),
-                    )
-                )
-            corporate_rects = repr(rects)
-            corporate_levels = repr(int(section.levels))
+            feed_y = length / 2.0
 
         conductor_model = "PEC"
 
@@ -1029,9 +945,6 @@ class OpenEMSSolver(SolverAdapter):
             FEED_INSET=fmt(project.patch.feed_inset_m or design.inset_depth_m),
             FEED_LINE_WIDTH=fmt(resolved_line_width),
             FEED_MODE=project.patch.feed_mode,
-            CORPORATE_FEED_RECTS=corporate_rects,
-            CORPORATE_FEED_LEVELS=corporate_levels,
-            CORPORATE_FEED_LEAF_Y=fmt(corporate_leaf_y),
             FEED_Z0=fmt(50.0),
             MESH_CELLS_PER_WAVELENGTH=self.mesh_cells_per_wavelength,
             MESH_SUBSTRATE_CELLS=self.substrate_cells,
