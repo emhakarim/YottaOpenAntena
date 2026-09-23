@@ -110,7 +110,49 @@ def _run_deck(script: str) -> str:
     """Execute a rendered deck with stubbed solvers and return whatever it printed."""
     stdout = io.StringIO()
     with TemporaryDirectory() as folder:
-        import numpy as np
+        try:
+            import numpy as np
+        except ImportError:
+            # CI deliberately runs with no optional dependencies.  The deck only needs a handful of
+            # array constructors, so a minimal stand-in keeps this test meaningful there instead of
+            # skipping the very thing it exists to prove.
+            class _NP(types.ModuleType):
+                pi = 3.141592653589793
+                e = 2.718281828459045
+                inf = float("inf")
+                nan = float("nan")
+
+                def sqrt(self, value):
+                    return value ** 0.5
+
+                def linspace(self, start, stop, count):
+                    step = (stop - start) / max(1, count - 1)
+                    return [start + index * step for index in range(count)]
+
+                def arange(self, start, stop, step=1.0):
+                    values = []
+                    value = start
+                    while value < stop:
+                        values.append(value)
+                        value += step
+                    return values
+
+                def array(self, values, *args, **kwargs):
+                    return list(values)
+
+                def zeros(self, count, *args, **kwargs):
+                    return [0.0] * count
+
+                def ones(self, count, *args, **kwargs):
+                    return [1.0] * count
+
+            np = _NP("numpy")
+            # the generated deck does its own `import numpy as np`, so the stand-in must be visible to
+            # the import system, not only to the deck's globals
+            sys.modules.setdefault("numpy", np)
+            _stub_numpy_installed = True
+        else:
+            _stub_numpy_installed = False
 
         installed: list[str] = []
         for name, module in _stub_environment().items():
@@ -135,6 +177,8 @@ def _run_deck(script: str) -> str:
         finally:
             for name in installed:
                 sys.modules.pop(name, None)
+            if _stub_numpy_installed:
+                sys.modules.pop("numpy", None)
     return stdout.getvalue()
 
 
