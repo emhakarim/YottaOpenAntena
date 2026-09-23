@@ -1356,6 +1356,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(SimulateTab(self.design_tab), "Simulate")
         tabs.addTab(ResultsTab(), "Results")
         tabs.addTab(SweepTab(), "Sweep")
+        tabs.addTab(ImportTab(), "Import")
         self.setCentralWidget(tabs)
 
         # The project tree: a shell-style view of the *model* (not of the widgets), so it
@@ -1673,3 +1674,102 @@ class SweepTab(QWidget):
         if drawn:
             self.axes.legend(fontsize=7)
         self.figure.canvas.draw_idle()
+
+
+class ImportTab(QWidget):
+    """Read a CAD mesh (STL) and show what the solver grid would make of it.
+
+    No new dependency: the STL reader and the staircase rasteriser are in openantenna.geometry.cad,
+    and the picture uses the same matplotlib canvas the other tabs use.  The panel says out loud
+    that a staircase approximation is coarser for slanted faces, because that is the number that
+    travels with any result taken from this geometry.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.mesh = None
+
+        layout = QVBoxLayout(self)
+        controls = QGroupBox("CAD import")
+        controls_layout = QHBoxLayout(controls)
+        self.choose = QPushButton("Choose STL\u2026")
+        self.choose.clicked.connect(self.choose_file)
+        self.units = QComboBox()
+        self.units.addItems(["mm", "m"])
+        self.cell_mm = QDoubleSpinBox()
+        self.cell_mm.setRange(0.1, 100.0)
+        self.cell_mm.setValue(2.0)
+        self.cell_mm.setSuffix(" mm")
+        controls_layout.addWidget(self.choose)
+        controls_layout.addWidget(QLabel("units"))
+        controls_layout.addWidget(self.units)
+        controls_layout.addWidget(QLabel("cell"))
+        controls_layout.addWidget(self.cell_mm)
+        layout.addWidget(controls)
+
+        self.summary = QLabel("No mesh loaded. STL carries no units, so pick the one your CAD used.")
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+
+        self.figure, self.axes = _plot_canvas()
+        layout.addWidget(self.figure.canvas)
+
+    def choose_file(self) -> None:
+        from openantenna.geometry.cad import read_stl
+
+        target, _filter = QFileDialog.getOpenFileName(self, "Open STL", "", "STL (*.stl);;All files (*)")
+        if not target:
+            return
+        try:
+            mesh = read_stl(target)
+            factor = 1e-3 if self.units.currentText() == "mm" else 1.0
+            self.mesh = mesh.scaled(factor)
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            self.mesh = None
+            self.summary.setText("could not read that file: %s" % exc)
+            self.axes.clear()
+            self.figure.canvas.draw_idle()
+            return
+        self.show_mesh(target)
+
+    def show_mesh(self, source: str) -> None:
+        from openantenna.geometry.cad import occupancy_fraction, staircase_occupancy
+
+        mesh = self.mesh
+        low, high = mesh.bounds()
+        size_mm = [(high[index] - low[index]) * 1e3 for index in range(3)]
+        cell_m = self.cell_mm.value() * 1e-3
+        try:
+            shape, rows = staircase_occupancy(mesh, cell_m)
+        except ValueError as exc:
+            self.summary.setText("%s: %s" % (source, exc))
+            return
+        self.summary.setText(
+            "%s\ntriangles %d  |  size %.2f x %.2f x %.2f mm  |  grid %d x %d cells of %.2f mm  "
+            "|  occupied %.1f %%\n"
+            "NOTE: staircase discretisation - quote the cell size with any result; a slanted face "
+            "is coarser than an axis-aligned one."
+            % (
+                source,
+                mesh.triangle_count,
+                size_mm[0],
+                size_mm[1],
+                size_mm[2],
+                shape[0],
+                shape[1],
+                self.cell_mm.value(),
+                occupancy_fraction(rows) * 100.0,
+            )
+        )
+        self.axes.clear()
+        self.axes.imshow(
+            [[1.0 if cell else 0.0 for cell in row] for row in rows],
+            origin="lower",
+            cmap="Blues",
+            interpolation="nearest",
+        )
+        self.axes.set_title("Staircase occupancy (xy)")
+        self.axes.set_xlabel("x cells")
+        self.axes.set_ylabel("y cells")
+        self.figure.canvas.draw_idle()
+

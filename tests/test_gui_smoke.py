@@ -33,13 +33,13 @@ class TestMainWindow(unittest.TestCase):
 
         return MainWindow()
 
-    def test_window_builds_with_five_tabs(self):
+    def test_window_builds_with_six_tabs(self):
         window = self._window()
         tabs = window.centralWidget()
-        self.assertEqual(tabs.count(), 5)
+        self.assertEqual(tabs.count(), 6)
         titles = [tabs.tabText(i) for i in range(tabs.count())]
         self.assertEqual(
-            titles, ["Material & composite", "Design", "Simulate", "Results", "Sweep"]
+            titles, ["Material & composite", "Design", "Simulate", "Results", "Sweep", "Import"]
         )
         window.close()
 
