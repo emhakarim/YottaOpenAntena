@@ -71,10 +71,19 @@ class TestCorporateFeedDeck(unittest.TestCase):
                     "no tree metal off the ground plane",
                 )
 
-    def test_two_dimensional_grids_are_refused(self):
+    def test_a_2d_grid_now_draws_the_two_layer_tree(self):
+        """Phase 2 #5b: the 2-D grid is implemented, so the old refusal must be gone."""
+        script = OpenEMSSolver().render_script(_corporate_project(2, 2))
+        self.assertIn('CSX.AddMetal("feed_layer")', script)
+        self.assertIn('CSX.AddMetal("row_trees")', script)
+        self.assertIn('CSX.AddMetal("feed_risers")', script)
+        self.assertIn("FEED TREE 2D:", script)
+        compile(script, "sim.py", "exec")
+
+    def test_a_2d_grid_that_is_not_power_of_two_per_axis_is_refused(self):
         with self.assertRaises(ValueError) as caught:
-            OpenEMSSolver().render_script(_corporate_project(2, 2))
-        self.assertIn("1-by-n", str(caught.exception))
+            OpenEMSSolver().render_script(_corporate_project(2, 3))
+        self.assertIn("power-of-two", str(caught.exception))
 
     def test_non_power_of_two_counts_are_refused(self):
         with self.assertRaises(ValueError) as caught:

@@ -331,6 +331,8 @@ if FEED_MODE == "corporate":
         "FEED TREE: %d rectangles over %d levels; leaf edge at y = %.3f mm, port at y = %.3f mm"
         % (len(_tree_rects), $CORPORATE_FEED_LEVELS, $CORPORATE_FEED_LEAF_Y, FEED_Y)
     )
+$CORPORATE_2D_BLOCK
+
 
 if ELEMENT_PORTS:
     ELEMENT_PORTS_OBJS = []
@@ -647,6 +649,36 @@ if __name__ == "__main__":
 )
 
 
+def render_2d_block(plan) -> str:
+    """Render the drawing code for a two-layer tree plan (feed layer, row trees, risers)."""
+
+    def rects(layer):
+        return [[round(r[0], 9), round(r[1], 9), round(r[2], 9), round(r[3], 9)]
+                for r in plan.rectangles(layer)]
+
+    lines = [
+        "    # Phase 2 #5b: two-layer corporate tree - feed layer buried at z = -H_TOTAL/2 so the",
+        "    # ground plane stays solid; row trees on the patch layer; risers through the substrate.",
+        '    _feed_layer = CSX.AddMetal("feed_layer")',
+        "    _feed_rects = %r" % (rects("feed"),),
+        "    for _r in _feed_rects:",
+        "        _feed_layer.AddBox([_r[0], _r[1], -H_TOTAL / 2.0], [_r[2], _r[3], -H_TOTAL / 2.0], priority=3)",
+        '    _row_trees = CSX.AddMetal("row_trees")',
+        "    _row_rects = %r" % (rects("patch"),),
+        "    for _r in _row_rects:",
+        "        _row_trees.AddBox([_r[0], _r[1], 0.0], [_r[2], _r[3], 0.0], priority=4)",
+        '    _risers = CSX.AddMetal("feed_risers")',
+        "    _via_rects = %r" % (rects("via"),),
+        "    for _r in _via_rects:",
+        "        _risers.AddBox([_r[0], _r[1], -H_TOTAL / 2.0], [_r[2], _r[3], 0.0], priority=5)",
+        "    if METAL_EDGE_SNAPPING:",
+        '        FDTD.AddEdges2Grid(dirs="xy", properties=_feed_layer, metal_edge_res=MESH_MAX_RES / 2.0)',
+        '        FDTD.AddEdges2Grid(dirs="xy", properties=_row_trees, metal_edge_res=MESH_MAX_RES / 2.0)',
+        '    print("FEED TREE 2D: %d feed rects, %d row rects, %d risers (feed layer at z = %.3f mm)" % (len(_feed_rects), len(_row_rects), len(_via_rects), -H_TOTAL / 2.0 * 1e3))',
+    ]
+    return "\n".join(lines)
+
+
 class OpenEMSSolver(SolverAdapter):
     """Adapter that renders and (when possible) runs an openEMS model."""
 
@@ -926,16 +958,37 @@ class OpenEMSSolver(SolverAdapter):
         corporate_rects = "[]"
         corporate_levels = "0"
         corporate_leaf_y = 0.0
+        corporate_2d_block = ""
         if project.patch.feed_mode == "corporate":
             from openantenna.geometry.feed import plan_corporate_feed_geometry
             from openantenna.geometry.patch import microstrip_width_for_impedance
             from openantenna.postproc.feed_network import synthesise_corporate_feed
 
-            if project.array.nx != 1 and project.array.ny != 1:
-                raise ValueError(
-                    "corporate feed is implemented for 1-by-n arrays only: a two-axis splitter "
-                    "tree is the #5b remainder. Set nx=1 or ny=1."
+            if project.array.nx > 1 and project.array.ny > 1:
+                from openantenna.geometry.feed2d import plan_h_tree_2d
+
+                lam0 = C0 / project.sweep.center_hz
+                def _width_2d(impedance_ohm: float) -> float:
+                    return microstrip_width_for_impedance(
+                        epsilon_r, project.substrate.total_thickness_m, impedance_ohm
+                    )
+
+                _eps_eff_2d = (epsilon_r + 1.0) / 2.0
+                _section_len_2d = C0 / (4.0 * project.sweep.center_hz * (_eps_eff_2d ** 0.5))
+                plan_2d = plan_h_tree_2d(
+                    rows=int(project.array.ny),
+                    cols=int(project.array.nx),
+                    pitch_x_m=project.array.spacing_x_lambda0 * lam0,
+                    pitch_y_m=project.array.spacing_y_lambda0 * lam0,
+                    width_of=_width_2d,
+                    section_length_m=_section_len_2d,
+                    epsilon_eff=_eps_eff_2d,
+                    frequency_hz=project.sweep.center_hz,
+                    leaf_offset_y_m=-length / 2.0,
                 )
+                feed_x = plan_2d.input_point[0]
+                feed_y = plan_2d.input_point[1]
+                corporate_2d_block = render_2d_block(plan_2d)
             n_elements = int(project.array.nx * project.array.ny)
             if n_elements < 2 or (n_elements & (n_elements - 1)) != 0:
                 raise ValueError(
@@ -1043,6 +1096,7 @@ class OpenEMSSolver(SolverAdapter):
             CORPORATE_FEED_RECTS=corporate_rects,
             CORPORATE_FEED_LEVELS=corporate_levels,
             CORPORATE_FEED_LEAF_Y=fmt(corporate_leaf_y),
+            CORPORATE_2D_BLOCK=corporate_2d_block,
             FEED_Z0=fmt(50.0),
             MESH_CELLS_PER_WAVELENGTH=self.mesh_cells_per_wavelength,
             MESH_SUBSTRATE_CELLS=self.substrate_cells,
