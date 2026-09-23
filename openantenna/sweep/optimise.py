@@ -172,44 +172,25 @@ def differential_evolution(
     )
 
 
-def tune_patch_for_resonance(
+def minimise_resonance_error(
     target_hz: float,
-    substrate,
-    *,
-    frequency_hint_hz: float | None = None,
-    length_span: float = 0.25,
-    inset_span: float = 0.6,
+    predict_resonance_hz,
+    bounds,
     **kwargs,
-) -> OptimisationResult:
-    """Tune patch length and inset so the package's own predictor lands on ``target_hz``.
+):
+    """Minimise ``|predicted - target| / target`` for a caller-supplied predictor.
 
-    The objective is the analytic cavity-referenced predictor, so this is a *targeting* search: it
-    finds the dimension the model wants, which is what the synthesis loop uses.  It is not evidence
-    that a solver run agrees - that needs a run, and the bias table in ``docs/calibration.md`` is
-    the place where that evidence lives.
-
-    Bounds are expressed relative to the synthesis result: ``length_span`` and ``inset_span`` are
-    fractions of the synthesised length and inset.
+    The predictor comes from the caller on purpose.  Resonance in this package is carried by a
+    specific design object with its own factory, and a later predictor may be solver-backed or
+    measured - keeping the optimiser agnostic means none of those change this module.  When the
+    predictor is the analytic model the result is a **targeting** result: where the model wants the
+    design to sit, not evidence that a solver run agrees.
     """
-    from openantenna.geometry.patch import PatchDesign
+    if target_hz <= 0.0:
+        raise ValueError("target_hz must be positive")
 
-    design = PatchDesign.for_frequency(target_hz, substrate.epsilon_r, substrate.total_thickness_m)
-    length0 = design.length_m
-    inset0 = design.inset_depth_m or 0.25 * length0
-    bounds = {
-        "length_m": (length0 * (1.0 - length_span), length0 * (1.0 + length_span)),
-        "inset_m": (max(1.0e-4, inset0 * (1.0 - inset_span)), inset0 * (1.0 + inset_span)),
-    }
-
-    def objective(params: Dict[str, float]) -> float:
-        candidate = PatchDesign(
-            width_m=design.width_m,
-            length_m=params["length_m"],
-            epsilon_r=substrate.epsilon_r,
-            height_m=substrate.total_thickness_m,
-            feed_inset_m=params["inset_m"],
-        )
-        predicted = candidate.resonance_hz()
+    def objective(params):
+        predicted = float(predict_resonance_hz(params))
         return abs(predicted - target_hz) / target_hz
 
     return differential_evolution(objective, bounds, **kwargs)
