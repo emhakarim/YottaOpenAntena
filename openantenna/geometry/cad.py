@@ -124,6 +124,83 @@ def read_ascii_stl(path: str | Path) -> Mesh:
     return Mesh(tuple(triangles))  # type: ignore[arg-type]
 
 
+
+def _obj_indices(token: str) -> int:
+    """A face token is ``v``, ``v/vt``, ``v//vn`` or ``v/vt/vn``; only the vertex index matters."""
+    head = token.split("/", 1)[0]
+    if not head:
+        raise ValueError(f"malformed face token {token!r}")
+    return int(head)
+
+
+def read_obj(path: str | Path) -> Mesh:
+    """Read a Wavefront OBJ as a triangle soup.
+
+    Handles ``v`` vertices and ``f`` faces, with ``v/vt/vn`` tokens and negative (relative) indices.
+    Polygons are triangulated by a **fan** from the first vertex, which is exact for convex faces -
+    quads and triangles, the common cases - and an approximation for concave ones.  ``vt``, ``vn``,
+    ``o``, ``g``, ``s`` and comments are ignored.
+    """
+    target = Path(path)
+    vertices: List[Point] = []
+    triangles: List[Triangle] = []
+    for number, line in enumerate(target.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        if parts[0] == "v":
+            if len(parts) < 4:
+                raise ValueError(f"{target.name}:{number}: a vertex needs three coordinates")
+            vertices.append((float(parts[1]), float(parts[2]), float(parts[3])))
+        elif parts[0] == "f":
+            tokens = parts[1:]
+            if len(tokens) < 3:
+                raise ValueError(f"{target.name}:{number}: a face needs at least three vertices")
+            indices = []
+            for token in tokens:
+                index = _obj_indices(token)
+                resolved = index - 1 if index > 0 else len(vertices) + index
+                if not 0 <= resolved < len(vertices):
+                    raise ValueError(
+                        f"{target.name}:{number}: face refers to vertex {index}, outside the "
+                        f"{len(vertices)} vertices defined so far"
+                    )
+                indices.append(resolved)
+            for offset in range(1, len(indices) - 1):
+                triangles.append(
+                    (vertices[indices[0]], vertices[indices[offset]], vertices[indices[offset + 1]])
+                )
+    if not vertices:
+        raise ValueError(f"{target.name}: no vertices found - not an OBJ")
+    if not triangles:
+        raise ValueError(f"{target.name}: vertices but no faces")
+    return Mesh(tuple(triangles))
+
+
+def read_mesh(path: str | Path) -> Mesh:
+    """Read a mesh, choosing the format by inspecting the file rather than its name.
+
+    STL announces itself by size; OBJ is text whose first meaningful lines are ``v`` or ``f``.
+    A file that is neither is refused with the reason, not guessed at.
+    """
+    target = Path(path)
+    if not target.exists():
+        raise FileNotFoundError(f"{target} does not exist")
+    if _looks_binary(target):
+        return read_binary_stl(target)
+    head = target.read_text(encoding="utf-8", errors="replace")[:4096]
+    body = [
+        line.strip()
+        for line in head.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    if any(line.split()[0] in ("v", "f") for line in body if line.split()):
+        return read_obj(target)
+    return read_ascii_stl(target)
+
+
+
 def read_stl(path: str | Path) -> Mesh:
     """Read an STL, binary or ASCII, choosing by measurement rather than by extension."""
     target = Path(path)

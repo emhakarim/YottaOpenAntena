@@ -489,7 +489,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     cad_inspect = sub.add_parser(
         "cad-inspect",
-        help="read an STL and report geometry plus what a staircase grid would see",
+        help="read an STL/OBJ and report geometry plus what a staircase grid would see",
     )
     cad_inspect.add_argument("file", help="path to a .stl (binary or ASCII)")
     cad_inspect.add_argument(
@@ -1067,9 +1067,9 @@ def cmd_cad_inspect(args: argparse.Namespace) -> int:
     The staircase check is reported next to the true bounds on purpose: a coarse grid and a slanted
     face are a visible approximation, and a reader who only sees the bounds would never know.
     """
-    from openantenna.geometry.cad import occupancy_fraction, read_stl, staircase_occupancy
+    from openantenna.geometry.cad import occupancy_fraction, read_mesh, staircase_occupancy
 
-    mesh = read_stl(args.file)
+    mesh = read_mesh(args.file)
     factor = 1e-3 if args.units == "mm" else 1.0
     if factor != 1.0:
         mesh = mesh.scaled(factor)
