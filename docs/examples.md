@@ -8,6 +8,7 @@ optional dependency - they run on a bare interpreter with the package installed.
 | 1 | synthesise a 2.45 GHz patch on PTFE, then tune the length against the cavity predictor | `python examples/01_patch_tuning.py` |
 | 2 | plan a 1-by-8 corporate feed: levels, quarter-wave section, rectangles, extent | `python examples/02_feed_plan_1d.py` |
 | 3 | plan the two-layer 4-by-4 tree and prove the layers do not overlap | `python examples/03_feed_plan_2d.py` |
+| 4 | read an STL from CAD and see what a staircase grid would make of it | `python examples/04_cad_import.py` |
 
 `tests/test_examples.py` runs all three under the test suite, so an example that stops working is a
 test failure rather than a stale document.
