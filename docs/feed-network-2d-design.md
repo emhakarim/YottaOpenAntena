@@ -1,8 +1,10 @@
 # Design note: the 2-D corporate feed tree (Phase 2 #5b remainder)
 
-Status: **open design item**, not an implementation gap.  The 1-D tree is built, wired into the
-deck builder and previewed in the GUI; this note records why the 2-D case is not a mechanical
-extension of it, so the next session starts from the analysis instead of rediscovering it.
+Status: **implemented** (2026-09-23).  The 1-D tree is built, wired into the deck builder and
+previewed in the GUI; the 2-D case needed a different topology, and the two-layer construction now
+lives in `openantenna/geometry/feed2d.py` and is drawn by the builder (`e9409d4`).  This note keeps
+the analysis that led there - why the 2-D case is not a mechanical extension of the 1-D planner -
+plus what is still open, so the next session starts from evidence instead of rediscovery.
 
 ## What is already done
 
@@ -103,4 +105,15 @@ decision.
 
 `HTreePlan.collisions()` (overlapping rectangle pairs must be empty) plus `len(leaves) == rows*cols`
 with the leaves on the element grid.  Those two caught the first attempt; they will catch the next
-one if it regresses.
+one if it regresses.  The implemented version adds a third: the column tree's input must sit below
+the routing channel, and the channel below the array - that ordering is what makes the two-layer
+layout legal.
+
+## What is still open (all of it deliberate, none of it hidden)
+
+| Item | State | Why it matters |
+|---|---|---|
+| Mesh treatment of the tree | metal edges are snapped (`AddEdges2Grid`) and **nothing else** | risers are ~3 mm against a coarse cell of a few mm; whether snapping is enough is a convergence question, not a drawing one |
+| Lambda/4 padding of the row-tree segments | not done: the segments follow the element grid | the electrical half of the 2-D tree; needs meander padding plus a synthesis pass |
+| `element_ports` together with a drawn tree | still refused, on purpose | per-element ports inside a shorting network measure nothing useful; the array has one driven port at the trunk input |
+| Buried feed layer stackup | the feed layer sits at `z = -H_TOTAL/2` inside the substrate | a real PCB decision: it needs a defined dielectric and via process at fabrication |
