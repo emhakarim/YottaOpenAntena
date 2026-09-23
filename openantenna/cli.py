@@ -1,4 +1,4 @@
-﻿"""Command line interface for OpenAntenna Studio (stdlib argparse only).
+"""Command line interface for OpenAntenna Studio (stdlib argparse only).
 
 Phase 1 is headless: this CLI is the only user entry point.  Every command is
 read-only with respect to the project *except* the ``gen-openems`` and
