@@ -545,11 +545,16 @@ class TestArrayGroundPlane(unittest.TestCase):
 
 
     def test_the_s11_port_is_bound_on_both_feed_branches(self):
-        """B2's probe arms burned 3230 s then died on an unbound `port`.
+        """Two attempts died here, so this test pins the *cause*, not only the symptom.
 
-        The unconditional `port.CalcPort(...)` ran even when the element-port branch had never
-        bound `port`.  A compile check cannot catch an unbound local, so this pins the structure:
-        the s11 port must be resolved from the branch that actually created a port object.
+        The defect is Python scoping: the port object is created at module scope, but an assignment
+        to `port` anywhere inside `main()` (the old `port = driven`) makes `port` a local of main()
+        that the probe path never binds -> UnboundLocalError after a full FDTD.  A text assertion on
+        `_s11_port` alone missed it: the intermediate fix still read the shadowed name.
+
+        Runtime proof that the fix works is a short rendered run, not this test - the test only
+        keeps the two structural causes (the shadowing assignment and the silent read) from coming
+        back.  See yottakomen.md for the recorded run.
         """
         project = make_project(nx=2, ny=2)
         project.patch.feed_line_width_m = 0.0  # element ports are probe-style for now
@@ -559,9 +564,17 @@ class TestArrayGroundPlane(unittest.TestCase):
             self.assertIn("_s11_port.CalcPort(sim_path, freqs, FEED_Z0)", script)
             self.assertIn("s11 = _s11_port.uf_ref / _s11_port.uf_inc", script)
             self.assertNotIn("\n    port.CalcPort(", script)
+            # The cause: nothing inside main() may assign to `port`, or `port` becomes a local.
+            self.assertNotIn("port = driven", script)
+            self.assertNotIn("\n        port = ", script)
+            # No read of the port may be left outside the resolved name.
+            self.assertNotIn("np.abs(port.uf_", script)
             compile(script, "sim.py", "exec")
         self.assertIn("_s11_port = ELEMENT_PORTS_OBJS[EXCITE_PORT - 1]", element)
         self.assertIn("_s11_port = port", single)
+        # The silent read is guarded: a malformed deck must fail in the first second, not after
+        # an hour of FDTD.
+        self.assertIn('if "port" not in globals():', single)
 
 
 if __name__ == "__main__":
