@@ -1449,6 +1449,9 @@ class MainWindow(QMainWindow):
         tree.expandAll()
 
 
+from .theme import apply_theme
+
+
 def run_gui(argv: list[str] | None = None) -> int:
     """Start the GUI.
 
@@ -1461,6 +1464,7 @@ def run_gui(argv: list[str] | None = None) -> int:
         return _gui_selftest(arguments)
 
     app = QApplication(arguments)
+    apply_theme(app)
     window = MainWindow()
     window.show()
     return app.exec()
