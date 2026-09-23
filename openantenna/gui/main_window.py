@@ -1355,6 +1355,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(self.design_tab, "Design")
         tabs.addTab(SimulateTab(self.design_tab), "Simulate")
         tabs.addTab(ResultsTab(), "Results")
+        tabs.addTab(SweepTab(), "Sweep")
         self.setCentralWidget(tabs)
 
         # The project tree: a shell-style view of the *model* (not of the widgets), so it
@@ -1489,3 +1490,186 @@ def _gui_selftest(arguments: list[str]) -> int:
 
         traceback.print_exc()
         return 1
+
+
+class SweepTab(QWidget):
+    """CST-style sweeping: a parameter table, run-all, and a results browser.
+
+    The runner is the analytic model on purpose: it answers in milliseconds, so the panel is usable
+    while a real solver sweep would still be queueing.  The numbers are *targeting* numbers and the
+    status line says so; a solver-backed runner is the same interface with a slower callable.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.table = None
+        self.epsilon_r = 3.4
+        self.height_mm = 1.6
+
+        layout = QVBoxLayout(self)
+        form = QGroupBox("Parameters")
+        form_layout = QVBoxLayout(form)
+        self.parameter_table = QTableWidget(1, 2)
+        self.parameter_table.setHorizontalHeaderLabels(["parameter", "values (comma separated)"])
+        self.parameter_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.parameter_table.setItem(0, 0, QTableWidgetItem("length_mm"))
+        self.parameter_table.setItem(0, 1, QTableWidgetItem("30.0, 31.0, 32.0, 33.0"))
+        form_layout.addWidget(self.parameter_table)
+
+        buttons = QHBoxLayout()
+        self.add_row = QPushButton("Add parameter")
+        self.add_row.clicked.connect(self._add_row)
+        self.remove_row = QPushButton("Remove last")
+        self.remove_row.clicked.connect(self._remove_row)
+        self.mode = QComboBox()
+        self.mode.addItems(["one at a time", "factorial"])
+        self.generate = QPushButton("Generate table")
+        self.generate.clicked.connect(self.generate_table)
+        buttons.addWidget(self.add_row)
+        buttons.addWidget(self.remove_row)
+        buttons.addWidget(self.mode)
+        buttons.addWidget(self.generate)
+        form_layout.addLayout(buttons)
+        layout.addWidget(form)
+
+        actions = QHBoxLayout()
+        self.run_all = QPushButton("Run all (analytic)")
+        self.run_all.clicked.connect(self.run_all_runs)
+        self.export = QPushButton("Export CSV")
+        self.export.clicked.connect(self.export_csv)
+        actions.addWidget(self.run_all)
+        actions.addWidget(self.export)
+        layout.addLayout(actions)
+
+        self.results = QTableWidget(0, 4)
+        self.results.setHorizontalHeaderLabels(["#", "parameters", "status", "resonance [GHz]"])
+        self.results.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(self.results)
+
+        self.figure, self.axes = _plot_canvas()
+        layout.addWidget(self.figure.canvas)
+        self.status = QLabel("Define parameters, generate the table, then run it.")
+        layout.addWidget(self.status)
+
+    def _add_row(self) -> None:
+        row = self.parameter_table.rowCount()
+        self.parameter_table.insertRow(row)
+        self.parameter_table.setItem(row, 0, QTableWidgetItem("width_mm"))
+        self.parameter_table.setItem(row, 1, QTableWidgetItem("40.0, 42.0"))
+
+    def _remove_row(self) -> None:
+        if self.parameter_table.rowCount() > 1:
+            self.parameter_table.removeRow(self.parameter_table.rowCount() - 1)
+
+    def _values(self) -> dict:
+        values = {}
+        for row in range(self.parameter_table.rowCount()):
+            name_item = self.parameter_table.item(row, 0)
+            value_item = self.parameter_table.item(row, 1)
+            if name_item is None or value_item is None:
+                continue
+            name = name_item.text().strip()
+            raw = value_item.text().replace(";", ",")
+            series = [piece.strip() for piece in raw.split(",") if piece.strip()]
+            if name and series:
+                values[name] = [float(piece) for piece in series]
+        return values
+
+    def generate_table(self) -> None:
+        from openantenna.sweep.table import SweepTable
+
+        try:
+            values = self._values()
+            if not values:
+                raise ValueError("no parameters with values")
+            if self.mode.currentText() == "factorial":
+                table = SweepTable.factorial(values)
+            else:
+                baseline = {name: series[0] for name, series in values.items()}
+                table = SweepTable.one_at_a_time(baseline, values)
+        except ValueError as exc:
+            self.status.setText("table not generated: %s" % exc)
+            return
+        self.table = table
+        self._refresh()
+        self.status.setText(
+            "%d runs (%s). Baseline is each parameter's first value." % (len(table), table.mode)
+        )
+
+    def _predict(self, params: dict) -> float:
+        from openantenna.geometry.patch import (
+            delta_length,
+            effective_permittivity,
+            patch_length,
+            patch_width,
+            resonant_frequency_cavity,
+        )
+
+        height_m = self.height_mm * 1e-3
+        width_m = params.get("width_mm", patch_width(2.45e9, self.epsilon_r) * 1e3) * 1e-3
+        epsilon_eff = effective_permittivity(self.epsilon_r, height_m, width_m)
+        default_length = patch_length(
+            2.45e9, epsilon_eff, delta_length(height_m, epsilon_eff, width_m)
+        )
+        length_m = params.get("length_mm", default_length * 1e3) * 1e-3
+        return resonant_frequency_cavity(self.epsilon_r, height_m, width_m, length_m)
+
+    def run_all_runs(self) -> None:
+        from openantenna.sweep.table import run_table
+
+        if self.table is None:
+            self.status.setText("generate the table first")
+            return
+        run_table(self.table, lambda params, _record: {"resonance_hz": self._predict(params)})
+        self._refresh()
+        counts = self.table.status_counts()
+        self.status.setText(
+            "done %d, failed %d - analytic targeting numbers, not solver results"
+            % (counts["done"], counts["failed"])
+        )
+
+    def export_csv(self) -> None:
+        if self.table is None:
+            self.status.setText("nothing to export yet")
+            return
+        target, _filter = QFileDialog.getSaveFileName(
+            self, "Export sweep", "sweep.csv", "CSV (*.csv)"
+        )
+        if not target:
+            return
+        self.table.to_csv(target)
+        self.status.setText("written to %s" % target)
+
+    def _refresh(self) -> None:
+        self.results.setRowCount(len(self.table))
+        for row, record in enumerate(self.table):
+            cells = [
+                str(record.index),
+                ", ".join("%s=%g" % item for item in record.params.items()),
+                record.status,
+                "%.6f" % (record.result["resonance_hz"] / 1e9)
+                if "resonance_hz" in record.result
+                else "",
+            ]
+            for column, text in enumerate(cells):
+                self.results.setItem(row, column, QTableWidgetItem(text))
+
+        self.axes.clear()
+        drawn = False
+        for name, points in self.table.summary("resonance_hz").items():
+            if len(points) > 1:
+                self.axes.plot(
+                    [key for key, _values in points],
+                    [values[0] / 1e9 for _key, values in points],
+                    "o-",
+                    label=name,
+                )
+                drawn = True
+        self.axes.axhline(2.45, color="tab:orange", linestyle="--", linewidth=0.8, label="2.45 GHz")
+        self.axes.set_xlabel("parameter value")
+        self.axes.set_ylabel("predicted resonance [GHz]")
+        self.axes.set_title("Sweep summary (analytic)")
+        self.axes.grid(True, linewidth=0.4)
+        if drawn:
+            self.axes.legend(fontsize=7)
+        self.figure.canvas.draw_idle()
