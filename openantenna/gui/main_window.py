@@ -464,7 +464,7 @@ class DesignTab(QWidget):
             self._draw_geometry_3d(geometry_axes, design, layout, self.height.value())
         else:
             geometry_axes = self.figure.add_subplot(121)
-            self._draw_geometry(geometry_axes, design, layout)
+            self._draw_geometry(geometry_axes, design, layout, self._corporate_plan())
 
         factor_axes = self.figure.add_subplot(122)
         samples = array_factor_plane(layout.positions_m, frequency, n_points=361, plane="e")
@@ -479,6 +479,44 @@ class DesignTab(QWidget):
         factor_axes.grid(True)
         self.canvas.draw_idle()
         self.design_changed.emit()
+
+    def _corporate_plan(self):
+        """Feed-tree drawing plan for the current project, or None when it does not apply.
+
+        Returns None for every case the deck builder also refuses (non-power-of-two counts, 2-D
+        grids): the preview stays quiet rather than drawing something that cannot be built.
+        """
+        project = self.current_project()
+        if project.patch.feed_mode != "corporate":
+            return None
+        from openantenna.geometry.feed import plan_corporate_feed_geometry
+        from openantenna.geometry.patch import microstrip_width_for_impedance
+        from openantenna.postproc.feed_network import synthesise_corporate_feed
+
+        n_elements = int(project.array.nx * project.array.ny)
+        if n_elements < 2 or (n_elements & (n_elements - 1)) != 0:
+            return None
+        if project.array.nx != 1 and project.array.ny != 1:
+            return None
+        lam0 = 299792458.0 / project.sweep.center_hz
+        pitch = (
+            project.array.spacing_x_lambda0 * lam0
+            if project.array.nx > 1
+            else project.array.spacing_y_lambda0 * lam0
+        )
+        feed = synthesise_corporate_feed(
+            n_elements=n_elements,
+            frequency_hz=project.sweep.center_hz,
+            epsilon_eff=(project.substrate.epsilon_r + 1.0) / 2.0,
+            z0_ohm=50.0,
+        )
+
+        def width_of(impedance_ohm: float) -> float:
+            return microstrip_width_for_impedance(
+                project.substrate.epsilon_r, project.substrate.total_thickness_m, impedance_ohm
+            )
+
+        return plan_corporate_feed_geometry(feed, pitch, width_of)
 
     @staticmethod
     def _draw_geometry_3d(axes, design, layout, substrate_mm: float) -> None:
@@ -544,7 +582,7 @@ class DesignTab(QWidget):
         )
 
     @staticmethod
-    def _draw_geometry(axes, design, layout) -> None:
+    def _draw_geometry(axes, design, layout, feed_plan=None) -> None:
         """Draw the array to scale in millimetres: one rectangle per patch element.
 
         The feed inset is *labelled*, not drawn as a point: the synthesised inset is a
@@ -592,6 +630,35 @@ class DesignTab(QWidget):
                 transform=axes.transAxes,
                 va="top",
                 fontsize=7,
+            )
+
+        if feed_plan is not None:
+            # Phase 2 #5b: the corporate tree as planned, in the plan's own frame (it grows in
+            # -y from the input at the origin).  This shows the *shape and widths* the builder
+            # will draw; it is not a claim about the board placement, which the deck resolves
+            # from the ground-plane edge.
+            rectangles = feed_plan.rectangles()
+            for x0, y0, x1, y1 in ((r[0], r[1], r[2], r[3]) for r in rectangles):
+                axes.add_patch(
+                    Rectangle(
+                        (x0 * 1e3, y0 * 1e3),
+                        (x1 - x0) * 1e3,
+                        (y1 - y0) * 1e3,
+                        facecolor="none",
+                        edgecolor="tab:orange",
+                        linewidth=0.6,
+                        linestyle="--",
+                    )
+                )
+            axes.text(
+                0.02,
+                0.90,
+                "feed tree: %d rectangles, %d levels (drawing plan)"
+                % (len(rectangles), feed_plan.levels),
+                transform=axes.transAxes,
+                va="top",
+                fontsize=7,
+                color="tab:orange",
             )
 
 
