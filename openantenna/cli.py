@@ -487,6 +487,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"openantenna {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
+    cad_inspect = sub.add_parser(
+        "cad-inspect",
+        help="read an STL and report geometry plus what a staircase grid would see",
+    )
+    cad_inspect.add_argument("file", help="path to a .stl (binary or ASCII)")
+    cad_inspect.add_argument(
+        "--cell-mm", type=float, default=1.0, help="grid cell for the staircase check"
+    )
+    cad_inspect.add_argument("--plane", choices=("xy", "xz", "yz"), default="xy")
+    cad_inspect.add_argument(
+        "--units",
+        choices=("mm", "m"),
+        default="mm",
+        help="units of the mesh coordinates (STL carries none; CAD exports are usually mm)",
+    )
+    cad_inspect.add_argument("--json", type=str, default=None, help="write the report to this file")
+    cad_inspect.set_defaults(handler=cmd_cad_inspect)
+
     optimise = sub.add_parser(
         "optimise",
         help="tune a patch dimension so a chosen resonance predictor hits a target (no solver)",
@@ -1037,6 +1055,62 @@ def cmd_optimise(args: argparse.Namespace) -> int:
             "failed_evaluations": result.failed_evaluations,
             "notes": result.notes,
             "warning": "analytic predictor: a targeting result, not a solver measurement",
+        }
+        Path(args.json).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(f"  written to {args.json}")
+    return EXIT_OK
+
+
+def cmd_cad_inspect(args: argparse.Namespace) -> int:
+    """Read an STL and say what it is, without pretending the grid sees the same object.
+
+    The staircase check is reported next to the true bounds on purpose: a coarse grid and a slanted
+    face are a visible approximation, and a reader who only sees the bounds would never know.
+    """
+    from openantenna.geometry.cad import occupancy_fraction, read_stl, staircase_occupancy
+
+    mesh = read_stl(args.file)
+    factor = 1e-3 if args.units == "mm" else 1.0
+    if factor != 1.0:
+        mesh = mesh.scaled(factor)
+    print(f"units         : {args.units} (coordinates scaled by {factor:g} to metres)")
+    low, high = mesh.bounds()
+    size = mesh.size()
+    print(f"file          : {args.file}")
+    print(f"triangles     : {mesh.triangle_count}")
+    print(
+        "bounds        : (%.4f, %.4f, %.4f) .. (%.4f, %.4f, %.4f) m"
+        % (low[0], low[1], low[2], high[0], high[1], high[2])
+    )
+    print("size          : %.4f x %.4f x %.4f m" % size)
+
+    cell_m = args.cell_mm * 1e-3
+    low_checked, high_checked = mesh.bounds()
+    for name, extent in zip("xyz", mesh.size()):
+        if extent / cell_m > 2000.0:
+            raise ValueError(
+                "a %.1f m extent on a %.3g mm cell would need more than 2000 cells along %s. Check "
+                "--units (STL carries no units) or coarsen --cell-mm." % (extent, args.cell_mm, name)
+            )
+    shape, rows = staircase_occupancy(mesh, cell_m, plane=args.plane)
+    fraction = occupancy_fraction(rows)
+    print(f"plane         : {args.plane}")
+    print(f"grid          : {shape[0]} x {shape[1]} cells of {args.cell_mm:g} mm")
+    print(f"occupied      : {fraction * 100.0:.2f} % of the grid")
+    print("NOTE: the grid is a staircase approximation of the mesh; a slanted face is coarser than")
+    print("      an axis-aligned one, and the cell size above is the one to quote with any result.")
+
+    if args.json:
+        payload = {
+            "kind": "openantenna.cad-inspect",
+            "file": str(args.file),
+            "triangles": mesh.triangle_count,
+            "bounds_m": [list(low), list(high)],
+            "size_m": list(size),
+            "plane": args.plane,
+            "grid": {"n_x": shape[0], "n_y": shape[1], "cell_m": cell_m},
+            "occupied_fraction": fraction,
+            "warning": "staircase discretisation; quote the cell size with any result",
         }
         Path(args.json).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         print(f"  written to {args.json}")

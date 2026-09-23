@@ -33,6 +33,22 @@ class Mesh:
     def triangle_count(self) -> int:
         return len(self.triangles)
 
+    def scaled(self, factor: float) -> "Mesh":
+        """The same mesh with every coordinate multiplied by ``factor``.
+
+        STL carries no units, and CAD tools export in millimetres as often as in metres, so the
+        caller states the scale instead of this module guessing.  Guessing would silently put a
+        10 mm plate 10 m across the grid.
+        """
+        if factor <= 0.0:
+            raise ValueError("scale factor must be positive")
+        return Mesh(
+            tuple(
+                tuple((point[0] * factor, point[1] * factor, point[2] * factor) for point in triangle)
+                for triangle in self.triangles
+            )
+        )
+
     def bounds(self) -> Tuple[Point, Point]:
         if not self.triangles:
             raise ValueError("an empty mesh has no bounds")
