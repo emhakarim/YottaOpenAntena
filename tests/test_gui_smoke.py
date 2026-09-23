@@ -33,6 +33,23 @@ class TestMainWindow(unittest.TestCase):
 
         return MainWindow()
 
+    def test_every_3d_camera_preset_can_be_selected(self):
+        """The preset combo drives a redraw, so switching it must not raise.
+
+        It was wired straight to a slot that takes no argument; Qt passes the new index, so the
+        first switch would have raised TypeError.  Nothing had exercised the signal.
+        """
+        from openantenna.gui.main_window import MainWindow
+
+        window = MainWindow()
+        tabs = window.centralWidget()
+        design_tab = tabs.widget(1)
+        self.assertTrue(hasattr(design_tab, "view_preset"))
+        for preset in ("top", "front", "side", "isometric"):
+            with self.subTest(preset=preset):
+                design_tab.view_preset.setCurrentText(preset)
+                self.assertEqual(design_tab.view_preset.currentText(), preset)
+
     def test_window_builds_with_six_tabs(self):
         window = self._window()
         tabs = window.centralWidget()
