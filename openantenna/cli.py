@@ -487,6 +487,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"openantenna {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
+    feed_plan = sub.add_parser(
+        "feed-plan",
+        help="export the corporate-feed tree plan (drawing geometry, no solver needed)",
+    )
+    feed_plan.add_argument("--rows", type=int, required=True, help="element rows")
+    feed_plan.add_argument("--cols", type=int, required=True, help="element columns")
+    feed_plan.add_argument("--pitch-mm", type=float, required=True, help="element pitch [mm]")
+    feed_plan.add_argument("--frequency-hz", type=float, default=2.45e9)
+    feed_plan.add_argument("--epsilon-r", type=float, default=3.4)
+    feed_plan.add_argument("--height-mm", type=float, default=1.6, help="substrate thickness [mm]")
+    feed_plan.add_argument("--json", type=str, default=None, help="write the plan to this file")
+    feed_plan.set_defaults(handler=cmd_feed_plan)
+
 
     material = sub.add_parser("material", help="inspect the material library")
     material_sub = material.add_subparsers(dest="material_command", required=True)
@@ -823,6 +836,105 @@ def cmd_coupling(args: argparse.Namespace) -> int:
             "converged": matrix.converged,
             "summary": summary,
         }
+        Path(args.json).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(f"  written to {args.json}")
+    return EXIT_OK
+
+
+def cmd_feed_plan(args: argparse.Namespace) -> int:
+    """Print (and optionally write) the corporate-feed drawing plan for a given array.
+
+    Both topologies are reachable: a single row or column uses the 1-D planner, anything else uses
+    the two-layer 2-D tree.  No solver, no run directory - this is the plan the deck builder draws.
+    """
+    from openantenna.geometry.feed import plan_corporate_feed_geometry
+    from openantenna.geometry.feed2d import plan_h_tree_2d
+    from openantenna.geometry.patch import microstrip_width_for_impedance
+    from openantenna.postproc.feed_network import synthesise_corporate_feed
+
+    height_m = args.height_mm * 1e-3
+    epsilon_eff = (args.epsilon_r + 1.0) / 2.0
+
+    def width_of(impedance_ohm: float) -> float:
+        return microstrip_width_for_impedance(args.epsilon_r, height_m, impedance_ohm)
+
+    section = synthesise_corporate_feed(
+        n_elements=args.rows * args.cols,
+        frequency_hz=args.frequency_hz,
+        epsilon_eff=epsilon_eff,
+    )
+
+    if args.rows > 1 and args.cols > 1:
+        plan_2d = plan_h_tree_2d(
+            rows=args.rows,
+            cols=args.cols,
+            pitch_x_m=args.pitch_mm * 1e-3,
+            pitch_y_m=args.pitch_mm * 1e-3,
+            width_of=width_of,
+            section_length_m=section.section_length_m,
+            epsilon_eff=epsilon_eff,
+            frequency_hz=args.frequency_hz,
+        )
+        layers = {
+            name: len(plan_2d.rectangles(name)) for name in plan_2d.layers_present()
+        }
+        collisions = {
+            name: len(plan_2d.collisions(name)) for name in plan_2d.layers_present()
+        }
+        payload = {
+            "kind": "openantenna.feed-plan.2d",
+            "rows": plan_2d.rows,
+            "cols": plan_2d.cols,
+            "topology": "two-layer tree",
+            "section_length_mm": round(section.section_length_m * 1e3, 4),
+            "layers": layers,
+            "collisions": collisions,
+            "channel_y_mm": round(plan_2d.channel_y_m * 1e3, 4),
+            "input_point_mm": [round(value * 1e3, 4) for value in plan_2d.input_point],
+            "depth_row_mm": round(plan_2d.depth_row_m * 1e3, 4),
+            "n_leaves": len(plan_2d.leaves),
+            "notes": plan_2d.notes,
+        }
+        print(f"topology      : two-layer tree ({plan_2d.rows}x{plan_2d.cols})")
+        print(f"section       : {section.section_length_m * 1e3:.3f} mm (lambda/4 in the guide)")
+        for name in plan_2d.layers_present():
+            print(f"  {name:<12}: {layers[name]:3d} rectangles, {collisions[name]} collisions")
+        print(f"channel       : y = {plan_2d.channel_y_m * 1e3:.3f} mm")
+        print(f"input (port)  : ({plan_2d.input_point[0] * 1e3:.3f}, {plan_2d.input_point[1] * 1e3:.3f}) mm")
+        for name in plan_2d.layers_present():
+            if collisions[name]:
+                print(f"  WARNING: the {name} layer has overlapping metal - do not build this")
+    else:
+        n_elements = args.rows * args.cols
+        plan_1d = plan_corporate_feed_geometry(
+            section, args.pitch_mm * 1e-3, width_of
+        )
+        rects = plan_1d.rectangles()
+        payload = {
+            "kind": "openantenna.feed-plan.1d",
+            "n_elements": n_elements,
+            "topology": "1-D tree",
+            "levels": section.levels,
+            "section_length_mm": round(section.section_length_m * 1e3, 4),
+            "n_segments": len(plan_1d.segments),
+            "n_rectangles": len(rects),
+            "bounds_mm": [round(value * 1e3, 4) for value in plan_1d.bounds()],
+            "notes": plan_1d.notes,
+        }
+        print(f"topology      : 1-D tree ({n_elements} elements, {section.levels} levels)")
+        print(f"section       : {section.section_length_m * 1e3:.3f} mm (lambda/4 in the guide)")
+        print(f"segments      : {len(plan_1d.segments)}")
+        print(f"rectangles    : {len(rects)}")
+        bounds = plan_1d.bounds()
+        print(
+            "bounds        : x %.3f..%.3f mm, y %.3f..%.3f mm"
+            % (bounds[0] * 1e3, bounds[2] * 1e3, bounds[1] * 1e3, bounds[3] * 1e3)
+        )
+
+    print("NOTE: drawing geometry only - segment lengths follow the element grid, lambda/4 padding")
+    print("      of the 2-D row trees is still open (docs/feed-network-2d-design.md).")
+
+    if args.json:
         Path(args.json).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         print(f"  written to {args.json}")
     return EXIT_OK
