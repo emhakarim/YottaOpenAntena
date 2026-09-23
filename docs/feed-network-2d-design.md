@@ -58,3 +58,49 @@ H-tree on the patch layer for the 4-by-4 case, in three steps:
    a question for a convergence run, not for a drawing change.
 
 Steps 1 and 2 are mechanical once the topology is chosen; step 3 needs machine time.
+
+## Measured layout budget (2026-09-23)
+
+The first H-tree attempt (`geometry/feed2d.py`, parked) halved the element grid recursively and
+ran its own **collision detector** over the resulting rectangles.  The detector is the useful part
+of that attempt; the layout was wrong and it said so:
+
+| Grid | pitch | segments | overlapping rectangle pairs |
+|---|---|---|---|
+| 2x2 | 60 mm | 14 | **7** |
+| 4x4 | 60 mm | 62 | **19** |
+| 4x4 | 90 mm | 62 | **19** |
+| 4x4 | 120 mm | 62 | **19** |
+
+The count is pitch-independent, which is the real finding: the collisions are **structural**, not
+a spacing problem.  A recursive halving that lets each level choose its own depth cannot keep two
+levels out of each other's way - not at any pitch.
+
+### What a collision-free layout needs
+
+Each stage needs its own band, and a band needs a direction the other stage is not using.  For a
+4x4 at 60 mm pitch the numbers are:
+
+* one quarter-wave section at 2.45 GHz, eps_eff ~1.95: **22.2 mm**;
+* a column's row-tree needs 2 levels x 22.2 = **44.4 mm** of depth;
+* the array itself spans 3 x 60 = **180 mm**;
+* the ground plane currently reaches ~25 mm past the array edge.
+
+So a single-layer tree does not fit: the row trees want 44.4 mm inside a 60 mm pitch (leaving
+15.6 mm for the riser and clearance), and the column tree wants another 44.4 mm below the array
+where only 25 mm are available.  Two ways out, both already anticipated above:
+
+1. **Two conductor layers** (the approved path): the column tree on the feed layer below the
+ground plane, the row trees on the patch layer, vertical risers between them.  Collision-free by
+construction, because the two stages never share a plane.  Cost: a second metal sheet, riser boxes
+through the substrate, a mesh that resolves the risers, and a ground-plane cavity where the feed
+layer passes through.
+2. **A larger element pitch** (>= 2 x 44.4 = 89 mm, i.e. >= 0.72 lambda0 at 2.45 GHz): keeps one
+layer, but changes the array's grating-lobe behaviour, so it is an antenna decision, not a layout
+decision.
+
+### Acceptance test the next session should keep
+
+`HTreePlan.collisions()` (overlapping rectangle pairs must be empty) plus `len(leaves) == rows*cols`
+with the leaves on the element grid.  Those two caught the first attempt; they will catch the next
+one if it regresses.
