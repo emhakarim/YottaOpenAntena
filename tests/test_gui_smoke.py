@@ -47,7 +47,8 @@ class TestMainWindow(unittest.TestCase):
             + "10" + nl + "0" + nl + "20" + nl + "10" + nl
         )
         body = "0" + nl + "SECTION" + nl + "2" + nl + "ENTITIES" + nl + entities + "0" + nl + "ENDSEC" + nl
-        tabs = self._window.centralWidget()
+        window = self._window()
+        tabs = window.centralWidget()
         import_tab = tabs.widget(5)
         self.assertEqual(tabs.tabText(5), "Import")
         with tempfile.TemporaryDirectory() as folder:

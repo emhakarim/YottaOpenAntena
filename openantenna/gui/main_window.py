@@ -1747,7 +1747,7 @@ class ImportTab(QWidget):
         except (ValueError, FileNotFoundError, OSError) as exc:
             self.mesh = None
             self.summary.setText("could not read that file: %s" % exc)
-            self.axes.clear()
+            self._canvas_axes().clear()
             self.figure.canvas.draw_idle()
             return
         self.show_loaded(target)
@@ -1781,16 +1781,17 @@ class ImportTab(QWidget):
                 occupancy_fraction(rows) * 100.0,
             )
         )
-        self.axes.clear()
-        self.axes.imshow(
+        axes = self._canvas_axes()
+        axes.clear()
+        axes.imshow(
             [[1.0 if cell else 0.0 for cell in row] for row in rows],
             origin="lower",
             cmap="Blues",
             interpolation="nearest",
         )
-        self.axes.set_title("Staircase occupancy (xy)")
-        self.axes.set_xlabel("x cells")
-        self.axes.set_ylabel("y cells")
+        axes.set_title("Staircase occupancy (xy)")
+        axes.set_xlabel("x cells")
+        axes.set_ylabel("y cells")
         self.figure.canvas.draw_idle()
 
     def load(self, target: str, factor: float) -> None:
@@ -1833,7 +1834,7 @@ class ImportTab(QWidget):
             shape, rows = rasterise_segments(segments, cell_m)
         except ValueError as exc:
             self.summary.setText("%s: %s" % (source, exc))
-            self.axes.clear()
+            self._canvas_axes().clear()
             self.figure.canvas.draw_idle()
             return
         xs = [x for start, end in segments for x in (start[0], end[0])]
@@ -1854,15 +1855,28 @@ class ImportTab(QWidget):
                 stroke_fraction(rows) * 100.0,
             )
         )
-        self.axes.clear()
-        self.axes.imshow(
+        axes = self._canvas_axes()
+        axes.clear()
+        axes.imshow(
             [[1.0 if cell else 0.0 for cell in row] for row in rows],
             origin="lower",
             cmap="Oranges",
             interpolation="nearest",
         )
-        self.axes.set_title("Stroked outline (xy)")
-        self.axes.set_xlabel("x cells")
-        self.axes.set_ylabel("y cells")
+        axes.set_title("Stroked outline (xy)")
+        axes.set_xlabel("x cells")
+        axes.set_ylabel("y cells")
         self.figure.canvas.draw_idle()
+
+    def _canvas_axes(self):
+        """The panel's drawing axes.
+
+        _plot_canvas() hands back (figure, canvas); the axes has to be taken from the figure.
+        Reaching for self.axes gets the canvas and raises on the first real draw.
+        """
+        if self.figure is None:
+            raise RuntimeError("matplotlib is not available")
+        if getattr(self.figure, "axes", None):
+            return self.figure.axes[0]
+        return self.figure.add_subplot(111)
 
