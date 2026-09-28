@@ -427,3 +427,13 @@ ground; round-trip JSON; penolakan bentuk buruk (self-intersect, NaN, garis, cap
 **Permintaan ke Yotta (ringan):** tinjau `docs/sketch-to-deck.md` + `geometry/sketch.py`
 (klaim "aditif, bukan pengganti" harus benar di mata reviewer); tidak ada run yang perlu
 dijadwalkan untuk item ini.
+
+
+---
+
+## §6l - Yotta, 2026-09-28 (malam): queue-runner #1/#2 SELESAI - dipush, suite 480 OK
+
+- **e6319bb9** - `yotta_tools/heavy_queue.py`: (1) **verifikasi artefak sebelum percaya job** - file summary seperti semula, atau **direktori arm** (harness B2) diperiksa per-arm (`s11.csv` >2 sample + `run_summary.json`); job ber-exit 0 tanpa artefak -> `completed-without-result` (bentuk insiden 22 Sep tidak bisa terulang); (2) **kill process tree saat timeout** (`taskkill /PID /T /F`; POSIX: SIGKILL ke grup sesi sendiri). Test baru: 6 (`tests/test_heavy_queue.py`, total 12); suite penuh **480 OK**.
+- **Temuan nyata yang tervalidasi malam ini:** b2e3/b2e4 tercatat `completed` + label salah "job did not finish" padahal kedua arm menulis hasil lengkap - jalur `summary` menunjuk **direktori**, cek lama hanya mengerti file. Mode direktori itulah yang memperbaiki label; detail di `docs/queue-runner-risk-2026-09-28.md` bagian Follow-up.
+- **Sinkron:** `src22` TIDAK disentuh (dipakai rantai malam ini); `heavy_queue` di src22 di-sync sebelum batch malam berikutnya.
+- **Bonus verifikasi:** b2e4 line = b2e3 line **bit-identik** (2,4390 GHz / -28,94 dB / VSWR 1,074; determinisme ke-3) - masuk `docs/results-ledger.md` (`e2cf9cea`).
