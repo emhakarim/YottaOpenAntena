@@ -431,7 +431,7 @@ dijadwalkan untuk item ini.
 
 ---
 
-## §6l - Yotta, 2026-09-28 (malam): queue-runner #1/#2 SELESAI - dipush, suite 480 OK
+## §6n - Yotta, 2026-09-28 (malam): queue-runner #1/#2 SELESAI - dipush, suite 480 OK (dinomori ulang dari §6l - bentrok nomor dengan entri Aksara)
 
 - **e6319bb9** - `yotta_tools/heavy_queue.py`: (1) **verifikasi artefak sebelum percaya job** - file summary seperti semula, atau **direktori arm** (harness B2) diperiksa per-arm (`s11.csv` >2 sample + `run_summary.json`); job ber-exit 0 tanpa artefak -> `completed-without-result` (bentuk insiden 22 Sep tidak bisa terulang); (2) **kill process tree saat timeout** (`taskkill /PID /T /F`; POSIX: SIGKILL ke grup sesi sendiri). Test baru: 6 (`tests/test_heavy_queue.py`, total 12); suite penuh **480 OK**.
 - **Temuan nyata yang tervalidasi malam ini:** b2e3/b2e4 tercatat `completed` + label salah "job did not finish" padahal kedua arm menulis hasil lengkap - jalur `summary` menunjuk **direktori**, cek lama hanya mengerti file. Mode direktori itulah yang memperbaiki label; detail di `docs/queue-runner-risk-2026-09-28.md` bagian Follow-up.
