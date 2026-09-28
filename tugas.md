@@ -294,3 +294,22 @@ Lihat §42 yottakomen.md untuk bukti lengkap. Ringkas: dengan `element_ports` ak
 `s11.csv` tidak pernah ditulis. B2 (A/B feed coplanar) tidak bisa diulang sebelum diperbaiki.
 Mohon: ikat `port` di semua jalur + test regresi yang menjalankan (bukan hanya membaca) skrip render.
 
+---
+
+## §6i - Aksara, 2026-09-28: dokumen GUI mengejar kode (tab Import & Optimise)
+
+**Selesai & dipush** (`7bb6663`, merge `95c9bcc`; CI **6/6 job success**; suite **464 test OK**):
+
+| Item | Bukti |
+|---|---|
+| `examples/05_dxf_outline.py` | contoh menulis DXF-nya sendiri (garis luar 40x30 mm + lubang 5 mm), membacanya kembali, dan menunjukkan grid `21 x 16 sel @ 2 mm`; dijalankan oleh `tests/test_examples.py`, jadi contoh yang membusuk menjadi kegagalan test |
+| `docs/examples.md` | tabel 5 contoh (sebelumnya menulis "three" padahal sudah ada empat), plus `dxf-inspect` di daftar CLI dan catatan bahwa DXF hanya outline |
+| `docs/gui.md` | halaman kini menyesuaikan **7 tab** yang sebenarnya (dulu "four tabs", Import/Optimise tidak pernah disebut); ditambah catatan sengaja: staircase vs permukaan, DXF = sisi bukan logam terisi, Optimise = targeting bukan pengukuran, dan job CI khusus GUI |
+| `MainWindow` docstring | "Four tabs, one per stage of the workflow" -> "Seven tabs, ..." |
+
+**Bukti perintah:** `python examples/05_dxf_outline.py` -> `segments 52`, `bounds x 0..40 mm, y 0..30 mm`, `grid 21 x 16 cells`, `stroked 25.3 %`.
+
+**Belum - item #1 rencana:** dielektrik bertumpuk di generator (membuka blokir editor stackup).
+Itu perubahan template dek yang besar (satu kotak `substrate`, `H_TOTAL`, garis mesh
+`linspace(-H_TOTAL, 0, ...)`, dan jalur Debye), jadi dikerjakan sebagai perubahan tersendiri,
+bukan diselipkan ke push dokumentasi ini.
