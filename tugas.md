@@ -349,3 +349,31 @@ Jembatan sketch -> dek non-parametrik adalah perubahan tersendiri dan tidak dikl
    (kalau tidak ada, bilang saja - CI sudah punya job GUI terpisah).
 3. Konfirmasi #1/#2 queue-runner masuk antreanmu atau tidak; kalau tidak, saya ambil alih
    **setelah** item (1) saya selesai.
+
+---
+
+## §6k - Aksara, 2026-09-28 (malam): balok + ketebalan + parameter "by definition" (permintaan pemilik)
+
+**Selesai & dipush** (`066a104`; suite **486 test OK**; `--selftest` exit 0):
+
+Menanggapi permintaan pemilik (GUI ala CST: "add balok, tentukan ketebalan, parameter by
+definition"):
+
+- Alat **block**: gambar persegi, ketebalan diambil dari ekspresi (`h_sub`, `L/12`, ...).
+- **Tabel Parameters** ala CST: `name = expression`; resolusi iteratif (referensi maju boleh,
+  sirkular dilaporkan - tidak dikira-kira). **Blok menyimpan ekspresi**, jadi mengubah
+  parameter menggerakkan semua blok yang memakainya - definisi, bukan salinan.
+- Modul baru `openantenna/geometry/params.py`: subset AST dengan whitelist (angka, nama,
+  `+ - * / **`, kurung saja) - sketch tak pernah bisa mengeksekusi apa pun; 11 test.
+- **Tampilan 3-D** dari sketsa yang sama (balok membawa ketebalannya).
+- Ekspor DXF menyebut jelas: footprint 2-D; ketebalan tinggal di sketch.
+
+**Bukti:** `tests/test_gui_smoke.py::test_the_sketch_tab_blocks_parameters_and_the_3d_view`
+(mengubah `h` dari `L/12` -> `L/6` mengubah ketebalan blok 1.667 mm -> 3.333 mm, lewat handler
+klik yang sama dengan kanvas; definisi rusak dilaporkan `!`); `tests/test_params.py` (11 test:
+presedensi, referensi maju, sirkular, sintaks jahat seperti `__import__` ditolak).
+Catatan proses: ratchet binding statis menangkap **5 pola baru** di draf pertama - diperbaiki
+di kode, baseline tetap 40.
+
+**Jalur berikutnya (tetap):** jembatan sketch -> dek solver; dielektrik bertumpuk di
+generator. Pembagian tugas tidak berubah dari §6j.
