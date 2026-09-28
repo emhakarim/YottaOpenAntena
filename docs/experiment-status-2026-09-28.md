@@ -150,3 +150,33 @@ the calibrated-criterion rerun.
 
 Started 15:41. The probe arm reported 165,326 / 400,000 steps at 56.6 MCells/s with energy -10.5 dB
 (the run stops early at -40 dB); the line arm follows. Estimated completion ~17:20-17:30.
+
+## 9. Route B adopted and automated (2026-09-28, 16:26)
+
+The owner approved the truncation-stability route. It is now the written policy, code, and a running
+experiment, in that order:
+
+- **Policy** - `docs/convergence-policy.md` gained **Route B**: two runs that both stopped at their
+  caps, with the caps at least 5 % apart, are accepted when their resonances agree within 0.2 % and
+  neither minimum sits on a sweep edge. The accepted value must be quoted *with* the caveat: both
+  truncation levels, and the fact that the end criteria was never reached. A same-cap repeat is
+  rejected by construction - it demonstrates determinism, not stability.
+- **Tool** - `yotta_tools/two_setting_verdict.py --truncation-pair` implements Route B and prints the
+  caveat; four new tests cover the accepted pair, the same-cap rejection, the too-large shift, and the
+  CLI switch. Suite: 468 tests OK (skipped=36). Commit `deabbefd`.
+- **Runs, automated** - three detached chains run back to back after `b2e4`: a 300k port-refine pair
+  against the existing 400k runs, its Route B verdicts, then a 300k B2 feed pair (line/probe) against
+  the 400k `b2e4` runs and its verdicts. Expected to finish around 20:30; the monitor reports the
+  verdicts or, if the provider keeps refusing, the files are waiting regardless.
+
+**What Route B does not bound.** It shows the answer no longer moves when the run is *lengthened*. It
+says nothing yet about the **mesh** - a finer mesh could still move the resonance. A mesh-sensitivity
+check (two mesh densities on the flagship configuration) is therefore the next required step after the
+first accepted number, and it is recommended in those words rather than implied.
+
+**Flagship candidate.** The coplanar line feed: deepest match of the project so far, -28.94 dB
+(VSWR 1.07) at 2.4390 GHz, 5.6 % below the probe arm's resonance. Its Route B verdict is what turns it
+from the strongest signal into the first quotable result.
+
+**Provenance.** The 300k chains run from `src22/repo`, which predates the corporate-feed implementation
+on `main`; B2 does not use that mode, so results stay comparable with `b2e3`/`b2e4`.
