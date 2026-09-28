@@ -505,5 +505,7 @@ ekspresi rusak atau ukuran nol ditolak dengan alasannya). Node pohon `Sketch` ->
 saklar include -> "Include these shapes in simulations". Docs (`gui.md`, `sketch-to-deck.md`)
 ikut diperbarui (label tab disebut Modeling; kata "sketch" tetap dipakai untuk gambarannya).
 Bukti: `test_the_modeling_tab_adds_a_block_by_numbers` (sudut dari ekspresi `L`,`W`; penolakan
-ekspresi rusak & kotak nol), suite **505 OK**, selftest exit 0. Push `HEAD`.
+ekspresi rusak & kotak nol), suite **505 OK**, selftest exit 0. Push `d993249` (fitur dan
+catatan ini mendarat dalam satu commit: kutip PowerShell memecah commit fitur pertama -
+isinya utuh, hanya pesannya jadi kurang presisi).
 Permintaan §6p ke Yotta tidak berubah (runtime smoke, red-team, equivalensi dek).
