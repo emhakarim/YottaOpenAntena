@@ -98,7 +98,7 @@ class TestMainWindow(unittest.TestCase):
         self.assertEqual(tabs.count(), 8)
         titles = [tabs.tabText(i) for i in range(tabs.count())]
         self.assertEqual(
-            titles, ["Material & composite", "Design", "Simulate", "Results", "Sweep", "Import", "Optimise", "Sketch"]
+            titles, ["Material & composite", "Design", "Simulate", "Results", "Sweep", "Import", "Optimise", "Modeling"]
         )
         window.close()
 
@@ -645,7 +645,7 @@ class TestMainWindow(unittest.TestCase):
         window = self._window()
         tabs = window.centralWidget()
         self.assertEqual(tabs.count(), 8)
-        self.assertEqual(tabs.tabText(7), "Sketch")
+        self.assertEqual(tabs.tabText(7), "Modeling")
         tab = tabs.widget(7)
         if tab.figure is None:
             window.close()
@@ -772,6 +772,33 @@ class TestMainWindow(unittest.TestCase):
         self.assertEqual(len(project.sketch_polygons), 1)
         self.assertAlmostEqual(project.sketch_polygons[0][1][0], 0.010)  # metres, not millimetres
         self.assertIn("skipped", sketch.include_note.text())
+        window.close()
+
+    def test_the_modeling_tab_adds_a_block_by_numbers(self):
+        """The CST route: "+ Add block" with numeric corners (parameter expressions allowed)."""
+        window = self._window()
+        tabs = window.centralWidget()
+        self.assertEqual(tabs.tabText(7), "Modeling")
+        tab = tabs.widget(7)
+        if tab.figure is None:
+            window.close()
+            return
+
+        tab.add_parameter("L", "30")
+        tab.add_parameter("W", "20")
+        index = tab.add_block("0", "0", "L", "W", thickness="1.6")
+        self.assertEqual(index, 0)
+        self.assertEqual(tab.shapes[0]["kind"], "block")
+        self.assertEqual(tab.shapes[0]["points"][2], (30.0, 20.0))
+        self.assertIn("added a block", tab.summary.text())
+
+        # a broken expression refuses instead of adding a broken shape
+        self.assertIsNone(tab.add_block("0", "0", "L / nope", "W"))
+        self.assertEqual(len(tab.shapes), 1)
+
+        # zero size after evaluation is refused too
+        self.assertIsNone(tab.add_block("5", "5", "5", "9"))
+        self.assertEqual(len(tab.shapes), 1)
         window.close()
 
 

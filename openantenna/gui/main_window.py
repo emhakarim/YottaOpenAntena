@@ -785,7 +785,7 @@ class SimulateTab(QWidget):
     def _project(self):
         """The design as the solver should see it.
 
-        When the sketch tab's include switch is on, its closed shapes are merged in as
+        When the modeling tab's include switch is on, its closed shapes are merged in as
         ``sketch_polygons`` (additive PEC sheets - docs/sketch-to-deck.md); open traces
         stay behind, and the sketch tab's note counts them.
         """
@@ -1391,7 +1391,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(SweepTab(), "Sweep")
         tabs.addTab(ImportTab(), "Import")
         tabs.addTab(OptimiseTab(), "Optimise")
-        tabs.addTab(self.sketch_tab, "Sketch")
+        tabs.addTab(self.sketch_tab, "Modeling")
         self.setCentralWidget(tabs)
 
         # The project tree: a shell-style view of the *model* (not of the widgets), so it
@@ -1481,7 +1481,7 @@ class MainWindow(QMainWindow):
         if project.sketch_polygons:
             root.addChild(
                 QTreeWidgetItem(
-                    ["Sketch", f"{len(project.sketch_polygons)} polygon(s), additive PEC"]
+                    ["Shapes", f"{len(project.sketch_polygons)} polygon(s), additive PEC"]
                 )
             )
 
@@ -2086,9 +2086,9 @@ def _segments_through(points):
 
 
 class SketchTab(QWidget):
-    """Draw antenna shapes and feed traces, and define them with parameters.
+    """Add blocks and draw antenna shapes and feed traces - the modeling tab.
 
-    The drawing half of a CST-style workflow: trace/polygon/rectangle/circle/line, plus
+    The modeling half of a CST-style workflow: trace/polygon/rectangle/circle/line, plus
     **blocks** (a brick footprint with a thickness), drawn on a snapped millimetre grid.  A
     block keeps the *expression* for its thickness, so ``h_sub`` can be a parameter and
     changing it moves every block that references it - "add parameter", the way a CST model
@@ -2131,7 +2131,7 @@ class SketchTab(QWidget):
         parameters_layout.addLayout(param_buttons)
         layout.addWidget(parameters)
 
-        controls = QGroupBox("Sketch")
+        controls = QGroupBox("Objects")
         controls_layout = QVBoxLayout(controls)
         row = QHBoxLayout()
         self.tool = QComboBox()
@@ -2154,6 +2154,32 @@ class SketchTab(QWidget):
         row.addWidget(self.thickness)
         row.addStretch(1)
         controls_layout.addLayout(row)
+        row_block = QHBoxLayout()
+        self.block_x0 = QLineEdit("0")
+        self.block_y0 = QLineEdit("0")
+        self.block_x1 = QLineEdit("10")
+        self.block_y1 = QLineEdit("10")
+        for field in (self.block_x0, self.block_y0, self.block_x1, self.block_y1):
+            field.setMaximumWidth(70)
+            field.setToolTip("a number or a parameter expression (millimetres)")
+        add_block_button = QPushButton("+ Add block")
+        add_block_button.setToolTip(
+            "Add a block with numeric corners - expressions over the parameters are allowed.  "
+            "The corners are evaluated now; the thickness stays a definition."
+        )
+        add_block_button.clicked.connect(self.add_block_from_fields)
+        row_block.addWidget(QLabel("block x0"))
+        row_block.addWidget(self.block_x0)
+        row_block.addWidget(QLabel("y0"))
+        row_block.addWidget(self.block_y0)
+        row_block.addWidget(QLabel("x1"))
+        row_block.addWidget(self.block_x1)
+        row_block.addWidget(QLabel("y1"))
+        row_block.addWidget(self.block_y1)
+        row_block.addWidget(QLabel("mm"))
+        row_block.addWidget(add_block_button)
+        row_block.addStretch(1)
+        controls_layout.insertLayout(0, row_block)
         row2 = QHBoxLayout()
         self.finish_button = QPushButton("Finish shape")
         self.finish_button.clicked.connect(self.finish)
@@ -2195,17 +2221,17 @@ class SketchTab(QWidget):
         layout.addWidget(downstream)
 
         self.summary = QLabel(
-            "Draw with the left mouse button: two clicks draw a line, rectangle, circle or "
-            "block; a trace or polygon takes one click per vertex, then \"Finish shape\" (or a "
-            "double-click).  A block's thickness is an expression over the parameters, so the "
-            "drawing is defined, not just copied.  Closed shapes can be merged into generated "
-            "decks with the include switch below (additive PEC sheets); open traces stay "
-            "drawing-only."
+            "Add a block by numbers (\"+ Add block\", the CST route) or draw with the left "
+            "mouse button: two clicks draw a line, rectangle, circle or block; a trace or "
+            "polygon takes one click per vertex, then \"Finish shape\" (or a double-click).  "
+            "A block's thickness is an expression over the parameters, so the drawing is "
+            "defined, not just copied.  Closed shapes can be merged into generated decks with "
+            "the include switch below (additive PEC sheets); open traces stay drawing-only."
         )
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
 
-        self.include_check = QCheckBox("Include sketch in simulations (additive PEC sheets)")
+        self.include_check = QCheckBox("Include these shapes in simulations (additive PEC sheets)")
         self.include_check.setToolTip(
             "When on, the closed shapes below are merged into the project the Simulate tab "
             "generates from (docs/sketch-to-deck.md).  Open traces are skipped; a block "
@@ -2431,6 +2457,51 @@ class SketchTab(QWidget):
             self.include_note.setText(
                 "no closed shapes to include yet (an open trace is not a region)."
             )
+
+    def add_block_from_fields(self) -> None:
+        self.add_block(
+            self.block_x0.text(),
+            self.block_y0.text(),
+            self.block_x1.text(),
+            self.block_y1.text(),
+        )
+
+    def add_block(self, x0="0", y0="0", x1="10", y1="10", thickness=None):
+        """Add a block with numeric corners - the CST-style "+ Add block" route.
+
+        Corner fields accept the same parameter expressions as the thickness.  The corners
+        are evaluated when the block is added, so the box lands exactly where the numbers
+        say; the thickness stays an expression, so it keeps following the parameters.
+        Refusals are explicit: a broken expression or a zero width/height adds nothing and
+        says why.
+        """
+        from openantenna.geometry.params import ParameterError, evaluate_expression
+
+        values, _errors = self._parameter_values()
+        if thickness is None:
+            thickness = self.thickness.text().strip() or "1.6"
+        try:
+            corner = [
+                evaluate_expression(str(text).strip() or "0", values)
+                for text in (x0, y0, x1, y1)
+            ]
+        except ParameterError as exc:
+            self.summary.setText("could not add the block: %s" % exc)
+            return None
+        x0v, y0v, x1v, y1v = corner
+        if x0v == x1v or y0v == y1v:
+            self.summary.setText(
+                "could not add the block: zero width or height after evaluating the corners"
+            )
+            return None
+        points = [(x0v, y0v), (x1v, y0v), (x1v, y1v), (x0v, y1v)]
+        self._add({"kind": "block", "points": points, "thickness": thickness})
+        self.summary.setText(
+            "added a block: %.4g x %.4g mm at (%.4g, %.4g) mm, thickness %s"
+            % (abs(x1v - x0v), abs(y1v - y0v), min(x0v, x1v), min(y0v, y1v), thickness)
+        )
+        self._redraw()
+        return len(self.shapes) - 1
 
     def project_polygons(self):
         """The drawn shapes as closed polygons in metres, for a solver project.

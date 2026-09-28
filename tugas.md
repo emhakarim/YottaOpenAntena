@@ -493,3 +493,17 @@ Plus: lanjutkan rantai Route B / ledger seperti biasa - angka quotable pertama t
 yang laporkan begitu lolos gerbang.
 
 **Catatan (menyusul §6o Yotta):** tinjauan kalian LULUS - terima kasih. Dua saran non-blocking ditindaklanjuti: (2) dedup titik kini juga membuang hampir-duplikat dalam epsilon 1e-9 m (commit setelah merge ini), dan (1) cek overlap **port/gap feed** dicatat sebagai kasus tajam di `docs/sketch-to-deck.md` untuk daftar geometric overlap check.
+
+---
+
+## §6q - Aksara, 2026-09-28 (malam): tab "Sketch" -> "Modeling" + "+ Add block" numerik (permintaan pemilik)
+
+Menanggapi pemilik ("kok sketch, di CST kan add block"): tab ke-8 kini berlabel **Modeling**;
+grup **Objects** dipimpin baris **+ Add block** (x0/y0/x1/y1 + thickness; ekspresi parameter
+boleh - sudut dievaluasi saat ditambahkan, ketebalan tetap definisi yang mengikuti parameter;
+ekspresi rusak atau ukuran nol ditolak dengan alasannya). Node pohon `Sketch` -> `Shapes`,
+saklar include -> "Include these shapes in simulations". Docs (`gui.md`, `sketch-to-deck.md`)
+ikut diperbarui (label tab disebut Modeling; kata "sketch" tetap dipakai untuk gambarannya).
+Bukti: `test_the_modeling_tab_adds_a_block_by_numbers` (sudut dari ekspresi `L`,`W`; penolakan
+ekspresi rusak & kotak nol), suite **505 OK**, selftest exit 0. Push `HEAD`.
+Permintaan §6p ke Yotta tidak berubah (runtime smoke, red-team, equivalensi dek).

@@ -25,7 +25,7 @@ describes what a run would use rather than what the widgets happen to say.
 | **Sweep** | A parameter table (factorial or one-at-a-time), run-all against the analytic predictor, a results table with per-row status, a resonance-versus-parameter plot from the table's own summary, and CSV export; the status line states the numbers are targeting values, not solver results |
 | **Import** | Read a CAD file - **STL** (ASCII or binary), **OBJ**, or a **DXF outline** - choose its units and cell size, and see what the solver grid would use: the **staircase occupancy** for a mesh, the **stroked edges** for an outline, drawn on the same canvas style as the other tabs |
 | **Optimise** | Target a resonance frequency by searching the patch length with the stdlib differential-evolution optimiser, **naming the analytic predictor** it used and stating that the number is a targeting result, not a measurement |
-| **Sketch** | Draw shapes and feed traces on a millimetre grid - trace, polygon, rectangle, circle, line, and **blocks** (a brick footprint plus a thickness) - with snapping, a **parameter table** (name = expression, CST-style: a block's thickness can be `h_sub`, and `h_sub` can be `L/8`), a shape list with undo/clear, a **3-D view** of the same sketch, **DXF export/import**, and a grid view of which solver cells the edges cross. Stated plainly: closed shapes merge into generated decks (additive PEC sheets) when the include switch is on; open traces are skipped, and a block contributes its footprint, not its thickness (`docs/sketch-to-deck.md`) |
+| **Modeling** | **Add blocks by numbers** (`+ Add block`, CST-style: corners and thickness accept parameter expressions) or draw shapes and feed traces on a millimetre grid - trace, polygon, rectangle, circle, line - with snapping, a **parameter table** (name = expression, CST-style: a block's thickness can be `h_sub`, and `h_sub` can be `L/8`), a shape list with undo/clear, a **3-D view** of the same model, **DXF export/import**, and a grid view of which solver cells the edges cross. Stated plainly: closed shapes merge into generated decks (additive PEC sheets) when the include switch is on; open traces are skipped, and a block contributes its footprint, not its thickness (`docs/sketch-to-deck.md`) |
 
 ## Things that are deliberate, not missing
 
@@ -56,12 +56,10 @@ describes what a run would use rather than what the widgets happen to say.
 * **A DXF is an outline, not a surface.** The tab strokes the edges onto the solver grid
   and says outright that these are the cells the edges cross, not filled metal, because a
   DXF has no surface to fill.
-* **The Sketch tab says what it does not do.** It draws, previews on the solver grid and
-  exports DXF - but the solver deck still comes from the parametric model, and the panel
-  states that the bridge from a sketch to a non-parametric deck is not built yet -
-  the GUI wiring landed too: an **Include sketch in simulations** switch merges the closed
-  shapes into the generated project (additive PEC sheets; open traces are skipped and
-  counted; `docs/sketch-to-deck.md`).
+* **The Modeling tab says what it does not do.** It adds blocks, draws, previews on the
+  solver grid and exports DXF; with the **Include these shapes in simulations** switch on,
+  the closed shapes are merged into the generated project (additive PEC sheets; open
+  traces are skipped and counted; `docs/sketch-to-deck.md`).
 * **Parameters are definitions, not copies.** A block keeps the *expression* for its
   thickness, resolved each time it is shown or exported, so changing `h_sub` moves every
   block that uses it - the point of CST's "add parameter", and the reason a sketch can be
@@ -86,6 +84,6 @@ python -m unittest tests.test_gui_smoke -v
 Those tests build the real window, exercise each panel with synthetic run directories, and
 check the figures that come out (axes, patches, curves). They drive the Import tab through
 the same `load`/`show_loaded` path a click uses, for both a mesh and a DXF outline, and walk
-all four 3-D camera presets in a real window, and the sketch tab draws through the same click handler the canvas calls, exports a DXF and reads it back with the reader the Import tab uses. PySide6 is optional: without it the tests skip
+all four 3-D camera presets in a real window, and the modeling tab draws through the same click handler the canvas calls, adds a block by numbers, exports a DXF and reads it back with the reader the Import tab uses. PySide6 is optional: without it the tests skip
 and the core is unaffected - so CI has a **separate job that installs PySide6 and runs the
 GUI tests**, otherwise a GUI bug could pass the suite unnoticed.

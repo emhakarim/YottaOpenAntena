@@ -1,6 +1,6 @@
 # Sketch to deck - the first half of the bridge (2026-09-28)
 
-The GUI can draw (Sketch tab) and the generator can build an openEMS deck.  This page is the
+The GUI can draw and add blocks (Modeling tab) and the generator can build an openEMS deck.  This page is the
 written boundary between the two, because "the drawing is simulated" is exactly the kind of
 claim that is easy to make and wrong to mean.
 
@@ -29,8 +29,8 @@ claim that is easy to make and wrong to mean.
   meaningful for you); a geometric overlap check is on the list.
 * **A block's thickness is not used.**  Sheets are zero-thickness PEC; the drawn z extent
   stays a sketch field only.
-* **The GUI wiring landed** (2026-09-28 evening): the Sketch tab has an *Include sketch in
-  simulations* switch; when ticked, the Simulate tab (and the project tree, and the batch
+* **The GUI wiring landed** (2026-09-28 evening): the Modeling tab has an *Include these
+  shapes in simulations* switch; when ticked, the Simulate tab (and the project tree, and the batch
   queue) merges the closed shapes into the project it generates from.  Conversion rules as
   described above; open traces are skipped and counted in the note under the switch.
   Still not there: cutouts, per-shape priorities, and the geometric overlap check - with
