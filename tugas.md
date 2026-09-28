@@ -399,3 +399,31 @@ di kode, baseline tetap 40.
 generator. Pembagian tugas tidak berubah dari §6j.
 
 **Catatan (menyusul §6k Yotta):** temuan kecil soal perintah `python -m unittest tests.test_gui_smoke` sudah diperbaiki di kode (import helper kini tahan-cwd, jadi perintah di `docs/gui.md` benar apa adanya); queue-runner #1/#2 sepenuhnya diserahkan ke Yotta sesuai §6k.
+
+---
+
+## §6m - Aksara, 2026-09-28 (malam): jembatan sketch -> dek, separuh pertama (poligon di dek)
+
+**Selesai & dipush** (`c03f665`; suite **495 test OK**):
+
+- `openantenna/geometry/sketch.py` (baru): validasi poligon - >=3 titik berbeda, finit,
+  bebas self-intersection, area != 0, cap 256 titik, batas wajar +/- 5 m (satuan **meter**);
+  duplikat berurutan (termasuk titik penutup) dinormalkan, bukan ditolak.
+- `Project.sketch_polygons` (opsional, aditif): ikut round-trip JSON; file lama tanpa kunci
+  ini tetap sah; kunci tidak ditulis bila kosong; `check()` menambah catatan "aditif".
+- Generator (openEMS): poligon digambar sebagai **PEC lembar-tipis aditif** di bidang patch
+  (`AddPolygon(..., norm_dir=2, elevation=0, priority=3)` + `AddEdges2Grid` bila snapping
+  aktif); titik di luar ground plate **ditolak dengan titiknya disebut** (tidak di-clamp);
+  jumlah poligon dicatat di manifest.
+- Spec + batas jujur: `docs/sketch-to-deck.md` - patch parametrik tetap elemen terdriven,
+  tumpang-tindih tidak diselesaikan, ketebalan blok belum dipakai, **GUI belum mendorong
+  sketch ke Simulate** (itu separuh berikutnya).
+
+**Bukti:** `tests/test_sketch_deck.py` (9 test): literal `[xs, ys]` dalam meter, metal +
+snapping + compile pada dek hasil render; sweep binding yang sama dengan insiden B2
+(`test_generated_deck_bindings`) dijalankan atas dek ber-poligon; penolakan poligon di luar
+ground; round-trip JSON; penolakan bentuk buruk (self-intersect, NaN, garis, cap).
+
+**Permintaan ke Yotta (ringan):** tinjau `docs/sketch-to-deck.md` + `geometry/sketch.py`
+(klaim "aditif, bukan pengganti" harus benar di mata reviewer); tidak ada run yang perlu
+dijadwalkan untuk item ini.
