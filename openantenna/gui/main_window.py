@@ -2054,25 +2054,55 @@ class OptimiseTab(QWidget):
         self.history.setPlainText("\n".join(lines))
 
 
-class SketchTab(QWidget):
-    """Draw antenna shapes and feed traces, then take them downstream as DXF.
+def _segments_through(points):
+    """Consecutive segments through a point list - shared by the sketch paths."""
+    return [(points[index], points[index + 1]) for index in range(len(points) - 1)]
 
-    The drawing half of a CST-style workflow: shapes are drawn on a millimetre grid with
-    snapping, kept in a plain list, previewed on the solver grid so the discretisation is
-    visible before it matters, and exported as a DXF the Import tab (and any CAD tool)
-    reads back.  What it deliberately does *not* claim: feeding a sketch into the solver
-    deck.  The deck pipeline is parametric; that bridge is a separate, bigger change, and
-    until it exists this panel says so instead of hinting otherwise.
+
+class SketchTab(QWidget):
+    """Draw antenna shapes and feed traces, and define them with parameters.
+
+    The drawing half of a CST-style workflow: trace/polygon/rectangle/circle/line, plus
+    **blocks** (a brick footprint with a thickness), drawn on a snapped millimetre grid.  A
+    block keeps the *expression* for its thickness, so ``h_sub`` can be a parameter and
+    changing it moves every block that references it - "add parameter", the way a CST model
+    is *defined* rather than merely drawn.  Shapes export as DXF (the same entity subset the
+    Import tab reads back), load back in, preview on the solver grid, and can be viewed in
+    3-D with their thicknesses.  What it deliberately does *not* claim: feeding a sketch
+    into the solver deck - that bridge is a separate, bigger change.
     """
 
-    TOOLS = ("trace (open)", "polygon (closed)", "rectangle", "circle", "line")
+    TOOLS = ("trace (open)", "polygon (closed)", "rectangle", "circle", "line", "block")
 
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
 
+        parameters = QGroupBox("Parameters (by definition)")
+        parameters_layout = QVBoxLayout(parameters)
+        self.params_table = QTableWidget(0, 3)
+        self.params_table.setHorizontalHeaderLabels(["name", "expression", "value"])
+        self.params_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.params_table.setMaximumHeight(110)
+        self.params_table.setToolTip(
+            "name = expression, e.g. L = 30 / h_sub = 1.6 / w = L/2.  Blocks store expressions, "
+            "so changing a parameter moves everything that uses it."
+        )
+        parameters_layout.addWidget(self.params_table)
+        param_buttons = QHBoxLayout()
+        add_param = QPushButton("+ Add parameter")
+        add_param.clicked.connect(self.add_parameter)
+        remove_param = QPushButton("Remove selected")
+        remove_param.clicked.connect(self.remove_selected_parameter)
+        param_buttons.addWidget(add_param)
+        param_buttons.addWidget(remove_param)
+        param_buttons.addStretch(1)
+        parameters_layout.addLayout(param_buttons)
+        layout.addWidget(parameters)
+
         controls = QGroupBox("Sketch")
-        row = QHBoxLayout(controls)
+        controls_layout = QVBoxLayout(controls)
+        row = QHBoxLayout()
         self.tool = QComboBox()
         self.tool.addItems(self.TOOLS)
         self.snap_mm = QDoubleSpinBox()
@@ -2081,23 +2111,37 @@ class SketchTab(QWidget):
         self.snap_mm.setValue(1.0)
         self.snap_mm.setSuffix(" mm")
         self.snap_mm.setToolTip("snap to this grid; 0 disables snapping")
+        self.thickness = QLineEdit("1.6")
+        self.thickness.setToolTip(
+            "thickness for new blocks - a number or a parameter expression (e.g. h_sub)"
+        )
+        row.addWidget(QLabel("tool"))
+        row.addWidget(self.tool)
+        row.addWidget(QLabel("snap"))
+        row.addWidget(self.snap_mm)
+        row.addWidget(QLabel("thickness"))
+        row.addWidget(self.thickness)
+        row.addStretch(1)
+        controls_layout.addLayout(row)
+        row2 = QHBoxLayout()
         self.finish_button = QPushButton("Finish shape")
         self.finish_button.clicked.connect(self.finish)
         undo = QPushButton("Undo last")
         undo.clicked.connect(self.undo_last)
         clear = QPushButton("Clear all")
         clear.clicked.connect(self.clear_all)
-        row.addWidget(QLabel("tool"))
-        row.addWidget(self.tool)
-        row.addWidget(QLabel("snap"))
-        row.addWidget(self.snap_mm)
-        row.addWidget(self.finish_button)
-        row.addWidget(undo)
-        row.addWidget(clear)
+        self.view3d_button = QPushButton("3-D view")
+        self.view3d_button.clicked.connect(self.toggle_3d)
+        row2.addWidget(self.finish_button)
+        row2.addWidget(undo)
+        row2.addWidget(clear)
+        row2.addWidget(self.view3d_button)
+        row2.addStretch(1)
+        controls_layout.addLayout(row2)
         layout.addWidget(controls)
 
         downstream = QGroupBox("Downstream")
-        row2 = QHBoxLayout(downstream)
+        row3 = QHBoxLayout(downstream)
         self.layer = QLineEdit("sketch")
         self.layer.setToolTip("DXF layer name for the export")
         self.cell_mm = QDoubleSpinBox()
@@ -2110,31 +2154,40 @@ class SketchTab(QWidget):
         load.clicked.connect(self.load_dxf)
         grid = QPushButton("Show grid view")
         grid.clicked.connect(self.show_grid_view)
-        row2.addWidget(QLabel("export layer"))
-        row2.addWidget(self.layer)
-        row2.addWidget(QLabel("cell"))
-        row2.addWidget(self.cell_mm)
-        row2.addWidget(export)
-        row2.addWidget(load)
-        row2.addWidget(grid)
+        row3.addWidget(QLabel("export layer"))
+        row3.addWidget(self.layer)
+        row3.addWidget(QLabel("cell"))
+        row3.addWidget(self.cell_mm)
+        row3.addWidget(export)
+        row3.addWidget(load)
+        row3.addWidget(grid)
         layout.addWidget(downstream)
 
         self.summary = QLabel(
-            "Draw with the left mouse button: two clicks draw a line, rectangle or circle; "
-            "a trace or polygon takes one click per vertex, then \"Finish shape\" (or a "
-            "double-click).  Nothing here touches the solver yet - shapes leave as DXF."
+            "Draw with the left mouse button: two clicks draw a line, rectangle, circle or "
+            "block; a trace or polygon takes one click per vertex, then \"Finish shape\" (or a "
+            "double-click).  A block's thickness is an expression over the parameters, so the "
+            "drawing is defined, not just copied.  Nothing here touches the solver yet - "
+            "shapes leave as DXF."
         )
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
 
-        self.shapes_table = QTableWidget(0, 3)
-        self.shapes_table.setHorizontalHeaderLabels(["shape", "vertices", "bounds (mm)"])
+        self.shapes_table = QTableWidget(0, 4)
+        self.shapes_table.setHorizontalHeaderLabels(
+            ["shape", "vertices", "bounds (mm)", "thickness (mm)"]
+        )
         self.shapes_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.shapes_table.setMaximumHeight(120)
+        from PySide6.QtWidgets import QAbstractItemView
+
+        self.shapes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         layout.addWidget(self.shapes_table)
 
         self.shapes: list = []
         self._pending: list = []
+        self._view_3d = False
+        self._updating_params = False
 
         try:
             self.figure, self.canvas = _plot_canvas()
@@ -2144,7 +2197,76 @@ class SketchTab(QWidget):
             self.figure = None
             self.canvas = None
             layout.addWidget(QLabel(f"Plotting unavailable: {exc}"))
+
+        self.params_table.itemChanged.connect(self._on_parameter_changed)
+        self._refresh_parameters()
         self._redraw()
+
+    # -- parameters ------------------------------------------------------------
+
+    def add_parameter(self, name=None, expression="1.0") -> int:
+        """Append a parameter row; returns its index.  Also the entry point tests drive."""
+        row = self.params_table.rowCount()
+        if not isinstance(name, str) or not name:
+            name = "param%d" % (row + 1)
+        if not isinstance(expression, str) or not expression:
+            expression = "1.0"
+        self.params_table.insertRow(row)
+        self.params_table.setItem(row, 0, QTableWidgetItem(name))
+        self.params_table.setItem(row, 1, QTableWidgetItem(expression))
+        self._refresh_parameters()
+        return row
+
+    def remove_selected_parameter(self) -> None:
+        rows = sorted({index.row() for index in self.params_table.selectedIndexes()}, reverse=True)
+        for row in rows:
+            self.params_table.removeRow(row)
+        self._refresh_parameters()
+
+    def _parameter_values(self):
+        """Resolve the current table into (values, errors) - the single place cells are read."""
+        from openantenna.geometry.params import ParameterTable
+
+        table = ParameterTable()
+        for row in range(self.params_table.rowCount()):
+            name_item = self.params_table.item(row, 0)
+            expression_item = self.params_table.item(row, 1)
+            name = name_item.text().strip() if name_item else ""
+            expression = expression_item.text().strip() if expression_item else ""
+            if not name and not expression:
+                continue
+            table.set(name, expression)
+        return table.resolve()
+
+    def _on_parameter_changed(self, item) -> None:
+        if self._updating_params:
+            return
+        if item is not None and item.column() == 2:
+            return
+        self._refresh_parameters()
+
+    def _refresh_parameters(self) -> None:
+        """Fill the value column and the shape table - the one place that writes derived cells."""
+        if self._updating_params:
+            return
+        self._updating_params = True
+        try:
+            values, errors = self._parameter_values()
+            for row in range(self.params_table.rowCount()):
+                name_item = self.params_table.item(row, 0)
+                name = name_item.text().strip() if name_item else ""
+                item = self.params_table.item(row, 2) or QTableWidgetItem("")
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self.params_table.setItem(row, 2, item)
+                if name in errors:
+                    item.setText("! " + errors[name])
+                elif name in values:
+                    item.setText("%.6g" % values[name])
+                else:
+                    item.setText("")
+        finally:
+            self._updating_params = False
+        self._refresh_table()
 
     # -- drawing model ---------------------------------------------------------
 
@@ -2160,6 +2282,8 @@ class SketchTab(QWidget):
         Only ``inaxes``/``button``/``xdata``/``ydata``/``dblclick`` are read from the
         event, so a small stand-in object can drive the same code without a real mouse.
         """
+        if self._view_3d:
+            return
         if getattr(event, "inaxes", None) is None or getattr(event, "button", 1) != 1:
             return
         if getattr(event, "xdata", None) is None or getattr(event, "ydata", None) is None:
@@ -2185,6 +2309,15 @@ class SketchTab(QWidget):
         if tool == "rectangle":
             points = [(x0, y0), (x, y0), (x, y), (x0, y)]
             self._add({"kind": "polyline", "points": points, "closed": True})
+        elif tool == "block":
+            points = [(x0, y0), (x, y0), (x, y), (x0, y)]
+            self._add(
+                {
+                    "kind": "block",
+                    "points": points,
+                    "thickness": self.thickness.text().strip() or "0.0",
+                }
+            )
         elif tool == "circle":
             self._add({"kind": "circle", "points": [(x0, y0), (x, y)]})
         else:  # line
@@ -2234,11 +2367,10 @@ class SketchTab(QWidget):
         if shape["kind"] == "circle":
             (cx, cy), (px, py) = shape["points"]
             radius = math.hypot(px - cx, py - cy)
-            points = polygonise_arc(cx, cy, radius, 0.0, 0.0)
-            return [(points[index], points[index + 1]) for index in range(len(points) - 1)]
+            return _segments_through(polygonise_arc(cx, cy, radius, 0.0, 0.0))
         points = shape["points"]
-        segments = [(points[index], points[index + 1]) for index in range(len(points) - 1)]
-        if shape.get("closed") and len(points) > 2:
+        segments = _segments_through(points)
+        if (shape.get("closed") or shape["kind"] == "block") and len(points) > 2:
             segments.append((points[-1], points[0]))
         return segments
 
@@ -2247,6 +2379,21 @@ class SketchTab(QWidget):
         for shape in self.shapes:
             segments.extend(self._shape_segments(shape))
         return segments
+
+    def _thickness_text(self, expression: str, values) -> str:
+        from openantenna.geometry.params import ParameterError, evaluate_expression
+
+        if not expression:
+            return "! no thickness set"
+        try:
+            value = evaluate_expression(expression, values)
+        except ParameterError as exc:
+            return "! %s" % exc
+        try:
+            float(expression)
+        except ValueError:
+            return "%s = %.4g mm" % (expression, value)
+        return "%.4g mm" % value
 
     # -- downstream actions ----------------------------------------------------
 
@@ -2263,11 +2410,16 @@ class SketchTab(QWidget):
                 return
         from openantenna.geometry.cad import write_dxf
 
+        values, _errors = self._parameter_values()
         entities = []
+        blocks = 0
         for shape in self.shapes:
             if shape["kind"] == "circle":
                 (cx, cy), (px, py) = shape["points"]
                 entities.append(("circle", (cx, cy), math.hypot(px - cx, py - cy)))
+            elif shape["kind"] == "block":
+                entities.append(("polyline", list(shape["points"]), True))
+                blocks += 1
             else:
                 entities.append(("polyline", list(shape["points"]), bool(shape.get("closed"))))
         layer = self.layer.text().strip() or "sketch"
@@ -2276,10 +2428,21 @@ class SketchTab(QWidget):
         except (ValueError, OSError) as exc:
             self.summary.setText("could not write %s: %s" % (target, exc))
             return
+        thicknesses = [
+            self._thickness_text(shape.get("thickness", ""), values)
+            for shape in self.shapes
+            if shape["kind"] == "block"
+        ]
+        note = (
+            "\nDXF is 2-D: %d block(s) exported as their footprint; thickness (%s) is kept "
+            "in the sketch only." % (blocks, "; ".join(thicknesses))
+            if blocks
+            else ""
+        )
         self.summary.setText(
             "exported %d shape(s) to %s on layer %r.  DXF carries no units: this sketch is in "
-            "millimetres by convention - quote the unit with any result."
-            % (len(entities), target, layer)
+            "millimetres by convention - quote the unit with any result.%s"
+            % (len(entities), target, layer, note)
         )
 
     def load_dxf(self, target: str | None = None) -> None:
@@ -2331,7 +2494,7 @@ class SketchTab(QWidget):
             "is what the grid would see of the drawing."
             % (len(segments), shape[0], shape[1], self.cell_mm.value(), stroke_fraction(rows) * 100.0)
         )
-        axes = self._canvas_axes()
+        axes = self._axes_2d()
         axes.clear()
         axes.imshow(
             [[1.0 if cell else 0.0 for cell in row] for row in rows],
@@ -2346,15 +2509,31 @@ class SketchTab(QWidget):
 
     # -- view ------------------------------------------------------------------
 
+    def toggle_3d(self) -> None:
+        """Flip between the 2-D drawing canvas and a 3-D view of the same sketch."""
+        if self.figure is None:
+            return
+        self._view_3d = not self._view_3d
+        self._redraw()
+
     def _refresh_table(self) -> None:
+        values, _errors = self._parameter_values()
         table = self.shapes_table
         table.setRowCount(len(self.shapes))
         for row, shape in enumerate(self.shapes):
+            thickness = ""
             if shape["kind"] == "circle":
                 (cx, cy), (px, py) = shape["points"]
                 kind = "circle"
                 vertices = 2
                 bounds = "r %.2f mm at (%.2f, %.2f)" % (math.hypot(px - cx, py - cy), cx, cy)
+            elif shape["kind"] == "block":
+                xs = [point[0] for point in shape["points"]]
+                ys = [point[1] for point in shape["points"]]
+                kind = "block"
+                vertices = len(shape["points"])
+                bounds = "%.2f x %.2f" % (max(xs) - min(xs), max(ys) - min(ys))
+                thickness = self._thickness_text(shape.get("thickness", ""), values)
             else:
                 xs = [point[0] for point in shape["points"]]
                 ys = [point[1] for point in shape["points"]]
@@ -2364,14 +2543,21 @@ class SketchTab(QWidget):
             table.setItem(row, 0, QTableWidgetItem(kind))
             table.setItem(row, 1, QTableWidgetItem(str(vertices)))
             table.setItem(row, 2, QTableWidgetItem(bounds))
+            table.setItem(row, 3, QTableWidgetItem(thickness))
 
     def _redraw(self) -> None:
         if self.figure is None:
             return
+        if self._view_3d:
+            self._draw_3d()
+        else:
+            self._draw_2d()
+
+    def _draw_2d(self) -> None:
         from .theme import ACCENT
         from openantenna.geometry.cad import polygonise_arc
 
-        axes = self._canvas_axes()
+        axes = self._axes_2d()
         axes.clear()
         for shape in self.shapes:
             if shape["kind"] == "circle":
@@ -2382,9 +2568,11 @@ class SketchTab(QWidget):
             else:
                 xs = [point[0] for point in shape["points"]]
                 ys = [point[1] for point in shape["points"]]
-                if shape.get("closed") and len(xs) > 2:
+                if (shape.get("closed") or shape["kind"] == "block") and len(xs) > 2:
                     xs = xs + [xs[0]]
                     ys = ys + [ys[0]]
+            if shape["kind"] == "block":
+                axes.fill(xs, ys, color=ACCENT, alpha=0.15)
             axes.plot(xs, ys, color=ACCENT, linewidth=1.6)
         if self._pending:
             xs = [point[0] for point in self._pending]
@@ -2402,14 +2590,74 @@ class SketchTab(QWidget):
             axes.set_ylim(-10.0, 60.0)
         self.figure.canvas.draw_idle()
 
-    def _canvas_axes(self):
-        """The panel's drawing axes.
+    def _draw_3d(self) -> None:
+        """The same sketch as blocks: footprints at z = 0 with their resolved thickness."""
+        from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 - registers the 3d projection
+        from .theme import ACCENT
+        from openantenna.geometry.params import ParameterError, evaluate_expression
+
+        values, _errors = self._parameter_values()
+        self.figure.clear()
+        axes = self.figure.add_subplot(111, projection="3d")
+        self._view_3d = True
+        self.view3d_button.setText("2-D view")
+        heights = []
+        for shape in self.shapes:
+            if shape["kind"] == "block":
+                xs = [point[0] for point in shape["points"]]
+                ys = [point[1] for point in shape["points"]]
+                x0, x1 = min(xs), max(xs)
+                y0, y1 = min(ys), max(ys)
+                try:
+                    height = max(0.0, evaluate_expression(shape.get("thickness", "") or "0.0", values))
+                except ParameterError:
+                    height = 0.0
+                heights.append(height)
+                axes.bar3d(
+                    x0,
+                    y0,
+                    0.0,
+                    x1 - x0,
+                    y1 - y0,
+                    max(height, 1e-9),
+                    color=ACCENT,
+                    alpha=0.45,
+                    shade=True,
+                )
+            else:
+                for start, end in self._shape_segments(shape):
+                    axes.plot(
+                        [start[0], end[0]], [start[1], end[1]], [0.0, 0.0], color=ACCENT, linewidth=1.4
+                    )
+        axes.set_xlabel("x (mm)")
+        axes.set_ylabel("y (mm)")
+        axes.set_zlabel("z (mm)")
+        axes.set_title("Sketch - 3-D (blocks carry their thickness)")
+        if not self.shapes:
+            axes.set_xlim(-20.0, 80.0)
+            axes.set_ylim(-10.0, 60.0)
+        axes.set_zlim(0.0, max(1.0, (max(heights) if heights else 1.0) * 1.2))
+        self.figure.canvas.draw_idle()
+
+    def _axes_2d(self):
+        """The 2-D drawing axes; switches back from the 3-D view when needed.
 
         _plot_canvas() hands back (figure, canvas); the axes has to be taken from the
         figure, or the first real draw reaches for the canvas and raises.
         """
         if self.figure is None:
             raise RuntimeError("matplotlib is not available")
-        if getattr(self.figure, "axes", None):
-            return self.figure.axes[0]
-        return self.figure.add_subplot(111)
+        stale = self.figure.axes[0] if getattr(self.figure, "axes", None) else None
+        if stale is None or stale.name == "3d":
+            self.figure.clear()
+            self.figure.add_subplot(111)
+        current = self.figure.axes[0]
+        self._view_3d = False
+        button = getattr(self, "view3d_button", None)
+        if button is not None:
+            button.setText("3-D view")
+        return current
+
+    def _canvas_axes(self):
+        """Alias kept for the offscreen tests: the current 2-D axes."""
+        return self._axes_2d()

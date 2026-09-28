@@ -686,6 +686,53 @@ class TestMainWindow(unittest.TestCase):
         self.assertEqual(len(tab.shapes), 2)
         window.close()
 
+    def test_the_sketch_tab_blocks_parameters_and_the_3d_view(self):
+        """A block's thickness is *defined* by parameters - change the parameter, the block follows."""
+        from types import SimpleNamespace
+
+        window = self._window()
+        tabs = window.centralWidget()
+        tab = tabs.widget(7)
+        if tab.figure is None:
+            window.close()
+            return
+
+        tab.add_parameter("L", "20")
+        tab.add_parameter("h", "L / 12")
+        values, errors = tab._parameter_values()
+        self.assertEqual(errors, {})
+        self.assertAlmostEqual(values["L"], 20.0)
+        self.assertAlmostEqual(values["h"], 20.0 / 12.0, places=9)
+        self.assertIn("1.6666", tab.params_table.item(1, 2).text())
+
+        axes = tab._canvas_axes()
+
+        def click(x, y):
+            tab._on_click(SimpleNamespace(inaxes=axes, button=1, xdata=x, ydata=y, dblclick=False))
+
+        tab.thickness.setText("h")
+        tab.tool.setCurrentText("block")
+        click(0.0, 0.0)
+        click(30.0, 15.0)
+        self.assertEqual(tab.shapes[-1]["kind"], "block")
+        self.assertIn("h = 1.667", tab.shapes_table.item(0, 3).text())
+
+        # the block follows the parameter, not a copied number
+        tab.params_table.item(1, 1).setText("L / 6")
+        self.assertIn("h = 3.333", tab.shapes_table.item(0, 3).text())
+
+        # a broken definition is reported, not guessed
+        tab.params_table.item(1, 1).setText("L / nope")
+        self.assertTrue(tab.params_table.item(1, 2).text().startswith("!"))
+        self.assertIn("!", tab.shapes_table.item(0, 3).text())
+        tab.params_table.item(1, 1).setText("L / 12")
+
+        tab.toggle_3d()
+        self.assertEqual(tab.figure.axes[0].name, "3d")
+        tab.toggle_3d()
+        self.assertNotEqual(tab.figure.axes[0].name, "3d")
+        window.close()
+
 
 if __name__ == "__main__":
     unittest.main()
