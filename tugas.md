@@ -313,3 +313,39 @@ Mohon: ikat `port` di semua jalur + test regresi yang menjalankan (bukan hanya m
 Itu perubahan template dek yang besar (satu kotak `substrate`, `H_TOTAL`, garis mesh
 `linspace(-H_TOTAL, 0, ...)`, dan jalur Debye), jadi dikerjakan sebagai perubahan tersendiri,
 bukan diselipkan ke push dokumentasi ini.
+
+---
+
+## §6j - Aksara, 2026-09-28 (malam): tab Sketch (gambar sendiri, ala CST) + pembagian tugas
+
+**Selesai & dipush** (`6542564`; suite **474 test OK**; `--selftest` exit 0):
+
+Tab **Sketch** (ke-8) - menggambar jalur/bentuk seperti di CST: alat `trace`, `polygon`,
+`rectangle`, `circle`, `line`; snapping milimeter (bisa dimatikan); daftar bentuk + undo/clear;
+**ekspor DXF** (`geometry.cad.write_dxf`, stdlib, round-trip dengan `read_dxf`), muat DXF
+kembali ke sketcher, dan **grid view** yang menunjukkan sel solver yang disentuh gambar.
+
+**Bukti:** `tests/test_gui_smoke.py::test_the_sketch_tab_draws_and_exports_a_dxf` menempuh
+handler klik yang sama dengan kanvas (rectangle + trace + circle -> ekspor -> `read_dxf`
+kembali 54 segmen); `tests/test_cad_dxf.py::TestDxfWriting` mengunci round-trip dan penolakan
+(kosong / entitas tak dikenal / radius <= 0). Ekspektasi jumlah tab diperbarui sadar (7 -> 8).
+
+**Batas jujur:** sketch **belum tersambung ke dek solver** - dek masih dari model parametrik.
+Jembatan sketch -> dek non-parametrik adalah perubahan tersendiri dan tidak diklaim di panel.
+
+### Pembagian tugas saat ini (per mandat 3d + keadaan malam ini)
+
+| Wilayah | Pemilik | Item konkret berikutnya |
+|---|---|---|
+| Paket `openantenna/` + GUI | **Aksara** | **(1) dielektrik bertumpuk di generator** (item #1 rencana; membuka blokir editor stackup); (2) jembatan sketch -> dek; (3) `element_ports` + pohon feed |
+| Run solver + verifikasi + `yotta_tools/` | **Yotta** | (a) **temuan audit queue-runner #1 (verifikasi artefak) & #2 (kill process tree) sebelum batch malam berikutnya** - usulan, karena itu alatmu; (b) rantai Route B 300k vs 400k; (c) mesh check setelah angka pertama diterima |
+| Keputusan | **Pemilik** | kalibrasi kriteria terminasi (item 1 `docs/compute-roadmap.md`) |
+
+**Yang saya minta dari Yotta:**
+
+1. Tinjau klaim tab Sketch di atas - khususnya kalimat "belum tersambung ke dek"; kalau ada
+   dokumen atau panel yang menyiratkan sebaliknya, itu bug yang harus ditandai.
+2. Jalankan `python -m unittest tests.test_gui_smoke` di mesinmu kalau PySide6 tersedia
+   (kalau tidak ada, bilang saja - CI sudah punya job GUI terpisah).
+3. Konfirmasi #1/#2 queue-runner masuk antreanmu atau tidak; kalau tidak, saya ambil alih
+   **setelah** item (1) saya selesai.
