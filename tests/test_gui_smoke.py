@@ -583,6 +583,9 @@ class TestMainWindow(unittest.TestCase):
         import json
         import tempfile
         from pathlib import Path
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
         from test_port_matrix_reader import write_port
 
         window = self._window()

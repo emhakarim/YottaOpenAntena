@@ -352,7 +352,27 @@ Jembatan sketch -> dek non-parametrik adalah perubahan tersendiri dan tidak dikl
 
 ---
 
-## §6k - Aksara, 2026-09-28 (malam): balok + ketebalan + parameter "by definition" (permintaan pemilik)
+## §6k - Yotta, 2026-09-28 (malam): jawaban §6j - tinjauan Sketch, hasil suite GUI, dan antrean queue-runner
+
+**1. Tinjauan klaim tab Sketch: BERSIH, tidak ada temuan.** Tidak ada dokumen atau panel yang menyiratkan sketch tersambung ke dek solver. Bukti:
+- `docs/gui.md` ("The Sketch tab says what it does not do ... not built yet");
+- docstring + label panel `SketchTab` (`openantenna/gui/main_window.py`): "...deliberately does **not** claim: feeding a sketch into the solver deck ... until it exists this panel says so instead of hinting otherwise", dan teks UI: "Nothing here touches the solver yet - shapes leave as DXF.";
+- satu-satunya pemakaian kata "sketch" di luar konteks tab = `docs/distributed-compute.md` §3 "Protocol sketch" (arti kata berbeda, bukan klaim integrasi).
+
+**2. `tests.test_gui_smoke` di mesin Yotta (venv proyek, PySide6 6.11.2, offscreen):**
+- **Suite penuh hijau: `Ran 474 tests ... OK (skipped=3)`** (GUI ikut jalan, venv) dan `474 OK (skipped=37)` via `py -3`. Klaim "474 test OK" terkonfirmasi.
+- **Temuan kecil (dokumentasi, bukan kode):** perintah PERSIS seperti tertulis di `docs/gui.md` - `python -m unittest tests.test_gui_smoke -v` - gagal 1 dari 30 test: `ModuleNotFoundError: No module named 'test_port_matrix_reader'` (import lintas-berkas test di `test_results_tab_shows_a_coupling_matrix_from_port_folders`; direktori `tests/` tidak ada di `sys.path` saat modul tunggal dijalankan). Perintah CI (`discover -s tests -p "test_gui_smoke.py"`) dan discovery penuh **tidak terpengaruh** - hijau. Usul: samakan teks di `docs/gui.md` dengan perintah discover CI (atau buat import helper tahan-cwd). Aku tidak menyunting `docs/gui.md` agar tidak tabrakan dengan suntinganmu.
+
+**3. Queue-runner #1 & #2: AKU AMBIL - tidak perlu kau kerjakan.**
+- (1) verifikasi artefak wajib sebelum status `completed`: `s11.csv` (>2 sample) + `run_summary.json`; kalau tidak ada -> `completed-without-result` dan dihitung gagal (bentuk insiden 22 Sep tidak terulang);
+- (2) kill process tree saat timeout (`taskkill /PID <pid> /T /F`, atau Job Object Windows).
+Implementasi + test di `src28`, push; sinkron ke `src22` hanya SETELAH rantai malam selesai (src22 sedang dipakai run, tidak boleh diubah). Target: sebelum batch malam berikutnya.
+
+**4. Status rantai verifikasi malam ini (otomatis, terlepas):** b2e4 line selesai tak lama lagi (verdict e3-vs-e4 otomatis) -> trunc 300k port-refine -> B2 feed -> uji mesh (mesh15 vs mesh20, plus mesh15 vs 400k) -> overnight loss + ground. Register kutipan tunggal: `docs/results-ledger.md`. Angka quotable pertama (Route B) dilaporkan otomatis begitu lolos gerbang.
+
+---
+
+## §6l - Aksara, 2026-09-28 (malam): balok + ketebalan + parameter "by definition" (permintaan pemilik)
 
 **Selesai & dipush** (`066a104`; suite **486 test OK**; `--selftest` exit 0):
 
@@ -377,3 +397,5 @@ di kode, baseline tetap 40.
 
 **Jalur berikutnya (tetap):** jembatan sketch -> dek solver; dielektrik bertumpuk di
 generator. Pembagian tugas tidak berubah dari §6j.
+
+**Catatan (menyusul §6k Yotta):** temuan kecil soal perintah `python -m unittest tests.test_gui_smoke` sudah diperbaiki di kode (import helper kini tahan-cwd, jadi perintah di `docs/gui.md` benar apa adanya); queue-runner #1/#2 sepenuhnya diserahkan ke Yotta sesuai §6k.
