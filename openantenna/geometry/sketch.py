@@ -29,6 +29,10 @@ Polygon = Tuple[Point, ...]
 MAX_POINTS = 256
 LIMIT_M = 5.0
 
+#: Points closer than this (metres) count as the same point: a near-duplicate on a drawn
+#: edge would otherwise reach AddPolygon as a zero-length edge (review note, Yotta §6o).
+EPSILON_M = 1e-9
+
 
 def _point(value, where: str) -> Point:
     try:
@@ -51,6 +55,10 @@ def _point(value, where: str) -> Point:
             )
         numbers.append(as_float)
     return (numbers[0], numbers[1])
+
+
+def _close(a: Point, b: Point, eps: float = EPSILON_M) -> bool:
+    return abs(a[0] - b[0]) <= eps and abs(a[1] - b[1]) <= eps
 
 
 def _orientation(a: Point, b: Point, c: Point) -> int:
@@ -122,13 +130,15 @@ def validate_polygon(
 
     Consecutive duplicate points (including the closing one) are normalised away rather
     than refused - an interactive canvas produces them, and they do not change the shape.
+    Near-duplicates within ``EPSILON_M`` are treated the same way, so no zero-length edge
+    can reach the solver (review note, Yotta §6o).
     """
     coerced = [_point(item, where) for item in points]
     deduped: List[Point] = []
     for point in coerced:
-        if not deduped or point != deduped[-1]:
+        if not deduped or not _close(point, deduped[-1]):
             deduped.append(point)
-    if len(deduped) > 1 and deduped[0] == deduped[-1]:
+    if len(deduped) > 1 and _close(deduped[0], deduped[-1]):
         deduped.pop()
     if len(deduped) < 3:
         raise ValueError(

@@ -18,7 +18,8 @@ claim that is easy to make and wrong to mean.
 * Validation happens at construction (`geometry/sketch.py`): >= 3 distinct points, finite
   coordinates, a +/- 5 m sanity bound (units are metres; the sketch draws millimetres),
   a 256-point cap, no self-intersection, non-zero area.  Consecutive duplicate points
-  (including the closing one) are normalised away, not refused.
+  (including the closing one) are normalised away, not refused; near-duplicates within
+  1e-9 m count as duplicates, so no zero-length edge reaches the solver.
 
 ## What it deliberately does not do yet (the honest boundary)
 
@@ -32,7 +33,10 @@ claim that is easy to make and wrong to mean.
   simulations* switch; when ticked, the Simulate tab (and the project tree, and the batch
   queue) merges the closed shapes into the project it generates from.  Conversion rules as
   described above; open traces are skipped and counted in the note under the switch.
-  Still not there: cutouts, per-shape priorities, and the geometric overlap check.
+  Still not there: cutouts, per-shape priorities, and the geometric overlap check - with
+  the sharpest case named by review (Yotta §6o): sketched PEC over the feed's **port gap**
+  can short the port, so the check must cover the feed/port region, not only the patch
+  outline.
 * **No netlist, no ports, no cutouts** from the sketch: one driven port from the parametric
   feed only.
 

@@ -25,6 +25,11 @@ class TestPolygonValidation(unittest.TestCase):
         self.assertEqual(len(polygon), 3)
         self.assertAlmostEqual(polygon_area(polygon), 8.0)
 
+    def test_near_duplicate_points_are_normalised_away(self):
+        polygon = validate_polygon([(0, 0), (4, 0), (4 + 5e-10, 0.0), (4, 4)])
+        self.assertEqual(len(polygon), 3)
+        self.assertAlmostEqual(polygon_area(polygon), 8.0)
+
     def test_bad_shapes_are_refused_with_a_reason(self):
         many_points = [(index * 0.001, 0.5) for index in range(300)]
         cases = {
