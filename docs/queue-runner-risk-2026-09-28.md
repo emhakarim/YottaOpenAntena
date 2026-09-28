@@ -45,3 +45,21 @@ threads per arm). Finding 1 is the one that matters for interpretation: when the
 `completed`, that will mean "the process exited zero", not "a result exists". Each claimed result must
 be confirmed against `<run dir>/s11.csv` before it is read - which is what `yotta_tools/two_setting_verdict.py`
 does when it refuses a run without convergent data.
+
+## Follow-up, same night (2026-09-28)
+
+Findings #1 and #2 are fixed in `yotta_tools/heavy_queue.py` and frozen in `tests/test_heavy_queue.py`:
+
+* the declared result location is verified before a job is believed: a summary file as before, or a
+  *directory* of arms (the B2 harness) checked arm by arm for `s11.csv` (>2 samples) +
+  `run_summary.json`; a zero-exit job with no verifiable artefact is downgraded to
+  `completed-without-result`;
+* the wall-clock kill now takes the whole process tree: `taskkill /PID <pid> /T /F` on Windows, or
+  `SIGKILL` to the child's own process group on POSIX (`start_new_session`), with a direct kill as
+  the last resort.
+
+Observed live the same night: b2e3/b2e4 were recorded `completed` while their `summary_error` said
+"job did not finish" *even though both arms wrote their results* - the declared path pointed at a
+directory and the old check only knew files. That false label is exactly what the directory mode
+removes. Findings #3 (`--no-wait` bypasses the wait) and #4 (tags name the run directories) remain
+as noted - both are single-instance usage questions, not silent-failure risks.

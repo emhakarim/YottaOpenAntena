@@ -6,7 +6,10 @@ already burned hours:
 * the queue called the batch harness without `--timeout-s`, so its 3600 s default killed three jobs
   at 36-55 % progress and the results were empty;
 * a job that exits in seconds was still reported as `completed` (it had failed at startup, e.g. an
-  interpreter without CSXCAD), which made an earlier queue claim four jobs it never ran.
+  interpreter without CSXCAD), which made an earlier queue claim four jobs it never ran;
+* a job can exit zero and still leave no artefacts (2026-09-28 risk audit, finding #1), so the
+  declared result location is verified - a summary file, or arm by arm for directory summaries -
+  and a zero-exit job without artefacts is downgraded to `completed-without-result`.
 
 Written with ``unittest`` only: CI runs the suite with no optional dependencies.
 """
@@ -17,6 +20,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from yotta_tools import heavy_queue
 
@@ -81,6 +86,86 @@ class TestQueueBehaviour(unittest.TestCase):
                 Path(tmp),
             )
         self.assertIn("exit 3", str(entry["status"]))
+
+
+class TestArtefactVerification(unittest.TestCase):
+    """The 2026-09-28 risk audit, finding #1: an exit code is not an artefact."""
+
+    def _make_arm(self, parent: Path, name: str, rows: int = 5, *, with_csv: bool = True,
+                  with_summary_json: bool = True) -> Path:
+        arm = parent / name
+        arm.mkdir(parents=True, exist_ok=True)
+        if with_csv:
+            lines = ["freq_hz,s11_re,s11_im"] + [f"{2.0e9 + i * 1e6},0.1,-0.0" for i in range(rows)]
+            (arm / "s11.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        if with_summary_json:
+            (arm / "run_summary.json").write_text('{"solver": "openEMS"}', encoding="utf-8")
+        return arm
+
+    def test_directory_summary_verifies_each_arm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._make_arm(root, "line")
+            self._make_arm(root, "probe")
+            entry: dict = {"job": "b2x", "what": "dir arms", "status": "completed", "summary": None}
+            heavy_queue.collect_summary({"name": "b2x", "summary": str(root)}, entry)
+            self.assertEqual(entry["summary"], str(root))
+            self.assertEqual(len(entry["arms"]), 2)  # type: ignore[arg-type]
+            self.assertNotIn("summary_error", entry)
+            self.assertEqual(entry["status"], "completed", "verified artefacts keep the status")
+
+    def test_directory_summary_with_a_missing_arm_downgrades_the_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._make_arm(root, "line")
+            self._make_arm(root, "probe", with_csv=False)
+            entry: dict = {"job": "b2x", "what": "dir arms", "status": "completed", "summary": None}
+            heavy_queue.collect_summary({"name": "b2x", "summary": str(root)}, entry)
+            self.assertIn("probe", str(entry.get("summary_error", "")))
+            self.assertEqual(entry["status"], "completed-without-result")
+
+    def test_a_declared_summary_that_was_never_written_downgrades_the_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            entry: dict = {"job": "x", "what": "never wrote", "status": "completed", "summary": None}
+            heavy_queue.collect_summary({"name": "x", "summary": str(Path(tmp) / "nope.json")}, entry)
+            self.assertIn("not found", str(entry.get("summary_error", "")))
+            self.assertEqual(entry["status"], "completed-without-result")
+
+    def test_a_terminated_job_is_not_re_flagged(self) -> None:
+        # terminated jobs are already never counted as results; the downgrade is only for
+        # jobs that claimed success (status == "completed")
+        with tempfile.TemporaryDirectory() as tmp:
+            entry: dict = {"job": "x", "what": "killed",
+                           "status": "terminated after 6 h (wall-clock limit; taskkill)", "summary": None}
+            heavy_queue.collect_summary({"name": "x", "summary": str(Path(tmp) / "nope.json")}, entry)
+            self.assertTrue(str(entry["status"]).startswith("terminated"))
+
+
+class TestKillTree(unittest.TestCase):
+    """The 2026-09-28 risk audit, finding #2: a direct kill leaves orphan workers."""
+
+    def test_windows_kill_uses_taskkill_on_the_tree(self) -> None:
+        calls: list = []
+
+        class _Done:
+            returncode = 0
+
+        def fake_run(cmd, **kwargs):  # noqa: ANN001 - test double
+            calls.append([str(x) for x in cmd])
+            return _Done()
+
+        fake_proc = SimpleNamespace(pid=4242, kill=lambda: calls.append(["direct"]))
+        with mock.patch.object(heavy_queue.subprocess, "run", fake_run):
+            note = heavy_queue.kill_process_tree(fake_proc, platform="nt")  # type: ignore[arg-type]
+        self.assertEqual(calls[0], ["taskkill", "/PID", "4242", "/T", "/F"])
+        self.assertIn("taskkill", note)
+
+    def test_posix_kill_falls_back_to_a_direct_kill(self) -> None:
+        fake_proc = SimpleNamespace(pid=4242, kill=lambda: None)
+        with mock.patch("yotta_tools.heavy_queue.os.getpgid", create=True, return_value=777), \
+                mock.patch("yotta_tools.heavy_queue.os.killpg", create=True, side_effect=OSError("nope")):
+            note = heavy_queue.kill_process_tree(fake_proc, platform="posix")  # type: ignore[arg-type]
+        self.assertIn("direct kill", note)
 
 
 if __name__ == "__main__":

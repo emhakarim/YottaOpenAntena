@@ -9,6 +9,9 @@ Safety rules built in (the owner's mandate: off-target runs are terminated, not 
   * every job has a wall-clock limit; on expiry the whole process tree is killed and the job is
     recorded as ``terminated`` - it is never counted as a result;
   * a job whose summary reports no converged case is recorded as ``rejected``;
+  * a job that exits zero but leaves no verifiable artefact is recorded
+    ``completed-without-result`` - an exit code alone is never treated as success
+    (risk audit 2026-09-28, finding #1);
   * run directories are unique per job (``--tag``) so no two harnesses share one (WinError 32).
 
 Usage:
@@ -23,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -76,6 +80,9 @@ JOBS: List[Dict[str, object]] = [
     # B2 rerun: the package fix (896e10f5) resolved the unbound s11 port that killed the
     # probe arms after a full FDTD.  Two settings, same two arms, per docs/convergence-policy.md;
     # the earlier attempt burned 3230 s per probe arm and never wrote s11.csv.
+    # NOTE: for b2e3/b2e4 "summary" points at a DIRECTORY of arms (line/, probe/); each arm is
+    # verified on its own s11.csv + run_summary.json by collect_summary() - the harness writes
+    # no combined summary file, and a missing arm must read as completed-without-result.
     {
         "name": "b2e3",
         "what": "B2 rerun (feed coplanar probe vs line), EndCriteria 1e-3",
@@ -113,6 +120,105 @@ def active_solver_processes() -> int:
         return 0
 
 
+def kill_process_tree(proc: subprocess.Popen, platform: str | None = None) -> str:
+    """Kill a process and its descendants; returns a short note for the queue log.
+
+    On Windows ``proc.kill()`` only reaps the direct child - solver workers keep running
+    as orphans and keep burning CPU (risk audit 2026-09-28, finding #2), so the tree is
+    killed with ``taskkill /T``.  On POSIX the child is started in its own session
+    (see ``start_new_session`` in ``run_job``) and the whole group gets ``SIGKILL``.
+    A direct kill is the last resort, so at minimum the harness itself dies.
+    """
+    platform = platform or ("nt" if os.name == "nt" else "posix")
+    if platform == "nt":
+        try:
+            done = subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                                  capture_output=True, text=True, timeout=60)
+            if done.returncode == 0:
+                return f"taskkill /T /F on pid {proc.pid}"
+        except Exception:
+            pass
+    else:
+        try:
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, signal.SIGKILL)
+            return f"SIGKILL to process group {pgid}"
+        except Exception:
+            pass
+    proc.kill()
+    return f"direct kill on pid {proc.pid}"
+
+
+def collect_summary(job: Dict[str, object], entry: Dict[str, object]) -> None:
+    """Attach the job's result artefacts to its entry; never trust the exit code alone.
+
+    The declared ``summary`` may be:
+      * a JSON summary file with a ``cases`` list (the batch harness) - parsed as before;
+      * a directory of run arms (the B2 harness writes ``<arm>/s11.csv`` and
+        ``<arm>/run_summary.json`` per arm and no combined summary) - verified arm by arm.
+
+    If a job that exited zero left no verifiable artefact, the status is downgraded to
+    ``completed-without-result`` (risk audit 2026-09-28, finding #1: the 2026-09-22
+    incident recorded "completed" for jobs whose post-processing had already died).
+    """
+    summary_rel = job.get("summary")
+    if not summary_rel:
+        return
+    summary_path = REPO / str(summary_rel)
+    if summary_path.is_file():
+        try:
+            data = json.loads(summary_path.read_text(encoding="utf-8"))
+            entry["summary"] = str(summary_path)
+            cases = data.get("cases", [])
+            entry["cases"] = [
+                {"case": c.get("case"), "resonance_hz": c.get("resonance_hz"),
+                 "converged": c.get("converged"), "runtime_s": c.get("runtime_s")}
+                for c in cases
+            ]
+            accepted = [c for c in entry["cases"] if c.get("converged") is True]  # type: ignore[union-attr]
+            entry["accepted_cases"] = len(accepted)
+            entry["verdict"] = "usable" if accepted else "rejected (no converged case)"
+        except Exception as exc:  # a broken summary must not kill the queue
+            entry["summary_error"] = f"{type(exc).__name__}: {exc}"
+    elif summary_path.is_dir():
+        arms = sorted(p for p in summary_path.iterdir() if p.is_dir())
+        checked: List[Dict[str, object]] = []
+        problems: List[str] = []
+        if not arms:
+            problems.append("no arm directories inside")
+        for arm in arms:
+            rows = -1
+            csv_path = arm / "s11.csv"
+            if csv_path.is_file():
+                lines = [ln for ln in csv_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                         if ln.strip()]
+                rows = max(0, len(lines) - 1)  # first line is the header
+            summary_json = arm / "run_summary.json"
+            ok_json = False
+            if summary_json.is_file():
+                try:
+                    json.loads(summary_json.read_text(encoding="utf-8"))
+                    ok_json = True
+                except Exception:
+                    ok_json = False
+            if rows > 2 and ok_json:
+                checked.append({"arm": arm.name, "s11_rows": rows, "s11_csv": str(csv_path)})
+            else:
+                problem = "no s11.csv (>2 samples)" if rows <= 2 else "no run_summary.json"
+                problems.append(f"{arm.name}: {problem}")
+        if problems:
+            entry["summary_error"] = "missing artefacts: " + "; ".join(problems)
+        else:
+            entry["summary"] = str(summary_path)
+            entry["arms"] = checked
+            entry["verdict"] = (f"artefacts ok for {len(checked)} arm(s); stability is judged by "
+                                "two_setting_verdict, not by this queue")
+    else:
+        entry["summary_error"] = "declared result path not found (job did not finish)"
+    if entry.get("summary") is None and entry.get("status") == "completed":
+        entry["status"] = "completed-without-result"
+
+
 def wait_for_room(limit: int = CONCURRENCY_LIMIT, timeout_s: float = 12 * 3600) -> None:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
@@ -136,15 +242,15 @@ def run_job(job: Dict[str, object], logdir: Path) -> Dict[str, object]:
     with open(log, "w", encoding="utf-8") as handle:
         proc = subprocess.Popen([str(x) for x in job["cmd"]],  # type: ignore[arg-type]
                                 cwd=str(REPO), env=env, stdout=handle, stderr=subprocess.STDOUT,
-                                text=True)
+                                text=True, start_new_session=True)
         try:
             returncode = proc.wait(timeout=limit_s)
             status = "completed" if returncode == 0 else f"exit {returncode}"
         except subprocess.TimeoutExpired:
-            proc.kill()
+            how = kill_process_tree(proc)
             proc.wait(timeout=60)
             returncode = None
-            status = f"terminated after {job['hours']} h (wall-clock limit)"
+            status = f"terminated after {job['hours']} h (wall-clock limit; {how})"
     elapsed = time.time() - started
     entry: Dict[str, object] = {
         "job": name, "what": job["what"], "status": status,
@@ -162,26 +268,7 @@ def run_job(job: Dict[str, object], logdir: Path) -> Dict[str, object]:
         except Exception:
             pass
 
-    summary_rel = job.get("summary")
-    if summary_rel:
-        summary_path = REPO / str(summary_rel)
-        if summary_path.is_file():
-            try:
-                data = json.loads(summary_path.read_text(encoding="utf-8"))
-                entry["summary"] = str(summary_path)
-                cases = data.get("cases", [])
-                entry["cases"] = [
-                    {"case": c.get("case"), "resonance_hz": c.get("resonance_hz"),
-                     "converged": c.get("converged"), "runtime_s": c.get("runtime_s")}
-                    for c in cases
-                ]
-                accepted = [c for c in entry["cases"] if c.get("converged") is True]  # type: ignore[union-attr]
-                entry["accepted_cases"] = len(accepted)
-                entry["verdict"] = "usable" if accepted else "rejected (no converged case)"
-            except Exception as exc:  # a broken summary must not kill the queue
-                entry["summary_error"] = f"{type(exc).__name__}: {exc}"
-        else:
-            entry["summary_error"] = "summary file not written (job did not finish)"
+    collect_summary(job, entry)
     return entry
 
 
