@@ -73,3 +73,39 @@ not the verdict tool's parser). The numbers agree:
 Relative shift (band-mean denominator): **0.301 %** - identical to the verdict tool's 0.301 %.
 Both runs ended by hitting the cap, so the verdict stands: **rejected, not quotable**.
 
+
+## 7. k2c completed - the post-processing path works on every arm class (2026-09-28 12:54)
+
+`k2c` (dielectric-loss validation: PTFE / FR-4 with loss / FR-4 without loss, 1e-4, cap 400k) finished
+in 3.03 h. All three arms wrote `s11.csv` **and** the NF2FF products (`nf2ff_pattern.csv`,
+`nf2ff_summary.csv`) - so the whole post-processing chain, not only the S11 write, is confirmed on
+every arm class that used to die silently.
+
+| arm | resonance [GHz] | deepest |S11| [dB] | VSWR | samples | converged | timesteps |
+|---|---|---|---|---|---|---|---|
+| loss_ptfe | 2.4427 | -7.84 | 2.365 | 101 | no | 400000 |
+| loss_fr4 | 2.4133 | -0.45 | 38.4 | 101 | no | 400000 |
+| loss_fr4_none | 2.4133 | -0.27 | 63.4 | 101 | no | 400000 |
+
+**Mechanical verdicts** (`yotta_tools/two_setting_verdict.py`):
+
+- loss on/off (fr4 vs fr4_none): shift **0.000 %** - yet *rejected*, because both arms are cap-limited
+  (`runs/verdict_k2c_fr4.json`).
+- material change (ptfe vs fr4): shift **1.209 %**, band "large shift (>=1 %)" - also rejected,
+  cap-limited (`runs/verdict_k2c_mat.json`).
+
+**Two things worth stating plainly.**
+
+*Determinism is not convergence.* The PTFE arm reads 2.4427 GHz / -7.84 dB, bit-identical to the `k1c`
+port_refine-on arm run hours earlier. Repeating a configuration reproduces it exactly - valuable for
+reproducibility, useless as evidence of numerical convergence. The acceptance policy must never be fed
+a same-configuration repeat: it would show a 0.000 % shift and look "stable" while proving nothing
+about the mesh or the end criteria.
+
+*The loss effect is second order at this mesh.* Enabling FR-4 loss moves the deepest |S11| from -0.27
+to -0.45 dB at an unchanged 2.4133 GHz; switching the substrate from PTFE to FR-4 moves the resonance
+by 1.209 % and costs ~7.4 dB of match depth. Both agree with ordinary expectation, and both remain
+**hypotheses** here, because every run is cap-limited and therefore not quotable.
+
+`b1s1` is in flight (timesteps 123k/132k at 35 min of wall time), then `b2e3` and `b2e4`; estimated
+completion around 18:00.
