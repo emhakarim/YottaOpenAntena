@@ -45,6 +45,13 @@ class TestExpressionEvaluation(unittest.TestCase):
         with self.assertRaises(ParameterError):
             evaluate_expression("True", {})
 
+    def test_pathological_nesting_is_a_parameter_error_not_a_crash(self):
+        for depth in (500, 5000):
+            with self.subTest(depth=depth):
+                expression = "(" * depth + "1" + ")" * depth
+                with self.assertRaises(ParameterError):
+                    evaluate_expression(expression, {})
+
 
 class TestParameterTable(unittest.TestCase):
     def test_forward_references_resolve(self):

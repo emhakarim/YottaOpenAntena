@@ -736,6 +736,44 @@ class TestMainWindow(unittest.TestCase):
         self.assertNotEqual(tab.figure.axes[0].name, "3d")
         window.close()
 
+    def test_the_sketch_feeds_the_simulate_tab_when_included(self):
+        """Second half of the bridge: tick the box, and the Simulate tab's project carries
+        the closed shapes as polygons - open traces stay behind (docs/sketch-to-deck.md)."""
+        from types import SimpleNamespace
+
+        window = self._window()
+        tabs = window.centralWidget()
+        sketch = tabs.widget(7)
+        simulate = tabs.widget(2)
+        if sketch.figure is None:
+            window.close()
+            return
+
+        axes = sketch._canvas_axes()
+
+        def click(x, y):
+            sketch._on_click(SimpleNamespace(inaxes=axes, button=1, xdata=x, ydata=y, dblclick=False))
+
+        sketch.tool.setCurrentText("polygon (closed)")
+        click(0.0, 0.0)
+        click(10.0, 0.0)
+        click(10.0, 10.0)
+        sketch.finish()
+        sketch.tool.setCurrentText("trace (open)")
+        click(0.0, 12.0)
+        click(5.0, 15.0)
+        sketch.finish()
+
+        # off by default: the sketch stays out of the project
+        self.assertEqual(simulate._project().sketch_polygons, ())
+
+        sketch.include_check.setChecked(True)
+        project = simulate._project()
+        self.assertEqual(len(project.sketch_polygons), 1)
+        self.assertAlmostEqual(project.sketch_polygons[0][1][0], 0.010)  # metres, not millimetres
+        self.assertIn("skipped", sketch.include_note.text())
+        window.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -680,9 +680,10 @@ class DesignTab(QWidget):
 class SimulateTab(QWidget):
     """Generate the openEMS model and run it, without blocking the window."""
 
-    def __init__(self, design_tab: DesignTab) -> None:
+    def __init__(self, design_tab: DesignTab, sketch_tab=None) -> None:
         super().__init__()
         self.design_tab = design_tab
+        self.sketch_tab = sketch_tab
         layout = QVBoxLayout(self)
 
         settings = QGroupBox("Solver settings")
@@ -781,6 +782,22 @@ class SimulateTab(QWidget):
             "nf2ff": self.nf2ff.isChecked(),
         }
 
+    def _project(self):
+        """The design as the solver should see it.
+
+        When the sketch tab's include switch is on, its closed shapes are merged in as
+        ``sketch_polygons`` (additive PEC sheets - docs/sketch-to-deck.md); open traces
+        stay behind, and the sketch tab's note counts them.
+        """
+        base = self.design_tab.current_project()
+        if self.sketch_tab is None:
+            return base
+        merged = self.sketch_tab.merge_into(base)
+        added = len(merged.sketch_polygons)
+        if added:
+            self.log.append("sketch: %d polygon(s) merged into the project" % added)
+        return merged
+
     def pick_directory(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, "Choose a run directory")
         if chosen:
@@ -828,7 +845,7 @@ class SimulateTab(QWidget):
 
     def add_to_queue(self) -> None:
         """Queue the design as it is right now (a snapshot, not a live link)."""
-        project = self.design_tab.current_project()
+        project = self._project()
         index = len(self._queue)
         label = f"queue{index + 1:02d}"
         self._queue.append((label, project))
@@ -888,7 +905,7 @@ class SimulateTab(QWidget):
             return
         self.log.append("generating model ...")
         worker = GenerateWorker(
-            self.design_tab.current_project(),
+            self._project(),
             Path(self.rundir.text()),
             **self._solver_kwargs(),
         )
@@ -905,7 +922,7 @@ class SimulateTab(QWidget):
             "%p% of the step cap (a run usually stops earlier, on energy)"
         )
         worker = SimulateWorker(
-            self.design_tab.current_project(),
+            self._project(),
             Path(self.rundir.text()),
             **self._solver_kwargs(),
         )
@@ -1365,15 +1382,16 @@ class MainWindow(QMainWindow):
         self.resize(1040, 780)
 
         self.design_tab = DesignTab()
+        self.sketch_tab = SketchTab()
         tabs = QTabWidget()
         tabs.addTab(MaterialTab(), "Material & composite")
         tabs.addTab(self.design_tab, "Design")
-        tabs.addTab(SimulateTab(self.design_tab), "Simulate")
+        tabs.addTab(SimulateTab(self.design_tab, self.sketch_tab), "Simulate")
         tabs.addTab(ResultsTab(), "Results")
         tabs.addTab(SweepTab(), "Sweep")
         tabs.addTab(ImportTab(), "Import")
         tabs.addTab(OptimiseTab(), "Optimise")
-        tabs.addTab(SketchTab(), "Sketch")
+        tabs.addTab(self.sketch_tab, "Sketch")
         self.setCentralWidget(tabs)
 
         # The project tree: a shell-style view of the *model* (not of the widgets), so it
@@ -1388,6 +1406,7 @@ class MainWindow(QMainWindow):
         dock.setWidget(self.project_tree)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
         self.design_tab.design_changed.connect(self._refresh_project_tree)
+        self.sketch_tab.sketch_changed.connect(self._refresh_project_tree)
         self._refresh_project_tree()
 
         status = self.statusBar()
@@ -1403,7 +1422,7 @@ class MainWindow(QMainWindow):
         """
         tree = self.project_tree
         tree.clear()
-        project = self.design_tab.current_project()
+        project = self.sketch_tab.merge_into(self.design_tab.current_project())
         root = QTreeWidgetItem([project.name, ""])
         tree.addTopLevelItem(root)
 
@@ -1458,6 +1477,13 @@ class MainWindow(QMainWindow):
         sweep.addChild(QTreeWidgetItem(["stop", f"{project.sweep.stop_hz / 1e9:.4f} GHz"]))
         sweep.addChild(QTreeWidgetItem(["points", str(project.sweep.points)]))
         root.addChild(sweep)
+
+        if project.sketch_polygons:
+            root.addChild(
+                QTreeWidgetItem(
+                    ["Sketch", f"{len(project.sketch_polygons)} polygon(s), additive PEC"]
+                )
+            )
 
         warnings = project.check()
         if warnings:
@@ -2068,11 +2094,16 @@ class SketchTab(QWidget):
     changing it moves every block that references it - "add parameter", the way a CST model
     is *defined* rather than merely drawn.  Shapes export as DXF (the same entity subset the
     Import tab reads back), load back in, preview on the solver grid, and can be viewed in
-    3-D with their thicknesses.  What it deliberately does *not* claim: feeding a sketch
-    into the solver deck - that bridge is a separate, bigger change.
+    3-D with their thicknesses.  With the include switch on, the closed shapes are merged
+    into the project the Simulate tab generates from - additive zero-thickness PEC sheets,
+    open traces skipped (docs/sketch-to-deck.md).
     """
 
     TOOLS = ("trace (open)", "polygon (closed)", "rectangle", "circle", "line", "block")
+
+    #: emitted whenever the drawing or the include switch changes, so the project tree can
+    #: follow what a generated deck would carry
+    sketch_changed = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -2167,11 +2198,24 @@ class SketchTab(QWidget):
             "Draw with the left mouse button: two clicks draw a line, rectangle, circle or "
             "block; a trace or polygon takes one click per vertex, then \"Finish shape\" (or a "
             "double-click).  A block's thickness is an expression over the parameters, so the "
-            "drawing is defined, not just copied.  Nothing here touches the solver yet - "
-            "shapes leave as DXF."
+            "drawing is defined, not just copied.  Closed shapes can be merged into generated "
+            "decks with the include switch below (additive PEC sheets); open traces stay "
+            "drawing-only."
         )
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
+
+        self.include_check = QCheckBox("Include sketch in simulations (additive PEC sheets)")
+        self.include_check.setToolTip(
+            "When on, the closed shapes below are merged into the project the Simulate tab "
+            "generates from (docs/sketch-to-deck.md).  Open traces are skipped; a block "
+            "contributes its footprint, not its thickness."
+        )
+        self.include_check.toggled.connect(self._on_include_toggled)
+        layout.addWidget(self.include_check)
+        self.include_note = QLabel("no closed shapes to include yet (an open trace is not a region).")
+        self.include_note.setWordWrap(True)
+        layout.addWidget(self.include_note)
 
         self.shapes_table = QTableWidget(0, 4)
         self.shapes_table.setHorizontalHeaderLabels(
@@ -2200,6 +2244,7 @@ class SketchTab(QWidget):
 
         self.params_table.itemChanged.connect(self._on_parameter_changed)
         self._refresh_parameters()
+        self._refresh_include_note()
         self._redraw()
 
     # -- parameters ------------------------------------------------------------
@@ -2344,6 +2389,7 @@ class SketchTab(QWidget):
     def _add(self, shape: dict) -> None:
         self.shapes.append(shape)
         self._refresh_table()
+        self._sketch_changed()
 
     def undo_last(self) -> None:
         if self.shapes:
@@ -2351,12 +2397,88 @@ class SketchTab(QWidget):
         self._pending = []
         self._refresh_table()
         self._redraw()
+        self._sketch_changed()
 
     def clear_all(self) -> None:
         self.shapes = []
         self._pending = []
         self._refresh_table()
         self._redraw()
+        self._sketch_changed()
+
+    def _on_include_toggled(self, _checked: bool) -> None:
+        self._sketch_changed()
+
+    def _sketch_changed(self) -> None:
+        self._refresh_include_note()
+        self.sketch_changed.emit()
+
+    def _refresh_include_note(self) -> None:
+        polygons, notes = self.project_polygons()
+        if self.include_check.isChecked():
+            suffix = ("  Skipped: " + "; ".join(notes) + ".") if notes else ""
+            self.include_note.setText(
+                "%d polygon(s) will be merged into generated decks (additive PEC sheets).%s"
+                % (len(polygons), suffix)
+            )
+            return
+        if polygons:
+            self.include_note.setText(
+                "%d closed shape(s) ready - tick the box to merge them into generated decks."
+                % len(polygons)
+            )
+        else:
+            self.include_note.setText(
+                "no closed shapes to include yet (an open trace is not a region)."
+            )
+
+    def project_polygons(self):
+        """The drawn shapes as closed polygons in metres, for a solver project.
+
+        Closed shapes only, per docs/sketch-to-deck.md: polygon/rectangle and block
+        footprints become polygons; a circle is polygonised into chords the way the DXF
+        reader does it; an open trace is skipped, because a stroked line is not a filled
+        region.  Returns ``(polygons, notes)``.
+        """
+        from openantenna.geometry.cad import polygonise_arc
+        from openantenna.geometry.sketch import validate_polygon
+
+        polygons = []
+        notes = []
+        for index, shape in enumerate(self.shapes, start=1):
+            label = "shape %d" % index
+            if shape["kind"] == "circle":
+                (cx, cy), (px, py) = shape["points"]
+                points = polygonise_arc(cx, cy, math.hypot(px - cx, py - cy), 0.0, 0.0)
+            elif shape["kind"] == "block" or shape.get("closed"):
+                points = list(shape["points"])
+            else:
+                notes.append("%s (trace) skipped: an open trace is not a filled region" % label)
+                continue
+            try:
+                polygons.append(
+                    validate_polygon(
+                        [(x * 1e-3, y * 1e-3) for x, y in points], where=label
+                    )
+                )
+            except ValueError as exc:
+                notes.append("%s skipped: %s" % (label, exc))
+        return polygons, notes
+
+    def simulation_polygons(self):
+        """What a generated deck would carry - empty unless the include box is ticked."""
+        if not self.include_check.isChecked():
+            return [], []
+        return self.project_polygons()
+
+    def merge_into(self, project):
+        """Merge the included polygons into a project (a copy; never mutates the input)."""
+        from dataclasses import replace
+
+        polygons, _notes = self.simulation_polygons()
+        if not polygons:
+            return project
+        return replace(project, sketch_polygons=tuple(polygons))
 
     # -- shape -> segments / DXF ----------------------------------------------
 
@@ -2472,6 +2594,7 @@ class SketchTab(QWidget):
         self.summary.setText("loaded %d segment(s) from %s" % (len(segments), target))
         self._refresh_table()
         self._redraw()
+        self._sketch_changed()
 
     def show_grid_view(self) -> None:
         """Show which solver-grid cells the sketch's edges would cross (Import-tab semantics)."""

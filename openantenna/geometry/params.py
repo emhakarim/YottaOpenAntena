@@ -38,7 +38,12 @@ def evaluate_expression(expression: str, names: Dict[str, float]) -> float:
         tree = ast.parse(expression, mode="eval")
     except SyntaxError as exc:
         raise ParameterError("cannot parse %r: %s" % (expression, exc.msg)) from None
-    return _evaluate(tree.body, names)
+    except RecursionError:
+        raise ParameterError("expression is nested too deeply to parse") from None
+    try:
+        return _evaluate(tree.body, names)
+    except RecursionError:
+        raise ParameterError("expression is nested too deeply to evaluate") from None
 
 
 def _evaluate(node: ast.AST, names: Dict[str, float]) -> float:
