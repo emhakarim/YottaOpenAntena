@@ -437,3 +437,30 @@ dijadwalkan untuk item ini.
 - **Temuan nyata yang tervalidasi malam ini:** b2e3/b2e4 tercatat `completed` + label salah "job did not finish" padahal kedua arm menulis hasil lengkap - jalur `summary` menunjuk **direktori**, cek lama hanya mengerti file. Mode direktori itulah yang memperbaiki label; detail di `docs/queue-runner-risk-2026-09-28.md` bagian Follow-up.
 - **Sinkron:** `src22` TIDAK disentuh (dipakai rantai malam ini); `heavy_queue` di src22 di-sync sebelum batch malam berikutnya.
 - **Bonus verifikasi:** b2e4 line = b2e3 line **bit-identik** (2,4390 GHz / -28,94 dB / VSWR 1,074; determinisme ke-3) - masuk `docs/results-ledger.md` (`e2cf9cea`).
+
+
+---
+
+## §6o - Yotta, 2026-09-28 (malam): review jembatan sketch->dek (separuh pertama) - LULUS
+
+**Verdict: klaim "aditif, bukan pengganti" TERBUKTI secara mekanis.** Bukti terkuat: render dek untuk project yang sama, tanpa vs dengan satu polygon 20x10 mm - diff-nya **persis satu baris**:
+
+    - SKETCH_POLYGONS = []
+    + SKETCH_POLYGONS = [[[0.0, 0.02, 0.02, 0.0], [-0.005, -0.005, 0.005, 0.005]]]
+
+Tidak ada satu pun baris patch/feed/port/mesh yang berubah; blok tetap dijaga `if SKETCH_POLYGONS:` sehingga project polos inert, dan patch parametrik tetap satu-satunya elemen terdriven. `main_window.py` nol rujukan `sketch_polygons` - klaim "GUI belum mendorong sketch ke Simulate" benar apa adanya.
+
+**Diverifikasi juga (semua benar):**
+- Unit: meter konsisten; pesan penolakan mengonversi ke mm hanya untuk tampilan (`_x * 1e3`) - label "mm" benar;
+- Guard ground plate: memakai extents ground (bukan clamp), titik pelanggar disebut + saran perbaikan;
+- Validasi: dedup titik penutup, self-intersection (sentuhan dihitung), cap 256, area != 0, batas sanity +/- 5 m, NaN/inf/bool ditolak - pesannya menyebut polygon ke-berapa;
+- JSON aditif: kunci absen bila kosong, file lama tetap sah, round-trip benar;
+- Manifest mencatat jumlah polygon; snap `AddEdges2Grid` hanya bila METAL_EDGE_SNAPPING; binding sweep (aturan lokal tak-terikat dari insiden B2) dijalankan atas dek berpolygon;
+- Suite: **501 test OK** di venv (GUI asli, skips=3) dan py -3 (skips=38); `test_sketch_deck`+`test_params` = 20 test OK; perintah `python -m unittest tests.test_gui_smoke` kini hijau penuh (31 test) - temuan kecil §6k tuntas di sisimu. Terima kasih.
+
+**Catatan reviewer (non-blocking, untuk separuh kedua):**
+1. Overlap paling tajam yang perlu dicek nanti bukan patch, melainkan **gap/port feed** - PEC di atas gap port bisa menghubung-singkatkan port; layak masuk daftar "geometric overlap check" yang sudah kau tulis.
+2. Dedup titik baru untuk duplikat persis; saran epsilon kecil (mis. 1e-9 m) untuk hampir-duplikat supaya tidak ada edge sepanjang-nol yang sampai ke `AddPolygon`.
+3. PEC-vs-PEC same-priority aman secara elektris (union PEC); yang penting janji "makna desain" tetap tidak dibuat - sudah benar.
+
+Tidak ada run yang kujadwalkan untuk item ini (memang tidak perlu). Rantai verifikasi malam tetap berjalan otomatis.
