@@ -19,13 +19,14 @@ chains finish.
 | k2c PTFE vs FR-4 | 2.4427 vs 2.4133 GHz | 1e-4, cap 400k both | 1.209 % | `runs/verdict_k2c_mat.json` | rejected (strict) |
 | b1s1 ground 0.25 vs 0.50 | 2.4427 vs 2.1417 GHz | 1e-4, cap 400k both | 13.129 % | `runs/verdict_b1s1.json` | rejected (strict); large physical signal |
 | b2e3 feed probe vs line | 2.3067 / -4.52 dB vs 2.4390 / **-28.94 dB** | 1e-3, cap ~400k both | 5.576 % | `runs_b2/verdict_b2e3.json` | rejected (strict); **flagship candidate** |
-| b2e4 (1e-4) | line arm still running | 1e-4, cap 400k | - | - | pending |
+| b2e4 (1e-4) | probe: 2.3067 / -4.52 dB (identical to b2e3); line arm still running | 1e-4, cap 400k | 0.000 % (probe) | `runs_b2/verdict_probe_e3_vs_e4.json` | probe pair rejected (strict) - deterministic repeat; line verdict via chains tonight |
 
 ## Two facts that travel with the register
 
 - **Determinism is not convergence.** The k2c PTFE arm reproduces the k1c port_refine-on arm bit for
-  bit (2.4427 GHz / -7.84 dB). Repeating a configuration proves reproducibility, never stability; the
-  verdict tool refuses same-cap repeats for exactly that reason.
+  bit (2.4427 GHz / -7.84 dB), and the b2e4 probe reproduces the b2e3 probe exactly
+  (2.3067 GHz / -4.52 dB, VSWR 3.926, 400000 timesteps both). Repeating a configuration proves
+  reproducibility, never stability; the verdict tool refuses same-cap repeats for exactly that reason.
 - **The best match the project has produced is the coplanar line feed** (-28.94 dB, VSWR 1.07 at
   2.4390 GHz, b2e3). It becomes quotable only when the truncation pair (300k vs the 400k e4 run) says
   the answer does not move with run length.
