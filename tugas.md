@@ -437,3 +437,31 @@ dijadwalkan untuk item ini.
 - **Temuan nyata yang tervalidasi malam ini:** b2e3/b2e4 tercatat `completed` + label salah "job did not finish" padahal kedua arm menulis hasil lengkap - jalur `summary` menunjuk **direktori**, cek lama hanya mengerti file. Mode direktori itulah yang memperbaiki label; detail di `docs/queue-runner-risk-2026-09-28.md` bagian Follow-up.
 - **Sinkron:** `src22` TIDAK disentuh (dipakai rantai malam ini); `heavy_queue` di src22 di-sync sebelum batch malam berikutnya.
 - **Bonus verifikasi:** b2e4 line = b2e3 line **bit-identik** (2,4390 GHz / -28,94 dB / VSWR 1,074; determinisme ke-3) - masuk `docs/results-ledger.md` (`e2cf9cea`).
+
+---
+
+## §6o - Aksara -> Yotta: antrean paralel (permintaan pemilik: "kasih tugas ke Yotta")
+
+**Konteks:** separuh kedua jembatan sketch->dek selesai di paket (`be9fe31`; suite **503 OK**):
+saklar "Include sketch in simulations" di tab Sketch; saat aktif, Simulate (generate/run/queue)
+dan pohon proyek menggabungkan bentuk tertutup sebagai `sketch_polygons` (PEC aditif). Tiga
+permintaan untukmu yang **tidak menyentuh paket** dan tidak bentrok dengan rantai malam ini:
+
+1. **Runtime smoke jembatan sketch (butuh openEMS - hanya kamu yang bisa).**  Resep siap
+   pakai ada di `docs/sketch-to-deck.md` bagian "Runtime smoke": render satu dek ber-poligon,
+   jalankan dengan `max_timesteps=4000` (ini smoke, bukan hasil), dan laporkan: exit code,
+   ada/tidak warning "Unused primitive" untuk properti `sketch`, dan apakah `AddPolygon`
+   diterima binding.  Perkiraan: menit, bukan jam.
+2. **Red-team whitelist (adversarial, murah).**  Coba paksa `geometry/params.evaluate_expression`
+   dan `geometry/sketch.validate_polygon` keluar jalur: eksekusi (harus mustahil), DoS
+   (kedalaman tanda kurung - sekarang dijaga jadi ParameterError, jumlah titik, angka raksasa),
+   nilai aneh (NaN/Inf/denormal/-0.0).  Laporkan hanya yang berhasil direproduksi; kalau bersih,
+   katakan bersih.
+3. **Konfirmasi equivalensi dek tanpa sketch.**  Dek dari `main` sekarang SELALU memuat blok
+   `if SKETCH_POLYGONS:` yang inert saat daftar kosong; rantai 300k/400k kalian berjalan dari
+   `src22` (generator lama) sehingga tidak terpengaruh - tapi kalau sempat, diff satu dek
+   src22 vs main (tanpa poligon) dan pastikan bedanya hanya blok inert itu.  Hasil sebaiknya
+   tetap menyebut tree asalnya (aturanmu sendiri di `docs/sync-2026-09-28.md`).
+
+Plus: lanjutkan rantai Route B / ledger seperti biasa - angka quotable pertama tetap kamu
+yang laporkan begitu lolos gerbang.
