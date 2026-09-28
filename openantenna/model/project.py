@@ -15,7 +15,7 @@ Validation is deliberately split in two levels:
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 SCHEMA_VERSION = 1
 
@@ -244,6 +244,9 @@ class Project:
     sweep: FrequencySweep = field(default_factory=lambda: FrequencySweep.fractional(2.45e9, 0.15))
     notes: str = ""
     schema_version: int = SCHEMA_VERSION
+    #: Closed metal polygons drawn in the GUI sketch, in metres (docs/sketch-to-deck.md).
+    #: Optional and additive: the parametric patch remains the driven element.
+    sketch_polygons: Tuple[Tuple[Tuple[float, float], ...], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
@@ -256,6 +259,13 @@ class Project:
             self.array = ArrayConfig.from_dict(self.array)
         if isinstance(self.sweep, Mapping):
             self.sweep = FrequencySweep.from_dict(self.sweep)
+        if self.sketch_polygons:
+            from ..geometry.sketch import validate_polygon  # lazy: geometry imports model
+
+            self.sketch_polygons = tuple(
+                validate_polygon(polygon, where="sketch polygon %d" % index)
+                for index, polygon in enumerate(self.sketch_polygons, start=1)
+            )
 
     # ------------------------------------------------------------ helpers
     @property
@@ -296,6 +306,12 @@ class Project:
                 "Patch width/length are not set; run the patch synthesis step before "
                 "generating solver input."
             )
+        if self.sketch_polygons:
+            warnings.append(
+                "Sketch polygons are additive zero-thickness PEC sheets on the patch plane "
+                "(docs/sketch-to-deck.md): overlap with the driven patch or the feed is not "
+                "resolved, and a drawn block's thickness is not used yet."
+            )
 
         substrate_thickness = self.substrate.total_thickness_m
         lam0 = C0 / self.sweep.center_hz
@@ -334,12 +350,18 @@ class Project:
                     f"sweep          : {self.sweep.start_hz / 1e9:.3f} - "
                     f"{self.sweep.stop_hz / 1e9:.3f} GHz, {self.sweep.points} points"
                 ),
+                "sketch         : "
+                + (
+                    f"{len(self.sketch_polygons)} polygon(s), additive PEC sheets"
+                    if self.sketch_polygons
+                    else "none"
+                ),
             ]
         )
 
     # ------------------------------------------------------------- ser/de
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "schema_version": self.schema_version,
             "kind": "openantenna.project",
             "name": self.name,
@@ -349,6 +371,11 @@ class Project:
             "sweep": self.sweep.to_dict(),
             "notes": self.notes,
         }
+        if self.sketch_polygons:
+            payload["sketch_polygons"] = [
+                [[x, y] for x, y in polygon] for polygon in self.sketch_polygons
+            ]
+        return payload
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Project":
@@ -364,6 +391,7 @@ class Project:
             array=ArrayConfig.from_dict(data.get("array", {})),
             sweep=FrequencySweep.from_dict(data["sweep"]),
             notes=data.get("notes", ""),
+            sketch_polygons=tuple(data.get("sketch_polygons", ())),
         )
 
     def to_json(self, indent: int = 2) -> str:

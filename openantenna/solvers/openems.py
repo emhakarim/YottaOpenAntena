@@ -302,6 +302,19 @@ if METAL_EDGE_SNAPPING:
         FDTD.AddEdges2Grid(dirs="xy", properties=_prop, metal_edge_res=MESH_MAX_RES / 2.0)
     print("METAL EDGES: snapped to the grid (AddEdges2Grid, res %.3f mm)" % (MESH_MAX_RES / 2.0 * 1e3))
 
+# Sketched metal from the GUI (docs/sketch-to-deck.md): closed polygons are ADDITIVE
+# zero-thickness PEC sheets on the patch plane (z = 0).  The parametric patch stays the
+# driven element; overlap with it or with the feed is not resolved for you, and a drawn
+# block's thickness is not used - that is the documented v1 boundary.
+SKETCH_POLYGONS = $SKETCH_POLYGONS
+if SKETCH_POLYGONS:
+    _sketch_layer = CSX.AddMetal("sketch")
+    for _polygon in SKETCH_POLYGONS:
+        _sketch_layer.AddPolygon(_polygon, norm_dir=2, elevation=0.0, priority=3)
+    if METAL_EDGE_SNAPPING:
+        FDTD.AddEdges2Grid(dirs="xy", properties=_sketch_layer, metal_edge_res=MESH_MAX_RES / 2.0)
+    print("SKETCH: %d polygon(s) drawn on the patch plane" % len(SKETCH_POLYGONS))
+
 # Feed realisation, two honest options:
 #   * FEED_IS_LINE: a microstrip line on the substrate that enters the patch notch - the
 #     coplanar inset the synthesis formula actually describes (review item Y-19).  The port
@@ -1066,6 +1079,22 @@ class OpenEMSSolver(SolverAdapter):
                 "Use feed_line_width_m=0.0 for the probe-style element ports."
             )
 
+        # ---- sketched metal (docs/sketch-to-deck.md) -------------------------------------
+        # Each point must lie on the ground plate: a sheet floating over the air region is a
+        # drawing accident, not a design, so it is refused with the offending point named -
+        # never clamped.  Units are metres; the drawing itself works in millimetres.
+        sketch_polygons = []
+        for _index, _polygon in enumerate(project.sketch_polygons, start=1):
+            for _x, _y in _polygon:
+                if abs(_x) > ground_x / 2.0 or abs(_y) > ground_y / 2.0:
+                    raise ValueError(
+                        "sketch polygon %d: point (%.3f, %.3f) mm lies outside the ground plate "
+                        "(%.1f x %.1f mm). Move the drawing inside the ground plate or increase "
+                        "ground_margin_lambda."
+                        % (_index, _x * 1e3, _y * 1e3, ground_x * 1e3, ground_y * 1e3)
+                    )
+            sketch_polygons.append([[_x for _x, _ in _polygon], [_y for _, _y in _polygon]])
+
         return _SCRIPT_TEMPLATE.substitute(
             VERSION=GENERATOR_VERSION,
             PROJECT_NAME=project.name,
@@ -1114,6 +1143,7 @@ class OpenEMSSolver(SolverAdapter):
             AIR_TOP_LAMBDA=fmt(self.air_top_lambda),
             MAX_TS=self.max_timesteps,
             END_CRITERIA=fmt(self.end_criteria),
+            SKETCH_POLYGONS=repr(sketch_polygons),
             ELEMENTS_LITERAL=repr(
                 [[float(x), float(y)] for x, y in layout.positions_m]
             ),
@@ -1166,6 +1196,7 @@ class OpenEMSSolver(SolverAdapter):
             "nf2ff_frequencies": self.nf2ff_frequencies,
             "element_ports": self.element_ports,
             "unit_cell": self.unit_cell,
+            "sketch_polygons": len(project.sketch_polygons),
             "numthreads": self.numthreads,
             "max_timesteps": self.max_timesteps,
             "end_criteria": self.end_criteria,

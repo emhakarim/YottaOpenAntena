@@ -58,7 +58,9 @@ describes what a run would use rather than what the widgets happen to say.
   DXF has no surface to fill.
 * **The Sketch tab says what it does not do.** It draws, previews on the solver grid and
   exports DXF - but the solver deck still comes from the parametric model, and the panel
-  states that the bridge from a sketch to a non-parametric deck is not built yet.
+  states that the bridge from a sketch to a non-parametric deck is not built yet -
+  the package half of that bridge now exists (`Project.sketch_polygons` to additive PEC
+  sheets, `docs/sketch-to-deck.md`); the GUI wiring is the remaining half.
 * **Parameters are definitions, not copies.** A block keeps the *expression* for its
   thickness, resolved each time it is shown or exported, so changing `h_sub` moves every
   block that uses it - the point of CST's "add parameter", and the reason a sketch can be
