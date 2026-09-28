@@ -9,7 +9,7 @@ same functions the CLI calls, so the GUI cannot drift away from the scriptable c
 python -m openantenna.gui
 ```
 
-## The seven tabs
+## The eight tabs
 
 A **project tree** dock sits on the left of the window: substrate layers, patch dimensions
 and feed, array configuration, sweep range, and the project's own validity warnings. It is
@@ -25,6 +25,7 @@ describes what a run would use rather than what the widgets happen to say.
 | **Sweep** | A parameter table (factorial or one-at-a-time), run-all against the analytic predictor, a results table with per-row status, a resonance-versus-parameter plot from the table's own summary, and CSV export; the status line states the numbers are targeting values, not solver results |
 | **Import** | Read a CAD file - **STL** (ASCII or binary), **OBJ**, or a **DXF outline** - choose its units and cell size, and see what the solver grid would use: the **staircase occupancy** for a mesh, the **stroked edges** for an outline, drawn on the same canvas style as the other tabs |
 | **Optimise** | Target a resonance frequency by searching the patch length with the stdlib differential-evolution optimiser, **naming the analytic predictor** it used and stating that the number is a targeting result, not a measurement |
+| **Sketch** | Draw shapes and feed traces on a millimetre grid - trace, polygon, rectangle, circle, line, with snapping on/off - keep them in a shape list with undo/clear, **export them as a DXF**, load an existing outline back in, and see which **solver-grid cells** the drawing's edges would cross. Stated plainly: the sketch leaves as DXF; wiring a sketch into the solver deck is a separate, bigger change and is not claimed yet |
 
 ## Things that are deliberate, not missing
 
@@ -55,6 +56,9 @@ describes what a run would use rather than what the widgets happen to say.
 * **A DXF is an outline, not a surface.** The tab strokes the edges onto the solver grid
   and says outright that these are the cells the edges cross, not filled metal, because a
   DXF has no surface to fill.
+* **The Sketch tab says what it does not do.** It draws, previews on the solver grid and
+  exports DXF - but the solver deck still comes from the parametric model, and the panel
+  states that the bridge from a sketch to a non-parametric deck is not built yet.
 * **The Optimise tab reports targeting, not measurement.** It names the predictor and says
   the number is where the chosen model wants the design to sit - the same wording the
   `optimise` CLI uses, so the two cannot drift apart.
@@ -74,6 +78,6 @@ python -m unittest tests.test_gui_smoke -v
 Those tests build the real window, exercise each panel with synthetic run directories, and
 check the figures that come out (axes, patches, curves). They drive the Import tab through
 the same `load`/`show_loaded` path a click uses, for both a mesh and a DXF outline, and walk
-all four 3-D camera presets in a real window. PySide6 is optional: without it the tests skip
+all four 3-D camera presets in a real window, and the sketch tab draws through the same click handler the canvas calls, exports a DXF and reads it back with the reader the Import tab uses. PySide6 is optional: without it the tests skip
 and the core is unaffected - so CI has a **separate job that installs PySide6 and runs the
 GUI tests**, otherwise a GUI bug could pass the suite unnoticed.

@@ -1357,7 +1357,7 @@ class ResultsTab(QWidget):
 
 
 class MainWindow(QMainWindow):
-    """Seven tabs, one per stage of the workflow."""
+    """Eight tabs, one per stage of the workflow."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -1373,6 +1373,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(SweepTab(), "Sweep")
         tabs.addTab(ImportTab(), "Import")
         tabs.addTab(OptimiseTab(), "Optimise")
+        tabs.addTab(SketchTab(), "Sketch")
         self.setCentralWidget(tabs)
 
         # The project tree: a shell-style view of the *model* (not of the widgets), so it
@@ -2052,3 +2053,363 @@ class OptimiseTab(QWidget):
             lines.append("  ... %d more" % (len(result.history) - 20))
         self.history.setPlainText("\n".join(lines))
 
+
+class SketchTab(QWidget):
+    """Draw antenna shapes and feed traces, then take them downstream as DXF.
+
+    The drawing half of a CST-style workflow: shapes are drawn on a millimetre grid with
+    snapping, kept in a plain list, previewed on the solver grid so the discretisation is
+    visible before it matters, and exported as a DXF the Import tab (and any CAD tool)
+    reads back.  What it deliberately does *not* claim: feeding a sketch into the solver
+    deck.  The deck pipeline is parametric; that bridge is a separate, bigger change, and
+    until it exists this panel says so instead of hinting otherwise.
+    """
+
+    TOOLS = ("trace (open)", "polygon (closed)", "rectangle", "circle", "line")
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout(self)
+
+        controls = QGroupBox("Sketch")
+        row = QHBoxLayout(controls)
+        self.tool = QComboBox()
+        self.tool.addItems(self.TOOLS)
+        self.snap_mm = QDoubleSpinBox()
+        self.snap_mm.setRange(0.0, 10.0)
+        self.snap_mm.setDecimals(2)
+        self.snap_mm.setValue(1.0)
+        self.snap_mm.setSuffix(" mm")
+        self.snap_mm.setToolTip("snap to this grid; 0 disables snapping")
+        self.finish_button = QPushButton("Finish shape")
+        self.finish_button.clicked.connect(self.finish)
+        undo = QPushButton("Undo last")
+        undo.clicked.connect(self.undo_last)
+        clear = QPushButton("Clear all")
+        clear.clicked.connect(self.clear_all)
+        row.addWidget(QLabel("tool"))
+        row.addWidget(self.tool)
+        row.addWidget(QLabel("snap"))
+        row.addWidget(self.snap_mm)
+        row.addWidget(self.finish_button)
+        row.addWidget(undo)
+        row.addWidget(clear)
+        layout.addWidget(controls)
+
+        downstream = QGroupBox("Downstream")
+        row2 = QHBoxLayout(downstream)
+        self.layer = QLineEdit("sketch")
+        self.layer.setToolTip("DXF layer name for the export")
+        self.cell_mm = QDoubleSpinBox()
+        self.cell_mm.setRange(0.1, 100.0)
+        self.cell_mm.setValue(2.0)
+        self.cell_mm.setSuffix(" mm")
+        export = QPushButton("Export DXF \u2026")
+        export.clicked.connect(self.export_dxf)
+        load = QPushButton("Load DXF \u2026")
+        load.clicked.connect(self.load_dxf)
+        grid = QPushButton("Show grid view")
+        grid.clicked.connect(self.show_grid_view)
+        row2.addWidget(QLabel("export layer"))
+        row2.addWidget(self.layer)
+        row2.addWidget(QLabel("cell"))
+        row2.addWidget(self.cell_mm)
+        row2.addWidget(export)
+        row2.addWidget(load)
+        row2.addWidget(grid)
+        layout.addWidget(downstream)
+
+        self.summary = QLabel(
+            "Draw with the left mouse button: two clicks draw a line, rectangle or circle; "
+            "a trace or polygon takes one click per vertex, then \"Finish shape\" (or a "
+            "double-click).  Nothing here touches the solver yet - shapes leave as DXF."
+        )
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
+
+        self.shapes_table = QTableWidget(0, 3)
+        self.shapes_table.setHorizontalHeaderLabels(["shape", "vertices", "bounds (mm)"])
+        self.shapes_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.shapes_table.setMaximumHeight(120)
+        layout.addWidget(self.shapes_table)
+
+        self.shapes: list = []
+        self._pending: list = []
+
+        try:
+            self.figure, self.canvas = _plot_canvas()
+            layout.addWidget(self.canvas)
+            self.canvas.mpl_connect("button_press_event", self._on_click)
+        except Exception as exc:  # matplotlib is optional
+            self.figure = None
+            self.canvas = None
+            layout.addWidget(QLabel(f"Plotting unavailable: {exc}"))
+        self._redraw()
+
+    # -- drawing model ---------------------------------------------------------
+
+    def _snap(self, value: float) -> float:
+        step = self.snap_mm.value()
+        if step <= 0.0:
+            return value
+        return round(value / step) * step
+
+    def _on_click(self, event) -> None:
+        """One left click on the canvas - and the exact path an offscreen test drives.
+
+        Only ``inaxes``/``button``/``xdata``/``ydata``/``dblclick`` are read from the
+        event, so a small stand-in object can drive the same code without a real mouse.
+        """
+        if getattr(event, "inaxes", None) is None or getattr(event, "button", 1) != 1:
+            return
+        if getattr(event, "xdata", None) is None or getattr(event, "ydata", None) is None:
+            return
+        x = self._snap(float(event.xdata))
+        y = self._snap(float(event.ydata))
+        tool = self.tool.currentText()
+
+        if tool.startswith("trace") or tool.startswith("polygon"):
+            if getattr(event, "dblclick", False):
+                self.finish()
+            else:
+                self._pending.append((x, y))
+                self._redraw()
+            return
+
+        if not self._pending:
+            self._pending = [(x, y)]
+            self._redraw()
+            return
+
+        (x0, y0) = self._pending[0]
+        if tool == "rectangle":
+            points = [(x0, y0), (x, y0), (x, y), (x0, y)]
+            self._add({"kind": "polyline", "points": points, "closed": True})
+        elif tool == "circle":
+            self._add({"kind": "circle", "points": [(x0, y0), (x, y)]})
+        else:  # line
+            self._add({"kind": "polyline", "points": [(x0, y0), (x, y)], "closed": False})
+        self._pending = []
+        self._redraw()
+
+    def finish(self) -> None:
+        """End an in-progress trace/polygon; a no-op for the two-click tools."""
+        tool = self.tool.currentText()
+        if not (tool.startswith("trace") or tool.startswith("polygon")):
+            return
+        if len(self._pending) >= 2:
+            self._add(
+                {
+                    "kind": "polyline",
+                    "points": list(self._pending),
+                    "closed": tool.startswith("polygon"),
+                }
+            )
+        self._pending = []
+        self._redraw()
+
+    def _add(self, shape: dict) -> None:
+        self.shapes.append(shape)
+        self._refresh_table()
+
+    def undo_last(self) -> None:
+        if self.shapes:
+            self.shapes.pop()
+        self._pending = []
+        self._refresh_table()
+        self._redraw()
+
+    def clear_all(self) -> None:
+        self.shapes = []
+        self._pending = []
+        self._refresh_table()
+        self._redraw()
+
+    # -- shape -> segments / DXF ----------------------------------------------
+
+    def _shape_segments(self, shape: dict) -> list:
+        """Segments of one shape, polygonising a circle the way the DXF reader does."""
+        from openantenna.geometry.cad import polygonise_arc
+
+        if shape["kind"] == "circle":
+            (cx, cy), (px, py) = shape["points"]
+            radius = math.hypot(px - cx, py - cy)
+            points = polygonise_arc(cx, cy, radius, 0.0, 0.0)
+            return [(points[index], points[index + 1]) for index in range(len(points) - 1)]
+        points = shape["points"]
+        segments = [(points[index], points[index + 1]) for index in range(len(points) - 1)]
+        if shape.get("closed") and len(points) > 2:
+            segments.append((points[-1], points[0]))
+        return segments
+
+    def all_segments(self) -> list:
+        segments: list = []
+        for shape in self.shapes:
+            segments.extend(self._shape_segments(shape))
+        return segments
+
+    # -- downstream actions ----------------------------------------------------
+
+    def export_dxf(self, target: str | None = None) -> None:
+        """Write the sketch as a DXF - the same entity subset the reader reads back."""
+        if not self.shapes:
+            self.summary.setText("nothing to export: draw at least one shape first.")
+            return
+        if not target:
+            target, _filter = QFileDialog.getSaveFileName(
+                self, "Export sketch", "sketch.dxf", "DXF (*.dxf)"
+            )
+            if not target:
+                return
+        from openantenna.geometry.cad import write_dxf
+
+        entities = []
+        for shape in self.shapes:
+            if shape["kind"] == "circle":
+                (cx, cy), (px, py) = shape["points"]
+                entities.append(("circle", (cx, cy), math.hypot(px - cx, py - cy)))
+            else:
+                entities.append(("polyline", list(shape["points"]), bool(shape.get("closed"))))
+        layer = self.layer.text().strip() or "sketch"
+        try:
+            write_dxf(target, entities, layer=layer)
+        except (ValueError, OSError) as exc:
+            self.summary.setText("could not write %s: %s" % (target, exc))
+            return
+        self.summary.setText(
+            "exported %d shape(s) to %s on layer %r.  DXF carries no units: this sketch is in "
+            "millimetres by convention - quote the unit with any result."
+            % (len(entities), target, layer)
+        )
+
+    def load_dxf(self, target: str | None = None) -> None:
+        """Load a DXF outline into the sketch as two-point trace shapes."""
+        if not target:
+            target, _filter = QFileDialog.getOpenFileName(
+                self, "Load DXF", "", "DXF (*.dxf)"
+            )
+            if not target:
+                return
+        from openantenna.geometry.cad import read_dxf
+
+        try:
+            segments = read_dxf(target)
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            self.summary.setText("could not read %s: %s" % (target, exc))
+            return
+        if len(segments) > 500:
+            self.summary.setText(
+                "refusing to load %d segments into the sketch editor - an outline that dense is "
+                "for viewing, not editing; the Import tab shows it on the grid instead."
+                % len(segments)
+            )
+            return
+        for start, end in segments:
+            self.shapes.append({"kind": "polyline", "points": [start, end], "closed": False})
+        self.summary.setText("loaded %d segment(s) from %s" % (len(segments), target))
+        self._refresh_table()
+        self._redraw()
+
+    def show_grid_view(self) -> None:
+        """Show which solver-grid cells the sketch's edges would cross (Import-tab semantics)."""
+        from openantenna.geometry.cad import rasterise_segments, stroke_fraction
+
+        segments = self.all_segments()
+        if not segments:
+            self.summary.setText("nothing to rasterise: draw at least one shape first.")
+            return
+        cell_m = self.cell_mm.value() * 1e-3
+        try:
+            shape, rows = rasterise_segments(segments, cell_m)
+        except ValueError as exc:
+            self.summary.setText("grid view refused: %s" % exc)
+            return
+        self.summary.setText(
+            "%d segment(s)  |  grid %d x %d cells of %.2f mm  |  edges cross %.1f %% of the "
+            "grid\nNOTE: a sketch is an outline, not a surface - these are stroked edges, not "
+            "filled metal.  The solver deck still comes from the parametric model; this view "
+            "is what the grid would see of the drawing."
+            % (len(segments), shape[0], shape[1], self.cell_mm.value(), stroke_fraction(rows) * 100.0)
+        )
+        axes = self._canvas_axes()
+        axes.clear()
+        axes.imshow(
+            [[1.0 if cell else 0.0 for cell in row] for row in rows],
+            origin="lower",
+            cmap="Greens",
+            interpolation="nearest",
+        )
+        axes.set_title("Sketch on the solver grid (xy)")
+        axes.set_xlabel("x cells")
+        axes.set_ylabel("y cells")
+        self.figure.canvas.draw_idle()
+
+    # -- view ------------------------------------------------------------------
+
+    def _refresh_table(self) -> None:
+        table = self.shapes_table
+        table.setRowCount(len(self.shapes))
+        for row, shape in enumerate(self.shapes):
+            if shape["kind"] == "circle":
+                (cx, cy), (px, py) = shape["points"]
+                kind = "circle"
+                vertices = 2
+                bounds = "r %.2f mm at (%.2f, %.2f)" % (math.hypot(px - cx, py - cy), cx, cy)
+            else:
+                xs = [point[0] for point in shape["points"]]
+                ys = [point[1] for point in shape["points"]]
+                kind = "polygon" if shape.get("closed") else "trace"
+                vertices = len(shape["points"])
+                bounds = "%.2f x %.2f" % (max(xs) - min(xs), max(ys) - min(ys))
+            table.setItem(row, 0, QTableWidgetItem(kind))
+            table.setItem(row, 1, QTableWidgetItem(str(vertices)))
+            table.setItem(row, 2, QTableWidgetItem(bounds))
+
+    def _redraw(self) -> None:
+        if self.figure is None:
+            return
+        from .theme import ACCENT
+        from openantenna.geometry.cad import polygonise_arc
+
+        axes = self._canvas_axes()
+        axes.clear()
+        for shape in self.shapes:
+            if shape["kind"] == "circle":
+                (cx, cy), (px, py) = shape["points"]
+                points = polygonise_arc(cx, cy, math.hypot(px - cx, py - cy), 0.0, 0.0)
+                xs = [point[0] for point in points]
+                ys = [point[1] for point in points]
+            else:
+                xs = [point[0] for point in shape["points"]]
+                ys = [point[1] for point in shape["points"]]
+                if shape.get("closed") and len(xs) > 2:
+                    xs = xs + [xs[0]]
+                    ys = ys + [ys[0]]
+            axes.plot(xs, ys, color=ACCENT, linewidth=1.6)
+        if self._pending:
+            xs = [point[0] for point in self._pending]
+            ys = [point[1] for point in self._pending]
+            axes.plot(xs, ys, color=ACCENT, linewidth=1.0, linestyle="--")
+            axes.plot(xs, ys, marker="o", color=ACCENT, linestyle="none", markersize=4)
+        axes.set_aspect("equal", adjustable="datalim")
+        axes.margins(0.08)
+        axes.grid(True, linewidth=0.4, alpha=0.5)
+        axes.set_title("Sketch (mm)")
+        axes.set_xlabel("x (mm)")
+        axes.set_ylabel("y (mm)")
+        if not self.shapes and not self._pending:
+            axes.set_xlim(-20.0, 80.0)
+            axes.set_ylim(-10.0, 60.0)
+        self.figure.canvas.draw_idle()
+
+    def _canvas_axes(self):
+        """The panel's drawing axes.
+
+        _plot_canvas() hands back (figure, canvas); the axes has to be taken from the
+        figure, or the first real draw reaches for the canvas and raises.
+        """
+        if self.figure is None:
+            raise RuntimeError("matplotlib is not available")
+        if getattr(self.figure, "axes", None):
+            return self.figure.axes[0]
+        return self.figure.add_subplot(111)

@@ -65,7 +65,7 @@ class TestMainWindow(unittest.TestCase):
         """The tab must run the existing search and report the model that produced the number."""
         window = self._window()
         tabs = window.centralWidget()
-        self.assertEqual(tabs.count(), 7)
+        self.assertEqual(tabs.count(), 8)
         self.assertEqual(tabs.tabText(6), "Optimise")
         tab = tabs.widget(6)
         tab.generations.setValue(8)
@@ -92,13 +92,13 @@ class TestMainWindow(unittest.TestCase):
                 design_tab.view_preset.setCurrentText(preset)
                 self.assertEqual(design_tab.view_preset.currentText(), preset)
 
-    def test_window_builds_with_seven_tabs(self):
+    def test_window_builds_with_eight_tabs(self):
         window = self._window()
         tabs = window.centralWidget()
-        self.assertEqual(tabs.count(), 7)
+        self.assertEqual(tabs.count(), 8)
         titles = [tabs.tabText(i) for i in range(tabs.count())]
         self.assertEqual(
-            titles, ["Material & composite", "Design", "Simulate", "Results", "Sweep", "Import", "Optimise"]
+            titles, ["Material & composite", "Design", "Simulate", "Results", "Sweep", "Import", "Optimise", "Sketch"]
         )
         window.close()
 
@@ -626,6 +626,64 @@ class TestMainWindow(unittest.TestCase):
             note = results_tab.coupling_note.text()
         self.assertIn("coupling not loaded", note)
         self.assertIn("port<N>", note)
+        window.close()
+
+    def test_the_sketch_tab_draws_and_exports_a_dxf(self):
+        """Draw through the same click handler the canvas uses, export, and read it back.
+
+        The handler reads a click-shaped object (inaxes/button/xdata/ydata/dblclick), so this
+        test drives the exact path a mouse takes without needing one.  The failure it guards
+        against is the one the Import tab shipped once: a draw path no test had ever walked.
+        """
+        import tempfile
+        from pathlib import Path
+        from types import SimpleNamespace
+
+        window = self._window()
+        tabs = window.centralWidget()
+        self.assertEqual(tabs.count(), 8)
+        self.assertEqual(tabs.tabText(7), "Sketch")
+        tab = tabs.widget(7)
+        if tab.figure is None:
+            window.close()
+            return
+
+        axes = tab._canvas_axes()
+
+        def click(x, y, dblclick=False):
+            tab._on_click(
+                SimpleNamespace(inaxes=axes, button=1, xdata=x, ydata=y, dblclick=dblclick)
+            )
+
+        tab.tool.setCurrentText("rectangle")
+        click(0.0, 0.0)
+        click(20.0, 10.0)
+        tab.tool.setCurrentText("trace (open)")
+        click(0.0, 12.0)
+        click(10.0, 20.0)
+        click(20.0, 12.0)
+        tab.finish()
+        tab.tool.setCurrentText("circle")
+        click(5.0, 25.0)
+        click(8.0, 25.0)
+        self.assertEqual(len(tab.shapes), 3)
+        self.assertEqual(tab.shapes_table.rowCount(), 3)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "sketch.dxf"
+            tab.export_dxf(str(target))
+            from openantenna.geometry.cad import read_dxf
+
+            segments = read_dxf(target)
+        # rectangle closes (4 segments) + open trace (2) + circle polygonised (48 chords)
+        self.assertEqual(len(segments), 54)
+        self.assertIn("exported 3 shape(s)", tab.summary.text())
+
+        tab.show_grid_view()
+        self.assertIn("grid", tab.summary.text())
+
+        tab.undo_last()
+        self.assertEqual(len(tab.shapes), 2)
         window.close()
 
 

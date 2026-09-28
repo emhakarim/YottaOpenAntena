@@ -215,7 +215,9 @@ def _dxf_pairs(text: str):
         yield code, lines[index + 1].strip()
 
 
-def _polygonise_arc(cx: float, cy: float, radius: float, start_deg: float, end_deg: float, steps: int = 48):
+def polygonise_arc(cx: float, cy: float, radius: float, start_deg: float, end_deg: float, steps: int = 48):
+    """Points along a circular arc; start == end closes the full circle.  Public because the
+    GUI sketch polygonises circles exactly the way the DXF reader does."""
     import math
 
     span = (end_deg - start_deg) % 360.0
@@ -255,11 +257,11 @@ def read_dxf(path: str | Path) -> List[Tuple[Tuple[float, float], Tuple[float, f
             if flags & 1 and len(points) > 2:
                 segments.append((points[-1], points[0]))
         elif kind == "CIRCLE" and 10 in values and 40 in values:
-            points = _polygonise_arc(values[10][0], values[20][0], values[40][0], 0.0, 0.0)
+            points = polygonise_arc(values[10][0], values[20][0], values[40][0], 0.0, 0.0)
             for index in range(len(points) - 1):
                 segments.append((points[index], points[index + 1]))
         elif kind == "ARC" and 10 in values and 40 in values:
-            points = _polygonise_arc(
+            points = polygonise_arc(
                 values[10][0], values[20][0], values[40][0],
                 values.get(50, [0.0])[0], values.get(51, [0.0])[0],
             )
@@ -420,3 +422,56 @@ def occupancy_fraction(rows: Iterable[Iterable[bool]]) -> float:
     total = sum(len(row) for row in rows)
     occupied = sum(1 for row in rows for cell in row if cell)
     return occupied / total if total else 0.0
+
+
+def write_dxf(
+    path: str | Path, entities, *, layer: str = "sketch"
+) -> Path:
+    """Write a minimal DXF (LINE / LWPOLYLINE / CIRCLE) that :func:`read_dxf` reads back.
+
+    The writer speaks exactly the entity subset the reader supports, so a write/read round
+    trip is exact for the kinds this module claims.  ``entities`` is a sequence of:
+
+    * ``("line", (x0, y0), (x1, y1))``
+    * ``("polyline", [(x, y), ...], closed)``
+    * ``("circle", (cx, cy), radius)``
+
+    Coordinates are drawing units (millimetres by convention) - the caller chooses the
+    unit and states it; this writer does not guess one, and it refuses an empty list rather
+    than emitting a file no reader would accept.
+    """
+    target = Path(path)
+    body = []
+    for entity in entities:
+        kind = entity[0]
+        if kind == "line":
+            (x0, y0), (x1, y1) = entity[1], entity[2]
+            body.append(
+                "0\nLINE\n8\n%s\n10\n%g\n20\n%g\n11\n%g\n21\n%g\n" % (layer, x0, y0, x1, y1)
+            )
+        elif kind == "polyline":
+            points = list(entity[1])
+            if len(points) < 2:
+                raise ValueError("a polyline needs at least two points; got %d" % len(points))
+            chunk = "0\nLWPOLYLINE\n8\n%s\n90\n%d\n70\n%d\n" % (
+                layer,
+                len(points),
+                1 if entity[2] else 0,
+            )
+            for x, y in points:
+                chunk += "10\n%g\n20\n%g\n" % (x, y)
+            body.append(chunk)
+        elif kind == "circle":
+            (cx, cy), radius = entity[1], float(entity[2])
+            if radius <= 0.0:
+                raise ValueError("circle radius must be positive; got %g" % radius)
+            body.append("0\nCIRCLE\n8\n%s\n10\n%g\n20\n%g\n40\n%g\n" % (layer, cx, cy, radius))
+        else:
+            raise ValueError(
+                "unsupported entity %r; this writer speaks line, polyline and circle only" % (kind,)
+            )
+    if not body:
+        raise ValueError("refusing to write an empty DXF: no entities given")
+    text = "0\nSECTION\n2\nENTITIES\n" + "".join(body) + "0\nENDSEC\n0\nEOF\n"
+    target.write_text(text, encoding="utf-8")
+    return target
