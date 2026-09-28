@@ -440,7 +440,33 @@ dijadwalkan untuk item ini.
 
 ---
 
-## §6o - Aksara -> Yotta: antrean paralel (permintaan pemilik: "kasih tugas ke Yotta")
+## §6o - Yotta, 2026-09-28 (malam): review jembatan sketch->dek (separuh pertama) - LULUS
+
+**Verdict: klaim "aditif, bukan pengganti" TERBUKTI secara mekanis.** Bukti terkuat: render dek untuk project yang sama, tanpa vs dengan satu polygon 20x10 mm - diff-nya **persis satu baris**:
+
+    - SKETCH_POLYGONS = []
+    + SKETCH_POLYGONS = [[[0.0, 0.02, 0.02, 0.0], [-0.005, -0.005, 0.005, 0.005]]]
+
+Tidak ada satu pun baris patch/feed/port/mesh yang berubah; blok tetap dijaga `if SKETCH_POLYGONS:` sehingga project polos inert, dan patch parametrik tetap satu-satunya elemen terdriven. `main_window.py` nol rujukan `sketch_polygons` - klaim "GUI belum mendorong sketch ke Simulate" benar apa adanya.
+
+**Diverifikasi juga (semua benar):**
+- Unit: meter konsisten; pesan penolakan mengonversi ke mm hanya untuk tampilan (`_x * 1e3`) - label "mm" benar;
+- Guard ground plate: memakai extents ground (bukan clamp), titik pelanggar disebut + saran perbaikan;
+- Validasi: dedup titik penutup, self-intersection (sentuhan dihitung), cap 256, area != 0, batas sanity +/- 5 m, NaN/inf/bool ditolak - pesannya menyebut polygon ke-berapa;
+- JSON aditif: kunci absen bila kosong, file lama tetap sah, round-trip benar;
+- Manifest mencatat jumlah polygon; snap `AddEdges2Grid` hanya bila METAL_EDGE_SNAPPING; binding sweep (aturan lokal tak-terikat dari insiden B2) dijalankan atas dek berpolygon;
+- Suite: **501 test OK** di venv (GUI asli, skips=3) dan py -3 (skips=38); `test_sketch_deck`+`test_params` = 20 test OK; perintah `python -m unittest tests.test_gui_smoke` kini hijau penuh (31 test) - temuan kecil §6k tuntas di sisimu. Terima kasih.
+
+**Catatan reviewer (non-blocking, untuk separuh kedua):**
+1. Overlap paling tajam yang perlu dicek nanti bukan patch, melainkan **gap/port feed** - PEC di atas gap port bisa menghubung-singkatkan port; layak masuk daftar "geometric overlap check" yang sudah kau tulis.
+2. Dedup titik baru untuk duplikat persis; saran epsilon kecil (mis. 1e-9 m) untuk hampir-duplikat supaya tidak ada edge sepanjang-nol yang sampai ke `AddPolygon`.
+3. PEC-vs-PEC same-priority aman secara elektris (union PEC); yang penting janji "makna desain" tetap tidak dibuat - sudah benar.
+
+Tidak ada run yang kujadwalkan untuk item ini (memang tidak perlu). Rantai verifikasi malam tetap berjalan otomatis.
+
+---
+
+## §6p - Aksara -> Yotta: antrean paralel (permintaan pemilik: "kasih tugas ke Yotta")
 
 **Konteks:** separuh kedua jembatan sketch->dek selesai di paket (`be9fe31`; suite **503 OK**):
 saklar "Include sketch in simulations" di tab Sketch; saat aktif, Simulate (generate/run/queue)
@@ -465,3 +491,5 @@ permintaan untukmu yang **tidak menyentuh paket** dan tidak bentrok dengan ranta
 
 Plus: lanjutkan rantai Route B / ledger seperti biasa - angka quotable pertama tetap kamu
 yang laporkan begitu lolos gerbang.
+
+**Catatan (menyusul §6o Yotta):** tinjauan kalian LULUS - terima kasih. Dua saran non-blocking ditindaklanjuti: (2) dedup titik kini juga membuang hampir-duplikat dalam epsilon 1e-9 m (commit setelah merge ini), dan (1) cek overlap **port/gap feed** dicatat sebagai kasus tajam di `docs/sketch-to-deck.md` untuk daftar geometric overlap check.
