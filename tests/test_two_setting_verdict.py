@@ -130,6 +130,25 @@ class TestVerdict(unittest.TestCase):
         self.assertEqual(result["verdict"], "rejected")
         self.assertGreater(result["relative_shift_pct"], 0.2)
 
+    def test_declared_setting_pair_shares_the_cap_and_is_accepted(self) -> None:
+        a = RunData(make_run(self.base, "mesh15", 500, samples=1001, converged=False, cap=300000))
+        b = RunData(make_run(self.base, "mesh20", 500, samples=1001, converged=False, cap=300000))
+        result = verdict(a, b, truncation_pair=True, differing_setting="mesh")
+        self.assertEqual(result["verdict"], "accepted")
+        self.assertTrue(result["quotable"])
+        self.assertEqual(result["differing_setting"], "mesh")
+        self.assertIn("mesh", result["quote_caveat"])
+        # the same pair without the declaration is a same-cap repeat and must be rejected
+        strict = verdict(a, b, truncation_pair=True)
+        self.assertEqual(strict["verdict"], "rejected")
+
+    def test_declared_setting_pair_with_a_different_cap_is_rejected(self) -> None:
+        a = RunData(make_run(self.base, "mesh15", 500, samples=1001, converged=False, cap=300000))
+        b = RunData(make_run(self.base, "mesh20", 500, samples=1001, converged=False, cap=400000))
+        result = verdict(a, b, truncation_pair=True, differing_setting="mesh")
+        self.assertEqual(result["verdict"], "rejected")
+        self.assertTrue(any("one variable per pair" in reason for reason in result["reasons"]))
+
     def test_s11_and_vswr_are_computed_from_the_dip(self) -> None:
         run = RunData(make_run(self.base, "setting_a", 500, samples=1001))
         self.assertAlmostEqual(run.s11_db[500], -25.0, delta=0.01)

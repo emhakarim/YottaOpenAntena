@@ -88,6 +88,14 @@ PRESETS: dict[str, list[dict]] = {
         {"name": "loss_fr4_none", "label": "FR-4 with the loss model switched off",
          "kwargs": {"nf2ff": True, "loss_model": "none"}, "material": "FR-4"},
     ],
+    "mesh-stability": [
+        # Route B, declared-setting pair: the mesh density is the one variable.  Both arms
+        # share --end-criteria/--max-ts; read the pair with --differing-setting mesh.
+        {"name": "mesh15", "label": "mesh 15 cells/lambda0 (default)",
+         "kwargs": {"port_refine": True, "mesh_cells_per_wavelength": 15}},
+        {"name": "mesh20", "label": "mesh 20 cells/lambda0 (+33 % density)",
+         "kwargs": {"port_refine": True, "mesh_cells_per_wavelength": 20}},
+    ],
 }
 
 

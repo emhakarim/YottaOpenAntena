@@ -91,11 +91,16 @@ Every meaningful run therefore ends at its cap. Route B accepts that fact withou
 3. Quote the accepted value **with the caveat**: both truncation levels, and the fact that the end
    criteria was never reached. The verdict tool prints exactly that caveat, so it travels with the
    number.
+4. The pair may instead differ in **one declared solver setting other than the truncation** - e.g.
+   mesh density, passed as `--differing-setting mesh`. Then both runs share the same cap, that setting
+   is the controlled variable, and the verdict records its name next to the caveat. Differing in both
+   the cap and the declared setting is rejected: one variable per pair.
 
 Mechanically:
 
 ```
 python -m yotta_tools.two_setting_verdict --a runs/run_300k --b runs/run_400k --truncation-pair
+python -m yotta_tools.two_setting_verdict --a runs/mesh15 --b runs/mesh20 --truncation-pair --differing-setting mesh
 ```
 
 Rationale: for a slow-ringing resonator, "extending the run no longer moves the answer" is the

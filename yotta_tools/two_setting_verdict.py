@@ -9,7 +9,9 @@ reports. This tool applies them mechanically and prints *why*.
 **Route B** (adopted 2026-09-28, owner-approved) accepts a *truncation pair* - two runs that both
 stopped at their timestep caps, with the caps at least 5 % apart - when they agree within the same
 tolerance. ``--truncation-pair`` selects that route; a same-cap repeat is rejected there, because
-it demonstrates determinism and not stability.
+it demonstrates determinism and not stability. With ``--differing-setting <name>`` the pair may
+instead be two cap-limited runs that differ in one declared setting (e.g. mesh density) and share the
+cap; the verdict records which setting differed.
 
 Inputs are two run directories produced by the harness (``parallel_batch.py`` or a single run):
 
@@ -152,8 +154,14 @@ def band_label(relative_shift: float) -> str:
 
 
 def verdict(a: RunData, b: RunData, tolerance: float = DEFAULT_TOLERANCE,
-            edge_steps: int = DEFAULT_EDGE_STEPS, truncation_pair: bool = False) -> dict[str, object]:
-    """Apply docs/convergence-policy.md (Route A or Route B) to two runs and explain the outcome."""
+            edge_steps: int = DEFAULT_EDGE_STEPS, truncation_pair: bool = False,
+            differing_setting: str = "truncation") -> dict[str, object]:
+    """Apply docs/convergence-policy.md (Route A or Route B) to two runs and explain the outcome.
+
+    ``differing_setting`` names the single setting that differs between the pair.  The default,
+    "truncation", is the classic Route B pair (different caps).  Any other name (e.g. "mesh") is a
+    declared-setting pair: both runs must share the cap and differ only in that setting.
+    """
     reasons: list[str] = []
     relative = abs(a.resonance_hz - b.resonance_hz) / ((a.resonance_hz + b.resonance_hz) / 2.0)
 
@@ -176,18 +184,32 @@ def verdict(a: RunData, b: RunData, tolerance: float = DEFAULT_TOLERANCE,
         elif truncation_pair and a.converged is False and b.converged is False:
             ts_a, ts_b = a.timesteps or 0, b.timesteps or 0
             gap = abs(ts_a - ts_b) / max(ts_a, ts_b, 1)
-            if gap >= MIN_TRUNCATION_GAP:
+            if differing_setting == "truncation":
+                if gap >= MIN_TRUNCATION_GAP:
+                    route = "truncation"
+                    quote_caveat = (
+                        f"truncation-stable at caps {min(ts_a, ts_b)}/{max(ts_a, ts_b)} timesteps; "
+                        "the end criteria was never reached (docs/convergence-policy.md Route B)"
+                    )
+                else:
+                    reasons.append(
+                        "both runs are cap-limited at the same truncation "
+                        f"({min(ts_a, ts_b)}/{max(ts_a, ts_b)} timesteps); a same-cap repeat shows "
+                        "determinism, not stability - Route B needs truncations at least "
+                        f"{100 * MIN_TRUNCATION_GAP:.0f} % apart"
+                    )
+            elif gap < MIN_TRUNCATION_GAP:
                 route = "truncation"
                 quote_caveat = (
-                    f"truncation-stable at caps {min(ts_a, ts_b)}/{max(ts_a, ts_b)} timesteps; "
-                    "the end criteria was never reached (docs/convergence-policy.md Route B)"
+                    f"cap-limited at the same truncation ({min(ts_a, ts_b)}/{max(ts_a, ts_b)} "
+                    f"timesteps), differing setting: {differing_setting}; the end criteria was "
+                    "never reached (docs/convergence-policy.md Route B, declared setting pair)"
                 )
             else:
                 reasons.append(
-                    "both runs are cap-limited at the same truncation "
-                    f"({min(ts_a, ts_b)}/{max(ts_a, ts_b)} timesteps); a same-cap repeat shows "
-                    "determinism, not stability - Route B needs truncations at least "
-                    f"{100 * MIN_TRUNCATION_GAP:.0f} % apart"
+                    "the two runs differ in both truncation and the declared setting "
+                    f"({differing_setting}); one variable per pair - hold the cap fixed for a "
+                    "declared-setting pair"
                 )
         elif truncation_pair:
             reasons.append(
@@ -209,9 +231,9 @@ def verdict(a: RunData, b: RunData, tolerance: float = DEFAULT_TOLERANCE,
         else:
             ts_a, ts_b = a.timesteps or 0, b.timesteps or 0
             reasons.append(
-                f"shift {100 * relative:.3f} % <= {100 * tolerance:.2f} % between the two "
-                f"truncations ({min(ts_a, ts_b)}/{max(ts_a, ts_b)} timesteps); accepted under "
-                "Route B, quote with the caveat"
+                f"shift {100 * relative:.3f} % <= {100 * tolerance:.2f} % between the two runs "
+                f"(caps {min(ts_a, ts_b)}/{max(ts_a, ts_b)} timesteps); accepted under Route B, "
+                "quote with the caveat"
             )
     elif not reasons:
         reasons.append(
@@ -227,6 +249,7 @@ def verdict(a: RunData, b: RunData, tolerance: float = DEFAULT_TOLERANCE,
         "tolerance_pct": 100 * tolerance,
         "edge_steps": edge_steps,
         "truncation_pair": bool(truncation_pair),
+        "differing_setting": differing_setting if truncation_pair else None,
         "reasons": reasons,
         "runs": [a.row(), b.row()],
         "quotable": bool(accepted),
@@ -274,6 +297,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="samples from each sweep edge that count as an edge artefact")
     parser.add_argument("--truncation-pair", action="store_true",
                         help="Route B: accept two cap-limited runs with different truncations")
+    parser.add_argument("--differing-setting", default="truncation",
+                        help="the single setting that differs between the pair (default: the "
+                             "truncation; pass e.g. 'mesh' for a mesh-density check)")
     parser.add_argument("--json", help="also write the verdict as JSON to this path")
     args = parser.parse_args(argv)
 
@@ -285,7 +311,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     result = verdict(a, b, tolerance=args.tol, edge_steps=args.edge_steps,
-                     truncation_pair=args.truncation_pair)
+                     truncation_pair=args.truncation_pair,
+                     differing_setting=args.differing_setting)
     print(render(result))
     if args.json:
         Path(args.json).write_text(json.dumps(result, indent=2), encoding="utf-8")
