@@ -109,3 +109,44 @@ by 1.209 % and costs ~7.4 dB of match depth. Both agree with ordinary expectatio
 
 `b1s1` is in flight (timesteps 123k/132k at 35 min of wall time), then `b2e3` and `b2e4`; estimated
 completion around 18:00.
+
+## 8. b1s1 and b2e3 finished; b2e4 in flight (2026-09-28 16:03)
+
+Four of the five relaunched jobs are now done. Every one of them wrote `s11.csv` - including `b2e3`,
+which is the exact job that died at 01:19 on 23 Sep with `UnboundLocalError`. The fix is now proven on
+all four job classes that used to fail.
+
+| job | wall | result files | verdict |
+|---|---|---|---|
+| k1c | 1.59 h | 2 arms | rejected - cap-limited, 0.301 % |
+| k2c | 3.03 h | 3 arms + NF2FF | rejected - cap-limited (0.000 % / 1.209 %) |
+| b1s1 | 1.76 h | 2 arms | rejected - cap-limited, **13.129 %** |
+| b2e3 | 1.63 h | 2 arms | rejected - cap-limited, **5.576 %** |
+
+### b1s1 - ground-plane footprint 0.25 lambda0 vs 0.50 lambda0
+
+| run | resonance [GHz] | deepest |S11| [dB] | VSWR | timesteps |
+|---|---|---|---|---|---|
+| gm025 | 2.4427 | -7.84 | 2.365 | 400000 |
+| gm050 | 2.1417 | -5.62 | 3.197 | 400000 |
+
+A 13.1 % resonance shift when the ground plane is doubled. The 0.25 lambda0 ground is only marginally
+larger than the patch, so edge diffraction dominates - but this remains a **hypothesis**, because both
+arms are cap-limited.
+
+### b2e3 - feed coplanar probe vs line (EndCriteria 1e-3), 201-point sweep
+
+| run | resonance [GHz] | deepest |S11| [dB] | VSWR | timesteps |
+|---|---|---|---|---|---|
+| probe | 2.3067 | -4.52 | 3.926 | 400000 |
+| line | 2.4390 | **-28.94** | **1.074** | 399788 |
+
+The feed implementation moves the resonance by 5.6 % and the match depth by 24 dB - the best-matched
+result the project has produced. Both arms are still cap-limited and therefore **not quotable**; the
+line feed is, however, the strongest physical signal seen so far and the natural first candidate for
+the calibrated-criterion rerun.
+
+### b2e4 - in flight
+
+Started 15:41. The probe arm reported 165,326 / 400,000 steps at 56.6 MCells/s with energy -10.5 dB
+(the run stops early at -40 dB); the line arm follows. Estimated completion ~17:20-17:30.
