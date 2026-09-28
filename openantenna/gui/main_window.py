@@ -72,10 +72,18 @@ from .worker import GenerateWorker, QueueWorker, SimulateWorker, _case_dirname
 
 
 def _plot_canvas():
-    """Create a matplotlib canvas that works with and without a display."""
+    """Create a matplotlib canvas that works with and without a display.
+
+    The figure is styled to match the app (dark surface, light text) so no tab glares
+    white against the window; the styling call is idempotent, so it is safe even when
+    apply_theme() already ran.
+    """
     from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
     from matplotlib.figure import Figure
 
+    from .theme import style_matplotlib
+
+    style_matplotlib()
     figure = Figure(figsize=(5, 3), tight_layout=True)
     canvas = FigureCanvasQTAgg(figure)
     return figure, canvas
@@ -729,6 +737,7 @@ class SimulateTab(QWidget):
         self.generate_button = QPushButton("Generate model")
         self.generate_button.clicked.connect(self.generate)
         self.run_button = QPushButton("Run simulation")
+        self.run_button.setProperty("primary", True)
         self.run_button.clicked.connect(self.simulate)
         for widget in (self.status_button, self.generate_button, self.run_button):
             row.addWidget(widget)
@@ -2163,6 +2172,7 @@ class SketchTab(QWidget):
             field.setMaximumWidth(70)
             field.setToolTip("a number or a parameter expression (millimetres)")
         add_block_button = QPushButton("+ Add block")
+        add_block_button.setProperty("primary", True)
         add_block_button.setToolTip(
             "Add a block with numeric corners - expressions over the parameters are allowed.  "
             "The corners are evaluated now; the thickness stays a definition."
@@ -2241,6 +2251,7 @@ class SketchTab(QWidget):
         layout.addWidget(self.include_check)
         self.include_note = QLabel("no closed shapes to include yet (an open trace is not a region).")
         self.include_note.setWordWrap(True)
+        self.include_note.setProperty("muted", True)
         layout.addWidget(self.include_note)
 
         self.shapes_table = QTableWidget(0, 4)

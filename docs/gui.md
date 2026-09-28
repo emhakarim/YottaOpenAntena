@@ -40,8 +40,11 @@ describes what a run would use rather than what the widgets happen to say.
 * **Multiple dielectric layers are refused, not silently collapsed.** The GUI warns on
   load, and the Phase 1 generator raises `supports a single dielectric layer; got 2` — the
   honest behaviour until the stackup is collapsed to an effective medium.
-* **The 3-D preview is plain matplotlib.** The roadmap lists a PyVista viewport; that is a
-  heavy dependency and therefore the owner's decision, not the GUI's. The preview shows
+* **Every chart is matplotlib, styled to match the app.** Figure surface, text and grid
+  follow the dark palette, so no tab glares white against the window; the styling pass is
+  one rcParams update, skipped cleanly when matplotlib is absent. The roadmap lists a
+  PyVista viewport; that is a heavy dependency and therefore the owner's decision, not the
+  GUI's. The 3-D preview shows
   the ground plate, substrate slab and patch elements with an explicitly approximate
   footprint, plus four camera presets (iso, front, top, side) and a rotate/zoom hint, so the
   same model can be inspected from more than one angle without a new dependency.

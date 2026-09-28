@@ -76,6 +76,30 @@ QPushButton {{
 QPushButton:hover {{ border-color: {ACCENT}; color: #ffffff; }}
 QPushButton:pressed {{ background: {BACKGROUND}; }}
 QPushButton:disabled {{ color: #6b7078; border-color: #2f3237; background: #26282c; }}
+QPushButton[primary="true"] {{
+    background: {ACCENT};
+    border-color: {ACCENT};
+    color: #ffffff;
+    font-weight: 600;
+}}
+QPushButton[primary="true"]:hover {{ background: #5d97f7; border-color: #5d97f7; }}
+QPushButton[primary="true"]:pressed {{ background: #3d76d8; }}
+QPushButton[primary="true"]:disabled {{ background: #33507f; border-color: #33507f; color: #b9c6db; }}
+
+QCheckBox::indicator {{
+    width: 15px;
+    height: 15px;
+    border: 1px solid {BORDER};
+    border-radius: 4px;
+    background: {BACKGROUND};
+}}
+QCheckBox::indicator:hover {{ border-color: {ACCENT}; }}
+QCheckBox::indicator:checked {{
+    background: {ACCENT};
+    border-color: {ACCENT};
+}}
+
+QLabel[muted="true"] {{ color: {TEXT_MUTED}; }}
 
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
     background: {BACKGROUND};
@@ -157,7 +181,48 @@ QToolTip {{
 """
 
 
+def style_matplotlib() -> bool:
+    """Make matplotlib figures match the app: dark surface, light text, quiet grid.
+
+    Every tab draws on the same figure factory, so one rcParams pass stops the charts from
+    glaring white against the dark window.  Returns False when matplotlib is absent (the
+    GUI runs without it and the tests skip the plots).  Unknown keys are skipped, so an
+    older matplotlib cannot turn this into an exception.
+    """
+    try:
+        from matplotlib import rcParams
+    except Exception:
+        return False
+    wanted = {
+        "figure.facecolor": PANEL,
+        "figure.edgecolor": PANEL,
+        "savefig.facecolor": PANEL,
+        "axes.facecolor": PANEL,
+        "axes.edgecolor": BORDER,
+        "axes.labelcolor": TEXT_MUTED,
+        "axes.titlecolor": TEXT,
+        "axes.titlesize": 10.0,
+        "axes.labelsize": 9.0,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "grid.color": BORDER,
+        "grid.alpha": 0.6,
+        "grid.linewidth": 0.6,
+        "xtick.color": TEXT_MUTED,
+        "ytick.color": TEXT_MUTED,
+        "xtick.labelsize": 8.5,
+        "ytick.labelsize": 8.5,
+        "text.color": TEXT,
+        "legend.facecolor": PANEL_ALT,
+        "legend.edgecolor": BORDER,
+        "font.size": 9.0,
+    }
+    rcParams.update({key: value for key, value in wanted.items() if key in rcParams})
+    return True
+
+
 def apply_theme(app) -> None:
-    """Install the stylesheet and a consistent base style on a QApplication."""
+    """Install the stylesheet, the base style, and matching chart styling."""
     app.setStyle("Fusion")
     app.setStyleSheet(STYLESHEET)
+    style_matplotlib()
