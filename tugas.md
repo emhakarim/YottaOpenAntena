@@ -524,3 +524,8 @@ Perilaku tidak disentuh; suite **505 OK**, selftest exit 0. Push `7c5b556`.
 Bukti visual: `modeling_tab_v2_dark.png` + `design_tab_v1_dark.png` (render offscreen).
 Catatan: mode mengikuti REDESIGN.md = Refinement (struktur & alur dipertahankan); pass
 UI-check (kontras, konsistensi komponen) dilakukan pada palet yang ada, tanpa redefinisi.
+
+Catatan proses (terulang, lalu diperbaiki): perbaikan hash di entri ini sempat gagal karena
+tanda backtick dikirim lewat `python -c` di PowerShell - backtick adalah karakter escape di
+sana, jadi assert-nya mencocokkan teks yang salah sementara commit tetap berjalan.  Aturan
+lama berlaku: skrip bantu ditulis sebagai **berkas**, bukan perintah inline.
