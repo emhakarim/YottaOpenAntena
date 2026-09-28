@@ -519,7 +519,7 @@ via rcParams (surface gelap, teks terang, grid tenang, tanpa spine atas/kanan) d
 ulang dengan aman dari pabrik figure - **kanvas putih menyala hilang** (pixel putih 0.03 % pada
 render verifikasi; sebelumnya seluruh kanvas putih). Detail kontrol: indikator QCheckBox,
 gaya aksen untuk aksi utama (+ Add block, Run simulation), catatan include jadi muted.
-Perilaku tidak disentuh; suite **505 OK**, selftest exit 0. Push `HEAD~0`.
+Perilaku tidak disentuh; suite **505 OK**, selftest exit 0. Push `7c5b556`.
 
 Bukti visual: `modeling_tab_v2_dark.png` + `design_tab_v1_dark.png` (render offscreen).
 Catatan: mode mengikuti REDESIGN.md = Refinement (struktur & alur dipertahankan); pass
