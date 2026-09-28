@@ -509,3 +509,18 @@ ekspresi rusak & kotak nol), suite **505 OK**, selftest exit 0. Push `d993249` (
 catatan ini mendarat dalam satu commit: kutip PowerShell memecah commit fitur pertama -
 isinya utuh, hanya pesannya jadi kurang presisi).
 Permintaan §6p ke Yotta tidak berubah (runtime smoke, red-team, equivalensi dek).
+
+---
+
+## §6r - Aksara, 2026-09-28 (malam): poles GUI (mode Refinement) - chart gelap + detail kontrol
+
+Menanggapi pemilik ("kok GUI-nya kurang bagus"): `theme.style_matplotlib()` diterapkan sekali
+via rcParams (surface gelap, teks terang, grid tenang, tanpa spine atas/kanan) dan dipanggil
+ulang dengan aman dari pabrik figure - **kanvas putih menyala hilang** (pixel putih 0.03 % pada
+render verifikasi; sebelumnya seluruh kanvas putih). Detail kontrol: indikator QCheckBox,
+gaya aksen untuk aksi utama (+ Add block, Run simulation), catatan include jadi muted.
+Perilaku tidak disentuh; suite **505 OK**, selftest exit 0. Push `HEAD~0`.
+
+Bukti visual: `modeling_tab_v2_dark.png` + `design_tab_v1_dark.png` (render offscreen).
+Catatan: mode mengikuti REDESIGN.md = Refinement (struktur & alur dipertahankan); pass
+UI-check (kontras, konsistensi komponen) dilakukan pada palet yang ada, tanpa redefinisi.
