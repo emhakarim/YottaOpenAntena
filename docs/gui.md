@@ -9,7 +9,7 @@ same functions the CLI calls, so the GUI cannot drift away from the scriptable c
 python -m openantenna.gui
 ```
 
-## The four tabs
+## The seven tabs
 
 A **project tree** dock sits on the left of the window: substrate layers, patch dimensions
 and feed, array configuration, sweep range, and the project's own validity warnings. It is
@@ -19,13 +19,12 @@ describes what a run would use rather than what the widgets happen to say.
 | Tab | What it does |
 |---|---|
 | **Material & composite** | The built-in material library (reference values, not measurements), plus a two-phase composite explorer: mixing models, their validity warnings, and a sensitivity plot of ε_eff against filler loading with the Wiener bounds and the current operating point marked |
-| **Design** | Patch synthesis from the transmission-line model; array parameters; a **2-D layout drawn to scale** or a **3-D preview** of the same model; the array-factor cut; and **save/load of the neutral project JSON** (the same document the CLI reads) |
+| **Design** | Patch synthesis from the transmission-line model; array parameters; a **2-D layout drawn to scale** or a **3-D preview** of the same model (with camera presets and a rotate/zoom hint); the array-factor cut; and **save/load of the neutral project JSON** (the same document the CLI reads) |
 | **Simulate** | Mesh, substrate cells, loss model, and the three A/B knobs (`port_refine`, `edge_snapping`, `nf2ff`); generate, run in a worker thread; a **progress bar driven by the solver's own timestep lines**; and a **sequential batch queue** |
-| **Results** | Load a run directory: S11 with its metrics, the run's own provenance (mesh, substrate, knobs, stop criteria, convergence), the far-field cut and summary, an **A/B overlay** of a second run with the resonance shift, and a warning when a number is physically impossible |
-
-The **project tree** dock (left of the window) mirrors the neutral model - substrate layers,
-patch dimensions and feed, array configuration, sweep, and the model's own validity
-warnings - and refreshes from a signal whenever the design is re-synthesised.
+| **Results** | Load a run directory: S11 with its metrics, the run's own provenance (mesh, substrate, knobs, stop criteria, convergence), the far-field cut and summary, an **A/B overlay** of a second run with the resonance shift, the **coupling matrix** assembled from `port_<n>.csv` folders, and a warning when a number is physically impossible |
+| **Sweep** | A parameter table (factorial or one-at-a-time), run-all against the analytic predictor, a results table with per-row status, a resonance-versus-parameter plot from the table's own summary, and CSV export; the status line states the numbers are targeting values, not solver results |
+| **Import** | Read a CAD file - **STL** (ASCII or binary), **OBJ**, or a **DXF outline** - choose its units and cell size, and see what the solver grid would use: the **staircase occupancy** for a mesh, the **stroked edges** for an outline, drawn on the same canvas style as the other tabs |
+| **Optimise** | Target a resonance frequency by searching the patch length with the stdlib differential-evolution optimiser, **naming the analytic predictor** it used and stating that the number is a targeting result, not a measurement |
 
 ## Things that are deliberate, not missing
 
@@ -43,7 +42,22 @@ warnings - and refreshes from a signal whenever the design is re-synthesised.
 * **The 3-D preview is plain matplotlib.** The roadmap lists a PyVista viewport; that is a
   heavy dependency and therefore the owner's decision, not the GUI's. The preview shows
   the ground plate, substrate slab and patch elements with an explicitly approximate
-  footprint.
+  footprint, plus four camera presets (iso, front, top, side) and a rotate/zoom hint, so the
+  same model can be inspected from more than one angle without a new dependency.
+* **The Import tab never trusts the file extension.** The format is decided by inspecting
+  the file: a text head holding a DXF `ENTITIES`/`SECTION` pair goes to the DXF reader;
+  everything else goes to the mesh reader, which itself measures whether an STL is binary
+  or ASCII rather than believing the name.
+* **Import shows a staircase, not the mesh.** STL and OBJ carry no units, so the tab asks
+  which one your CAD used, and the occupancy it draws is a staircase approximation of the
+  true surface - a slanted face is coarser than an axis-aligned one. The number and that
+  caveat are printed together.
+* **A DXF is an outline, not a surface.** The tab strokes the edges onto the solver grid
+  and says outright that these are the cells the edges cross, not filled metal, because a
+  DXF has no surface to fill.
+* **The Optimise tab reports targeting, not measurement.** It names the predictor and says
+  the number is where the chosen model wants the design to sit - the same wording the
+  `optimise` CLI uses, so the two cannot drift apart.
 * **An impossible radiation efficiency is flagged.** The tutorial run reports
   `eta_rad = 55` at its own resonance; the panel prints the number *and* says it is
   physically impossible, so nobody quotes it by accident.
@@ -58,5 +72,8 @@ python -m unittest tests.test_gui_smoke -v
 ```
 
 Those tests build the real window, exercise each panel with synthetic run directories, and
-check the figures that come out (axes, patches, curves). PySide6 is optional: without it
-the tests skip and the core is unaffected.
+check the figures that come out (axes, patches, curves). They drive the Import tab through
+the same `load`/`show_loaded` path a click uses, for both a mesh and a DXF outline, and walk
+all four 3-D camera presets in a real window. PySide6 is optional: without it the tests skip
+and the core is unaffected - so CI has a **separate job that installs PySide6 and runs the
+GUI tests**, otherwise a GUI bug could pass the suite unnoticed.

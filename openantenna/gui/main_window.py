@@ -1357,7 +1357,7 @@ class ResultsTab(QWidget):
 
 
 class MainWindow(QMainWindow):
-    """Four tabs, one per stage of the workflow."""
+    """Seven tabs, one per stage of the workflow."""
 
     def __init__(self) -> None:
         super().__init__()

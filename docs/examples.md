@@ -1,6 +1,6 @@
 # Examples
 
-Three runnable recipes plus the CLI equivalents.  None of them needs a solver, and none needs an
+Five runnable recipes plus the CLI equivalents.  None of them needs a solver, and none needs an
 optional dependency - they run on a bare interpreter with the package installed.
 
 | Example | What it shows | Command |
@@ -9,8 +9,9 @@ optional dependency - they run on a bare interpreter with the package installed.
 | 2 | plan a 1-by-8 corporate feed: levels, quarter-wave section, rectangles, extent | `python examples/02_feed_plan_1d.py` |
 | 3 | plan the two-layer 4-by-4 tree and prove the layers do not overlap | `python examples/03_feed_plan_2d.py` |
 | 4 | read an STL from CAD and see what a staircase grid would make of it | `python examples/04_cad_import.py` |
+| 5 | read a DXF board outline and see which grid cells a stroked edge would cross | `python examples/05_dxf_outline.py` |
 
-`tests/test_examples.py` runs all three under the test suite, so an example that stops working is a
+`tests/test_examples.py` runs every example under the test suite, so an example that stops working is a
 test failure rather than a stale document.
 
 ## The same things from the CLI
@@ -21,11 +22,14 @@ openantenna feed-plan --rows 4 --cols 4 --pitch-mm 60 --json feed.json
 openantenna feed-plan --rows 1 --cols 4 --pitch-mm 60
 openantenna material list
 openantenna design patch --frequency-hz 2.45e9
+openantenna cad-inspect plate.stl --cell-mm 5
+openantenna dxf-inspect board.dxf --cell-mm 2
 ```
 
 `optimise` prints which analytic predictor produced the number and says outright that it is a
 targeting result, not a measurement.  `feed-plan` prints the collision count per layer - a non-zero
-count means the layout is not buildable and the tool says so.
+count means the layout is not buildable and the tool says so.  `cad-inspect` and `dxf-inspect` state
+what the grid sees next to the file's own bounds, so a coarse cell size is visible rather than implied.
 
 ## What the examples deliberately do not claim
 
@@ -35,3 +39,7 @@ count means the layout is not buildable and the tool says so.
   is still open (`docs/feed-network-2d-design.md`).
 * The feed layer sits inside the substrate in the generated deck, which is a stackup decision, not a
   free choice.
+* A DXF is an **outline**, not a surface.  Example 5 shows stroked edges on the grid - which cells the
+  board boundary would touch - not filled metal, because a DXF carries no surface to fill.
+* STL and OBJ carry **no units**, so example 4 states the scale it assumed (millimetres) rather than
+  guessing one silently.
