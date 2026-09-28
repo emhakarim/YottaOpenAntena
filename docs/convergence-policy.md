@@ -74,3 +74,39 @@ Cross-check against the worked rejection: on the K-1 pair (`port_refine` on/off 
 reproduces the hand-written verdict - `rejected`, 29.96 % by band-mean, with **both** settings' minima
 on a sweep edge (2.8170 GHz at the top of the band, 2.0830 GHz at the bottom) and both runs
 cap-limited at 60000 timesteps. Four reasons, no number quotable.
+
+## Route B - truncation stability (adopted 2026-09-28, owner-approved)
+
+Route A assumes runs can *stop themselves* by meeting an end criteria. The measured reality after the
+September reruns is starker than the table at the top of this document: on the final-setting arm the
+relative energy had decayed to only -14.9 dB after the full 400k steps, so the openEMS end criteria is
+not merely late, it is effectively unreachable for this class of open patch within any sane budget.
+Every meaningful run therefore ends at its cap. Route B accepts that fact without pretending it away:
+
+1. Run the same case twice with **different truncations** - e.g. `--max-ts 300000` and `--max-ts 400000` -
+   with everything else identical.
+2. Accept when `|f_2 - f_1| / f_1 <= 0.2 %`, neither minimum sits at a sweep edge, both runs stopped at
+   their caps, and the two caps differ by **at least 5 %**. A same cap repeat reproduces the run
+   bit-for-bit: that demonstrates determinism, not stability, and must never be used here.
+3. Quote the accepted value **with the caveat**: both truncation levels, and the fact that the end
+   criteria was never reached. The verdict tool prints exactly that caveat, so it travels with the
+   number.
+
+Mechanically:
+
+```
+python -m yotta_tools.two_setting_verdict --a runs/run_300k --b runs/run_400k --truncation-pair
+```
+
+Rationale: for a slow-ringing resonator, "extending the run no longer moves the answer" is the
+strongest stability evidence obtainable within any budget, and it is a statement about the *answer*,
+which is what a numerical result is supposed to demonstrate. Route B is weaker than Route A in one
+respect and this must be said in any report using it: it bounds the dependence on run length, not on
+the mesh or on the stop criterion the engine never reached.
+
+## Route B and the termination rule
+
+The termination rule above and Route B fit together: a truncation pair is exactly two runs that
+stopped at their caps, so it adds no extra CPU on top of runs that were going to be capped anyway.
+What the rule forbids is a run whose result cannot enter either route - no convergence, no
+truncation partner, no defensible number - and such runs are still terminated on sight.

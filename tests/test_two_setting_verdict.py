@@ -22,7 +22,7 @@ F_MAX = 2.7e9
 
 
 def make_run(base: Path, name: str, min_at: int, *, samples: int = 101, converged: bool = True,
-             edge: bool = False) -> Path:
+             edge: bool = False, cap: int = 400000) -> Path:
     """Write one synthetic run directory: a Lorentzian dip at ``min_at`` plus an engine log."""
     directory = base / name
     directory.mkdir(parents=True)
@@ -43,7 +43,7 @@ def make_run(base: Path, name: str, min_at: int, *, samples: int = 101, converge
         log = "Timestep: 42000 || Speed: 40.0 MC/s || Energy: ~1e-20\n"
         log += "RunFDTD: End criteria reached after 42000 iterations\n"
     else:
-        log = "Timestep: 400000 || Speed: 40.0 MC/s || Energy: ~1e-18\n"
+        log = f"Timestep: {cap} || Speed: 40.0 MC/s || Energy: ~1e-18\n"
         log += ("RunFDTD: Warning: Max. number of timesteps was reached before the end-criteria "
                 "of -20dB was reached.\n")
     (directory / "run.stdout.log").write_text(log, encoding="utf-8")
@@ -102,6 +102,34 @@ class TestVerdict(unittest.TestCase):
         self.assertIsNone(run.converged)
         self.assertTrue(run.convergence_note.startswith("engine log has no convergence statement"))
 
+    def test_truncation_pair_different_caps_is_accepted_under_route_b(self) -> None:
+        a = RunData(make_run(self.base, "trunc_300k", 500, samples=1001, converged=False, cap=300000))
+        b = RunData(make_run(self.base, "trunc_400k", 500, samples=1001, converged=False, cap=400000))
+        result = verdict(a, b, truncation_pair=True)
+        self.assertEqual(result["verdict"], "accepted")
+        self.assertTrue(result["quotable"])
+        self.assertEqual(result["policy_route"], "truncation")
+        self.assertIn("Route B", result["quote_caveat"])
+        self.assertAlmostEqual(result["relative_shift_pct"], 0.0, places=3)
+        # the very same pair is rejected on the strict route - Route B must be asked for
+        strict = verdict(a, b)
+        self.assertEqual(strict["verdict"], "rejected")
+
+    def test_truncation_pair_at_the_same_cap_is_rejected(self) -> None:
+        a = RunData(make_run(self.base, "repeat_a", 500, samples=1001, converged=False, cap=400000))
+        b = RunData(make_run(self.base, "repeat_b", 500, samples=1001, converged=False, cap=400000))
+        result = verdict(a, b, truncation_pair=True)
+        self.assertEqual(result["verdict"], "rejected")
+        self.assertFalse(result["quotable"])
+        self.assertTrue(any("determinism" in reason for reason in result["reasons"]))
+
+    def test_truncation_pair_with_a_large_shift_is_rejected(self) -> None:
+        a = RunData(make_run(self.base, "trunc_300k", 500, samples=1001, converged=False, cap=300000))
+        b = RunData(make_run(self.base, "trunc_400k", 520, samples=1001, converged=False, cap=400000))
+        result = verdict(a, b, truncation_pair=True)
+        self.assertEqual(result["verdict"], "rejected")
+        self.assertGreater(result["relative_shift_pct"], 0.2)
+
     def test_s11_and_vswr_are_computed_from_the_dip(self) -> None:
         run = RunData(make_run(self.base, "setting_a", 500, samples=1001))
         self.assertAlmostEqual(run.s11_db[500], -25.0, delta=0.01)
@@ -148,6 +176,18 @@ class TestVerdictCli(unittest.TestCase):
         self.assertEqual(payload["verdict"], "accepted")
         self.assertTrue(payload["rules"].startswith("docs/convergence-policy.md"))
         self.assertEqual(payload["edge_steps"], 2)
+        self.assertEqual(payload["policy_route"], "stability")
+
+    def test_cli_truncation_pair_flag_switches_route_b(self) -> None:
+        a = make_run(self.base, "trunc_300k", 500, samples=1001, converged=False, cap=300000)
+        b = make_run(self.base, "trunc_400k", 500, samples=1001, converged=False, cap=400000)
+        out = self.base / "verdict.json"
+        self.assertEqual(
+            main(["--a", str(a), "--b", str(b), "--truncation-pair", "--json", str(out)]), 0)
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(payload["verdict"], "accepted")
+        self.assertEqual(payload["policy_route"], "truncation")
+        self.assertTrue(payload["truncation_pair"])
 
 
 if __name__ == "__main__":

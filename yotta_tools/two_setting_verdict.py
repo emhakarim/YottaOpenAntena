@@ -6,6 +6,11 @@ minimum inside the band, or when the minimum sits on a band edge. Those rules we
 by hand, in prose - which is exactly the kind of step that quietly changes meaning between two
 reports. This tool applies them mechanically and prints *why*.
 
+**Route B** (adopted 2026-09-28, owner-approved) accepts a *truncation pair* - two runs that both
+stopped at their timestep caps, with the caps at least 5 % apart - when they agree within the same
+tolerance. ``--truncation-pair`` selects that route; a same-cap repeat is rejected there, because
+it demonstrates determinism and not stability.
+
 Inputs are two run directories produced by the harness (``parallel_batch.py`` or a single run):
 
     runs/batch_e2b_prab_on/     s11.csv              freq_hz,s11_re,s11_im
@@ -38,6 +43,7 @@ from pathlib import Path
 
 DEFAULT_TOLERANCE = 0.002  # 0.2 %, docs/convergence-policy.md
 DEFAULT_EDGE_STEPS = 2     # matches yotta_tools/two_stage_sweep.py EDGE_STEPS
+MIN_TRUNCATION_GAP = 0.05  # Route B: the two caps must be at least 5 % apart
 BANDS = ((0.002, "di bawah ambang terima (<0,2 %)"),
          (0.01, "bergeser (0,2-1 %)"),
          (math.inf, "bergeser besar (>=1 %)"))
@@ -146,8 +152,8 @@ def band_label(relative_shift: float) -> str:
 
 
 def verdict(a: RunData, b: RunData, tolerance: float = DEFAULT_TOLERANCE,
-            edge_steps: int = DEFAULT_EDGE_STEPS) -> dict[str, object]:
-    """Apply docs/convergence-policy.md to two runs and explain the outcome."""
+            edge_steps: int = DEFAULT_EDGE_STEPS, truncation_pair: bool = False) -> dict[str, object]:
+    """Apply docs/convergence-policy.md (Route A or Route B) to two runs and explain the outcome."""
     reasons: list[str] = []
     relative = abs(a.resonance_hz - b.resonance_hz) / ((a.resonance_hz + b.resonance_hz) / 2.0)
 
@@ -158,18 +164,55 @@ def verdict(a: RunData, b: RunData, tolerance: float = DEFAULT_TOLERANCE,
                 f"({run.resonance_hz / 1e9:.4f} GHz) is within {edge_steps} steps of a sweep edge - "
                 "an artefact the two-stage sweep exists to avoid"
             )
+
+    route: str | None = None
+    quote_caveat: str | None = None
     for run in (a, b):
-        if run.converged is False:
-            reasons.append(f"{run.dir.name}: not converged ({run.convergence_note})")
-        elif run.converged is None:
+        if run.converged is None:
             reasons.append(f"{run.dir.name}: convergence unverifiable ({run.convergence_note})")
+    if not any(run.converged is None for run in (a, b)):
+        if a.converged and b.converged:
+            route = "stability"
+        elif truncation_pair and a.converged is False and b.converged is False:
+            ts_a, ts_b = a.timesteps or 0, b.timesteps or 0
+            gap = abs(ts_a - ts_b) / max(ts_a, ts_b, 1)
+            if gap >= MIN_TRUNCATION_GAP:
+                route = "truncation"
+                quote_caveat = (
+                    f"truncation-stable at caps {min(ts_a, ts_b)}/{max(ts_a, ts_b)} timesteps; "
+                    "the end criteria was never reached (docs/convergence-policy.md Route B)"
+                )
+            else:
+                reasons.append(
+                    "both runs are cap-limited at the same truncation "
+                    f"({min(ts_a, ts_b)}/{max(ts_a, ts_b)} timesteps); a same-cap repeat shows "
+                    "determinism, not stability - Route B needs truncations at least "
+                    f"{100 * MIN_TRUNCATION_GAP:.0f} % apart"
+                )
+        elif truncation_pair:
+            reasons.append(
+                "mixed stop conditions (one run converged, one cap-limited); run a clean "
+                "truncation pair for Route B"
+            )
+        else:
+            for run in (a, b):
+                if run.converged is False:
+                    reasons.append(f"{run.dir.name}: not converged ({run.convergence_note})")
 
     accepted = not reasons and relative <= tolerance
     if accepted:
-        reasons.append(
-            f"shift {100 * relative:.3f} % <= {100 * tolerance:.2f} % between two settings, "
-            "and both runs converged"
-        )
+        if route == "stability":
+            reasons.append(
+                f"shift {100 * relative:.3f} % <= {100 * tolerance:.2f} % between two settings, "
+                "and both runs converged"
+            )
+        else:
+            ts_a, ts_b = a.timesteps or 0, b.timesteps or 0
+            reasons.append(
+                f"shift {100 * relative:.3f} % <= {100 * tolerance:.2f} % between the two "
+                f"truncations ({min(ts_a, ts_b)}/{max(ts_a, ts_b)} timesteps); accepted under "
+                "Route B, quote with the caveat"
+            )
     elif not reasons:
         reasons.append(
             f"shift {100 * relative:.3f} % > {100 * tolerance:.2f} % between the two settings"
@@ -177,14 +220,17 @@ def verdict(a: RunData, b: RunData, tolerance: float = DEFAULT_TOLERANCE,
 
     return {
         "verdict": "accepted" if accepted else "rejected",
+        "policy_route": route,
         "relative_shift": relative,
         "relative_shift_pct": round(100 * relative, 4),
         "band": band_label(relative),
         "tolerance_pct": 100 * tolerance,
         "edge_steps": edge_steps,
+        "truncation_pair": bool(truncation_pair),
         "reasons": reasons,
         "runs": [a.row(), b.row()],
         "quotable": bool(accepted),
+        "quote_caveat": quote_caveat,
         "rules": "docs/convergence-policy.md (stability between two settings, no edge minimum)",
     }
 
@@ -209,6 +255,12 @@ def render(result: dict[str, object]) -> str:
     if not result["quotable"]:
         lines.append("")
         lines.append("NOT QUOTABLE: do not cite these numbers as a result (docs/convergence-policy.md).")
+    elif result.get("quote_caveat"):
+        lines.append("")
+        lines.append(
+            "QUOTABLE under Route B - record this caveat when quoting: "
+            f"{result['quote_caveat']}"
+        )
     return "\n".join(lines)
 
 
@@ -220,6 +272,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="relative frequency tolerance (default 0.002 = 0.2 %%)")
     parser.add_argument("--edge-steps", type=int, default=DEFAULT_EDGE_STEPS,
                         help="samples from each sweep edge that count as an edge artefact")
+    parser.add_argument("--truncation-pair", action="store_true",
+                        help="Route B: accept two cap-limited runs with different truncations")
     parser.add_argument("--json", help="also write the verdict as JSON to this path")
     args = parser.parse_args(argv)
 
@@ -230,7 +284,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    result = verdict(a, b, tolerance=args.tol, edge_steps=args.edge_steps)
+    result = verdict(a, b, tolerance=args.tol, edge_steps=args.edge_steps,
+                     truncation_pair=args.truncation_pair)
     print(render(result))
     if args.json:
         Path(args.json).write_text(json.dumps(result, indent=2), encoding="utf-8")

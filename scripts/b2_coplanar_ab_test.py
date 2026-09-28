@@ -67,11 +67,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default=str(Path("runs") / "b2_coplanar"))
     parser.add_argument("--run", action="store_true", help="run the decks instead of only writing them")
     parser.add_argument("--end-criteria", type=float, default=1e-3)
+    parser.add_argument("--max-ts", type=int, default=400000,
+                        help="timestep cap carried into the deck (MAX_TS); Route B needs two caps)")
     args = parser.parse_args(argv)
 
     from openantenna.solvers.openems import OpenEMSSolver
 
-    solver = OpenEMSSolver(end_criteria=args.end_criteria)
+    solver = OpenEMSSolver(end_criteria=args.end_criteria, max_timesteps=args.max_ts)
     status = solver.available()
     print(f"solver available: {status.available} - {status.detail}")
 
