@@ -419,293 +419,391 @@ INDEX_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenAntenna Studio - local web UI</title>
+<title>OpenAntenna Studio</title>
 <style>
   :root {
-    --bg: #17181c; --surface: #202226; --panel: #232529; --panel2: #2b2e33; --border: #33363b;
-    --text: #e8e9ec; --muted: #9aa0a9; --accent: #4c8bf5; --accent-soft: rgba(76,139,245,.16);
-    --danger: #ff7b72; --ok: #76c494;
+    --bg: #0f1013; --panel: #15171c; --panel2: #1b1e24; --inset: #101216;
+    --border: #262a31; --border2: #30353e;
+    --text: #eef0f4; --muted: #98a0ac;
+    --accent: #4c8bf5; --accent2: #7c5cff; --accent-soft: rgba(76,139,245,.16);
+    --ok: #5ad19a; --danger: #ff7b72;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0; color: var(--text);
     font: 14px/1.55 "Segoe UI", Inter, system-ui, sans-serif;
-    background-color: var(--bg);
-    background-image: radial-gradient(1100px 520px at 12% -12%, rgba(76,139,245,.09), transparent 62%);
-    background-repeat: no-repeat;
+    background:
+      radial-gradient(880px 480px at 88% -12%, rgba(124,92,255,.11), transparent 62%),
+      radial-gradient(920px 520px at -8% 8%, rgba(76,139,245,.13), transparent 60%),
+      var(--bg);
+    background-attachment: fixed;
   }
-  ::selection { background: rgba(76,139,245,.35); }
+  ::selection { background: rgba(124,92,255,.35); }
 
-  header { padding: 18px 22px 2px; }
-  .brandrow { display: flex; align-items: center; gap: 13px; }
+  .shell { display: flex; min-height: 100vh; }
+
+  /* ---------------- sidebar ---------------- */
+  .sidebar {
+    width: 236px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 18px;
+    padding: 20px 14px 16px; border-right: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)) ;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 0 6px; }
   .mark {
-    width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto;
-    display: grid; place-items: center;
-    background: linear-gradient(160deg, #5d97f7, #3d76d8);
-    box-shadow: 0 6px 16px rgba(76,139,245,.35), inset 0 1px 0 rgba(255,255,255,.25);
+    width: 34px; height: 34px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center;
+    background: linear-gradient(140deg, #4c8bf5, #7c5cff);
+    box-shadow: 0 8px 20px rgba(90,120,255,.35), inset 0 1px 0 rgba(255,255,255,.28);
   }
-  h1 { font-size: 19px; margin: 0; font-weight: 650; letter-spacing: .1px; }
-  .badge { font-size: 11px; font-weight: 600; color: #cfe0ff; background: var(--accent-soft);
-           border: 1px solid rgba(76,139,245,.45); border-radius: 999px; padding: 1px 9px; vertical-align: 2px; }
-  .sub { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
-  .chips { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-  .chip { border: 1px solid var(--border); background: var(--panel); border-radius: 999px;
-          padding: 3px 11px; font-size: 12px; color: var(--muted);
-          font-family: Consolas, "Cascadia Mono", monospace; }
-  .chip.ok  { color: #b9e4c9; border-color: rgba(118,196,148,.55); background: rgba(118,196,148,.08); }
-  .chip.bad { color: #ffb4ae; border-color: rgba(255,123,114,.55); background: rgba(255,123,114,.08); }
+  .brandname { font-size: 15px; font-weight: 700; letter-spacing: .2px;
+               background: linear-gradient(92deg, #dfe8ff, #c9c4ff); -webkit-background-clip: text;
+               background-clip: text; color: transparent; }
+  .brandsub { font-size: 11px; color: var(--muted); margin-top: -1px; }
 
-  nav.tabs { display: flex; gap: 4px; margin: 12px 22px 0; padding: 4px; width: max-content;
-             background: var(--surface); border: 1px solid var(--border); border-radius: 999px; }
-  nav.tabs button { border: none; background: transparent; color: var(--muted); border-radius: 999px;
-                    padding: 6px 18px; font: inherit; font-size: 13.5px; cursor: pointer; transition: all .15s ease; }
-  nav.tabs button:hover { color: var(--text); }
-  nav.tabs button.active { background: var(--accent-soft); color: #cfe0ff; font-weight: 600;
-                           box-shadow: inset 0 0 0 1px rgba(76,139,245,.45); }
+  .nav { display: flex; flex-direction: column; gap: 4px; }
+  .navitem {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    background: transparent; border: 1px solid transparent; border-radius: 11px;
+    color: var(--muted); font: inherit; font-size: 13.5px; padding: 9px 12px;
+    cursor: pointer; transition: all .16s ease; text-align: left;
+  }
+  .navitem svg { width: 17px; height: 17px; flex: 0 0 auto; }
+  .navitem:hover { color: var(--text); background: rgba(255,255,255,.035); }
+  .navitem.active {
+    color: var(--text); font-weight: 600;
+    background: linear-gradient(92deg, rgba(76,139,245,.18), rgba(124,92,255,.08));
+    border-color: rgba(76,139,245,.38);
+    box-shadow: 0 6px 18px rgba(76,139,245,.12);
+  }
+  .navitem.active svg { color: #9dc0ff; }
 
-  main { display: grid; grid-template-columns: 400px 1fr; gap: 14px; padding: 14px 22px 26px; align-items: start; }
-  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+  .sidebarFoot { margin-top: auto; display: flex; flex-direction: column; gap: 7px; padding: 0 6px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; width: max-content; max-width: 100%;
+    border: 1px solid var(--border); background: var(--panel); border-radius: 999px;
+    padding: 3px 11px; font-size: 11.5px; color: var(--muted); font-family: Consolas, "Cascadia Mono", monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--border2); flex: 0 0 auto; }
+  .chip.ok { color: #b9e8d0; border-color: rgba(90,209,154,.5); background: rgba(90,209,154,.08); }
+  .chip.ok::before { background: var(--ok); box-shadow: 0 0 8px rgba(90,209,154,.8); }
+  .chip.bad { color: #ffb9b3; border-color: rgba(255,123,114,.5); background: rgba(255,123,114,.08); }
+  .chip.bad::before { background: var(--danger); }
+  .finep { font-size: 11px; color: var(--muted); opacity: .75; }
+
+  /* ---------------- content ---------------- */
+  .content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  .topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 22px 26px 2px; }
+  .topbar h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: .2px; }
+  .topbar .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+
+  main.grid { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 16px; padding: 16px 26px 26px; align-items: start; }
+  @media (max-width: 1040px) { main.grid { grid-template-columns: 1fr; } }
+
+  .view { display: none; }
+  .view.active { display: block; animation: viewin .28s ease; }
+  @keyframes viewin { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 
   section {
-    background: linear-gradient(180deg, rgba(255,255,255,.022), rgba(255,255,255,0)), var(--panel);
-    border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; margin-bottom: 14px;
-    box-shadow: 0 10px 26px rgba(0,0,0,.20);
+    background: linear-gradient(180deg, rgba(255,255,255,.032), rgba(255,255,255,0)), var(--panel);
+    border: 1px solid var(--border); border-radius: 16px; padding: 15px 17px; margin-bottom: 16px;
+    box-shadow: 0 20px 44px rgba(0,0,0,.34);
   }
-  h2 { display: flex; align-items: center; gap: 8px; font-size: 11.5px; margin: 0 0 10px;
-       color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 650; }
-  h2::before { content: ""; width: 3px; height: 12px; background: var(--accent); border-radius: 2px; }
+  h2 { display: flex; align-items: center; gap: 9px; font-size: 11px; margin: 0 0 12px;
+       color: var(--muted); text-transform: uppercase; letter-spacing: .13em; font-weight: 650; }
+  h2::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto;
+               background: linear-gradient(140deg, var(--accent), var(--accent2));
+               box-shadow: 0 0 9px rgba(90,120,255,.7); }
 
   label { color: var(--muted); font-size: 12px; }
   input, select {
-    background: #1b1c20; color: var(--text); border: 1px solid var(--border); border-radius: 8px;
-    padding: 6px 9px; font: inherit; font-size: 13px; width: 100%; transition: border-color .15s ease, box-shadow .15s ease;
+    background: var(--inset); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+    padding: 7px 10px; font: inherit; font-size: 13px; width: 100%;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
   }
-  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(76,139,245,.16); }
+  input:hover, select:hover { border-color: var(--border2); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); background: #12151b;
+                              box-shadow: 0 0 0 3px rgba(76,139,245,.18); }
   input.num, .num { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
 
-  button { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
-           padding: 6px 13px; font: inherit; font-size: 13px; cursor: pointer; transition: all .15s ease; }
-  button:hover { border-color: var(--accent); color: #fff; }
-  button:active { transform: translateY(1px); }
-  button.primary { background: linear-gradient(180deg, #5d97f7, #4c8bf5); border-color: #4c8bf5; color: #fff;
-                   font-weight: 600; box-shadow: 0 6px 14px rgba(76,139,245,.25), inset 0 1px 0 rgba(255,255,255,.22); }
-  button.primary:hover { filter: brightness(1.08); }
-  button.mini { padding: 2px 8px; font-size: 12px; }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+    padding: 7px 14px; font: inherit; font-size: 13px; cursor: pointer;
+    transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease, filter .14s ease;
+  }
+  button:hover { border-color: var(--accent); transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(76,139,245,.25); }
+  button.primary {
+    background: linear-gradient(135deg, #4c8bf5, #6d6cf5); border: none; color: #fff; font-weight: 650;
+    box-shadow: 0 10px 24px rgba(90,110,245,.32), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  button.primary:hover { filter: brightness(1.09); box-shadow: 0 12px 28px rgba(90,110,245,.42); }
+  button.mini { padding: 2px 9px; font-size: 12px; border-radius: 8px; }
 
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 5px 6px; font-size: 12.5px; border-bottom: 1px solid rgba(51,54,59,.7); }
+  th, td { text-align: left; padding: 6px; font-size: 12.5px; border-bottom: 1px solid rgba(38,42,49,.8); }
   th { color: var(--muted); font-weight: 600; }
   tr:last-child td { border-bottom: none; }
   td.err { color: var(--danger); }
 
-  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .row { display: flex; gap: 9px; align-items: center; margin-bottom: 9px; }
   .row > label { white-space: nowrap; }
-  .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 9px; }
+  .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
   .fields.three { grid-template-columns: repeat(3, 1fr); }
   .fields label { font-size: 11px; }
-  .checks { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 4px 0 10px; }
-  .checks label { display: flex; gap: 6px; align-items: center; color: var(--text); font-size: 13px; }
+  .checks { display: flex; gap: 15px; flex-wrap: wrap; align-items: center; margin: 5px 0 11px; }
+  .checks label { display: flex; gap: 7px; align-items: center; color: var(--text); font-size: 13px; }
   .checks input { width: auto; accent-color: var(--accent); }
 
-  #canvasWrap { background: #1a1b1f; border: 1px solid var(--border); border-radius: 12px; padding: 8px; }
-  canvas { width: 100%; height: 420px; display: block; border-radius: 8px; }
+  #canvasWrap { background: #101218; border: 1px solid var(--border); border-radius: 14px; padding: 8px; }
+  canvas { width: 100%; height: 420px; display: block; border-radius: 10px; }
   canvas.chart { height: 330px; }
-  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .actions { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 11px; }
 
-  .hint { border: 1px solid var(--border); border-left: 3px solid var(--border); background: rgba(255,255,255,.02);
-          border-radius: 8px; padding: 8px 11px; font-size: 12.5px; color: var(--muted);
-          margin-top: 9px; white-space: pre-wrap; min-height: 20px; }
-  .hint.error { border-left-color: var(--danger); color: #ffb4ae; }
-  .hint.ok    { border-left-color: var(--ok); color: #b9e4c9; }
+  .hint { display: flex; gap: 9px; align-items: flex-start;
+          border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,.02);
+          padding: 9px 12px; font-size: 12.5px; color: var(--muted); margin-top: 10px;
+          white-space: pre-wrap; min-height: 20px; }
+  .hint::before { content: ""; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: 0 0 auto; background: var(--border2); }
+  .hint.ok { color: #b9e8d0; border-color: rgba(90,209,154,.35); }
+  .hint.ok::before { background: var(--ok); box-shadow: 0 0 8px rgba(90,209,154,.8); }
+  .hint.error { color: #ffb9b3; border-color: rgba(255,123,114,.35); }
+  .hint.error::before { background: var(--danger); }
 
-  .result { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 9px; }
-  .kv { background: #1b1c20; border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
-  .kv .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-  .kv .v { font-family: Consolas, monospace; font-size: 15px; margin-top: 1px; }
+  .result { display: grid; grid-template-columns: repeat(auto-fit, minmax(142px, 1fr)); gap: 9px; margin-top: 10px; }
+  .kv { background: var(--inset); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; }
+  .kv .k { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; }
+  .kv .v { font-family: Consolas, monospace; font-size: 16px; margin-top: 2px; }
 
-  .progress { height: 14px; background: #1b1c20; border: 1px solid var(--border); border-radius: 999px;
-              overflow: hidden; margin-top: 10px; }
-  .progress > div { height: 100%; width: 0%; background: linear-gradient(90deg, #4c8bf5, #7aa9ff);
-                    border-radius: 999px; transition: width .35s ease; }
+  .progress { height: 12px; background: var(--inset); border: 1px solid var(--border); border-radius: 999px;
+              overflow: hidden; margin-top: 11px; }
+  .progress > div { height: 100%; width: 0%; border-radius: 999px;
+                    background: linear-gradient(90deg, #4c8bf5, #7c5cff);
+                    box-shadow: 0 0 12px rgba(110,110,255,.5); transition: width .35s ease; }
 
-  pre { background: #17181c; border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px;
+  pre { background: #0d0f13; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px;
         font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; color: var(--muted);
-        white-space: pre-wrap; max-height: 260px; overflow: auto; margin: 9px 0 0; }
-  footer { color: var(--muted); font-size: 12px; padding: 2px 22px 20px; }
+        white-space: pre-wrap; max-height: 260px; overflow: auto; margin: 10px 0 0; }
+  footer { color: var(--muted); font-size: 11.5px; padding: 0 26px 22px; opacity: .8; }
+
+  @media (max-width: 1040px) {
+    .shell { flex-direction: column; }
+    .sidebar { width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px;
+               border-right: none; border-bottom: 1px solid var(--border); padding: 12px 16px; }
+    .nav { flex-direction: row; flex-wrap: wrap; }
+    .sidebarFoot { margin: 0 0 0 auto; flex-direction: row; flex-wrap: wrap; padding: 0; }
+    .finep { display: none; }
+  }
+  @media (max-width: 560px) {
+    .topbar { padding: 16px 16px 0; }
+    main.grid { padding: 12px 16px 20px; }
+    .fields, .fields.three { grid-template-columns: repeat(2, 1fr); }
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="brandrow">
-    <span class="mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 15V9M9 9L4 4M9 9l5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg></span>
-    <div>
-      <h1>OpenAntenna Studio <span class="badge">web</span></h1>
-      <div class="sub">Offline and stdlib-only - served by your own Python on 127.0.0.1, using the same core functions as the desktop app. Nothing external is loaded.</div>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 15V9M9 9L4 4M9 9l5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg></span>
+      <div>
+        <div class="brandname">OpenAntenna</div>
+        <div class="brandsub">studio - web</div>
+      </div>
     </div>
-    <div class="chips">
+    <nav class="nav" aria-label="Sections">
+      <button class="navitem active" data-view="modeling" onclick="showView('modeling')">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3l6 3.4v7.2L10 17l-6-3.4V6.4L10 3zM10 3v6.7m6-3.3L10 9.7 4 6.4"/></svg>
+        Modeling
+      </button>
+      <button class="navitem" data-view="simulate" onclick="showView('simulate')">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.2"/><path d="M8.4 7.2l4.8 2.8-4.8 2.8z" fill="currentColor" stroke="none"/></svg>
+        Simulate
+      </button>
+      <button class="navitem" data-view="results" onclick="showView('results')">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16V9.5m5 6.5V4.5m5 11.5v-4.5"/></svg>
+        Results
+      </button>
+    </nav>
+    <div class="sidebarFoot">
       <span class="chip" id="chipPort">127.0.0.1:8077</span>
       <span class="chip" id="engineChip">engine: checking ...</span>
+      <div class="finep">offline - stdlib only - your machine</div>
     </div>
-  </div>
-</header>
-<nav class="tabs">
-  <button class="tab active" data-view="modeling" onclick="showView('modeling')">Modeling</button>
-  <button class="tab" data-view="simulate" onclick="showView('simulate')">Simulate</button>
-  <button class="tab" data-view="results" onclick="showView('results')">Results</button>
-</nav>
+  </aside>
 
-<div id="view-modeling">
-<main>
-  <div>
-    <section>
-      <h2>Patch design</h2>
-      <div class="fields">
-        <div><label for="f0">frequency (GHz)</label><input id="f0" class="num" value="2.45"></div>
-        <div><label for="er">epsilon r</label><input id="er" class="num" value="2.1"></div>
-        <div><label for="hh">height (mm)</label><input id="hh" class="num" value="1.6"></div>
-        <div><label for="feed">feed</label><select id="feed"><option>inset</option><option>edge</option><option>probe</option></select></div>
+  <div class="content">
+    <header class="topbar">
+      <div>
+        <h1 id="viewTitle">Modeling</h1>
+        <div class="sub" id="viewSub">draw blocks and define parameters</div>
       </div>
-      <button class="primary" onclick="synthesise()">Synthesise</button>
-      <div class="result" id="patchOut"></div>
-      <div id="patchWarn" class="sub" style="margin-top:6px"></div>
-    </section>
-    <section>
-      <h2>Parameters (by definition)</h2>
-      <table><thead><tr><th style="width:30%">name</th><th style="width:42%">expression</th><th>value</th><th></th></tr></thead><tbody id="paramsBody"></tbody></table>
-      <div class="actions"><button onclick="addParam()">+ Add parameter</button></div>
-    </section>
-    <section>
-      <h2>Add block (numbers, CST-style)</h2>
-      <div class="fields">
-        <div><label for="bx0">x0</label><input id="bx0" class="num" value="0"></div>
-        <div><label for="by0">y0</label><input id="by0" class="num" value="0"></div>
-        <div><label for="bx1">x1</label><input id="bx1" class="num" value="L"></div>
-        <div><label for="by1">y1</label><input id="by1" class="num" value="W"></div>
+    </header>
+
+    <div id="view-modeling" class="view active">
+    <main class="grid">
+      <div>
+        <section>
+          <h2>Patch design</h2>
+          <div class="fields">
+            <div><label for="f0">frequency (GHz)</label><input id="f0" class="num" value="2.45"></div>
+            <div><label for="er">epsilon r</label><input id="er" class="num" value="2.1"></div>
+            <div><label for="hh">height (mm)</label><input id="hh" class="num" value="1.6"></div>
+            <div><label for="feed">feed</label><select id="feed"><option>inset</option><option>edge</option><option>probe</option></select></div>
+          </div>
+          <button class="primary" onclick="synthesise()">Synthesise</button>
+          <div class="result" id="patchOut"></div>
+          <div id="patchWarn" class="sub" style="margin-top:7px"></div>
+        </section>
+        <section>
+          <h2>Parameters (by definition)</h2>
+          <table><thead><tr><th style="width:30%">name</th><th style="width:42%">expression</th><th>value</th><th></th></tr></thead><tbody id="paramsBody"></tbody></table>
+          <div class="actions"><button onclick="addParam()">+ Add parameter</button></div>
+        </section>
+        <section>
+          <h2>Add block (numbers, CST-style)</h2>
+          <div class="fields">
+            <div><label for="bx0">x0</label><input id="bx0" class="num" value="0"></div>
+            <div><label for="by0">y0</label><input id="by0" class="num" value="0"></div>
+            <div><label for="bx1">x1</label><input id="bx1" class="num" value="L"></div>
+            <div><label for="by1">y1</label><input id="by1" class="num" value="W"></div>
+          </div>
+          <div class="row">
+            <label for="bth">thickness (mm)</label>
+            <input id="bth" class="num" value="h_sub" style="max-width:130px">
+            <button class="primary" onclick="addBlock()">+ Add block</button>
+          </div>
+          <div class="sub">Corners and thickness accept parameter expressions; corners are evaluated when the block is added.</div>
+        </section>
+        <section>
+          <h2>Shapes</h2>
+          <table><thead><tr><th>shape</th><th>vertices</th><th>bounds (mm)</th><th>thickness</th><th></th></tr></thead><tbody id="shapesBody"></tbody></table>
+          <div class="actions"><button onclick="clearShapes()">Clear all</button></div>
+          <div class="sub">Closed shapes are merged into generated decks when the Simulate include switch is on.</div>
+        </section>
       </div>
-      <div class="row">
-        <label for="bth">thickness (mm)</label>
-        <input id="bth" class="num" value="h_sub" style="max-width:130px">
-        <button class="primary" onclick="addBlock()">+ Add block</button>
+      <div>
+        <section>
+          <h2>Canvas</h2>
+          <div id="canvasWrap"><canvas id="cv" width="940" height="420"></canvas></div>
+          <div class="actions">
+            <button onclick="showGrid()">Show solver grid</button>
+            <button onclick="drawCanvas()">Outlines only</button>
+            <button onclick="exportDxf()">Export DXF</button>
+          </div>
+          <div id="status" class="hint">ready. Add a block or draw, then preview on the solver grid.</div>
+        </section>
       </div>
-      <div class="sub">Corners and thickness accept parameter expressions; corners are evaluated when the block is added.</div>
-    </section>
-    <section>
-      <h2>Shapes</h2>
-      <table><thead><tr><th>shape</th><th>vertices</th><th>bounds (mm)</th><th>thickness</th><th></th></tr></thead><tbody id="shapesBody"></tbody></table>
-      <div class="actions"><button onclick="clearShapes()">Clear all</button></div>
-      <div class="sub">Closed shapes are merged into generated decks when the Simulate tab's include switch is on.</div>
-    </section>
+    </main>
+    </div>
+
+    <div id="view-simulate" class="view">
+    <main class="grid">
+      <div>
+        <section>
+          <h2>Design</h2>
+          <div class="fields three">
+            <div><label for="simName">name</label><input id="simName" value="web-design"></div>
+            <div><label for="simF0">frequency (GHz)</label><input id="simF0" class="num" value="2.45"></div>
+            <div><label for="simMat">material</label><input id="simMat" value="PTFE"></div>
+            <div><label for="simH">height (mm)</label><input id="simH" class="num" value="1.6"></div>
+            <div><label for="simFeed">feed</label><select id="simFeed"><option>probe</option><option>inset</option><option>edge</option></select></div>
+            <div><label for="simPts">sweep points</label><input id="simPts" class="num" value="201"></div>
+            <div><label for="simW">W (mm, optional)</label><input id="simW" class="num" value=""></div>
+            <div><label for="simL">L (mm, optional)</label><input id="simL" class="num" value=""></div>
+          </div>
+          <div class="checks">
+            <label><input type="checkbox" id="simInclude" checked> include sketch shapes</label>
+          </div>
+        </section>
+        <section>
+          <h2>Solver</h2>
+          <div class="fields three">
+            <div><label for="simMesh">mesh cells / wavelength</label><input id="simMesh" class="num" value="15"></div>
+            <div><label for="simSub">substrate cells</label><input id="simSub" class="num" value="8"></div>
+            <div><label for="simLoss">dielectric loss</label><select id="simLoss"><option>kappa</option><option>none</option></select></div>
+            <div><label for="simCap">max timesteps</label><input id="simCap" class="num" value="400000"></div>
+            <div><label for="simEnd">end criteria</label><input id="simEnd" class="num" value="0.0001"></div>
+          </div>
+          <div class="checks">
+            <label><input type="checkbox" id="simRefine" checked> port refine</label>
+            <label><input type="checkbox" id="simSnap" checked> edge snapping</label>
+            <label><input type="checkbox" id="simNf2ff"> NF2FF</label>
+          </div>
+          <div class="row">
+            <label for="simDir">run directory</label>
+            <input id="simDir" class="num" value="runs/web_run">
+          </div>
+        </section>
+      </div>
+      <div>
+        <section>
+          <h2>Run</h2>
+          <div class="actions">
+            <button onclick="generateModel()">Generate model</button>
+            <button class="primary" onclick="startRun()">Run simulation</button>
+            <button onclick="stopPolling()">Stop watching</button>
+          </div>
+          <div class="progress"><div id="simBar"></div></div>
+          <div id="simStatus" class="hint">idle. Generate the model, then run it. One run at a time; progress comes from the solver's own progress.json.</div>
+          <pre id="simDetail"></pre>
+        </section>
+      </div>
+    </main>
+    </div>
+
+    <div id="view-results" class="view">
+    <main class="grid">
+      <div>
+        <section>
+          <h2>Load a run</h2>
+          <div class="row">
+            <label for="resultsDir">run directory</label>
+            <input id="resultsDir" class="num" value="runs/web_run">
+          </div>
+          <div class="actions"><button class="primary" onclick="loadResults()">Load results</button></div>
+          <div class="result" id="resMetrics"></div>
+          <pre id="resProvenance"></pre>
+        </section>
+        <section>
+          <h2>Far field (if NF2FF ran)</h2>
+          <pre id="resFarfield">no far-field data loaded</pre>
+        </section>
+      </div>
+      <div>
+        <section>
+          <h2>S11</h2>
+          <div id="canvasWrap"><canvas id="cv2" class="chart" width="940" height="330"></canvas></div>
+          <pre id="resBands"></pre>
+        </section>
+      </div>
+    </main>
+    </div>
+
+    <footer>offline - served by your own python - model output, not a measurement - DXF carries no units by convention</footer>
   </div>
-  <div>
-    <section>
-      <h2>Canvas</h2>
-      <div id="canvasWrap"><canvas id="cv" width="940" height="420"></canvas></div>
-      <div class="actions">
-        <button onclick="showGrid()">Show solver grid</button>
-        <button onclick="drawCanvas()">Outlines only</button>
-        <button onclick="exportDxf()">Export DXF</button>
-      </div>
-      <div id="status" class="hint">ready. Add a block or draw, then preview on the solver grid.</div>
-    </section>
-  </div>
-</main>
 </div>
-
-<div id="view-simulate" style="display:none">
-<main>
-  <div>
-    <section>
-      <h2>Design</h2>
-      <div class="fields three">
-        <div><label for="simName">name</label><input id="simName" value="web-design"></div>
-        <div><label for="simF0">frequency (GHz)</label><input id="simF0" class="num" value="2.45"></div>
-        <div><label for="simMat">material</label><input id="simMat" value="PTFE"></div>
-        <div><label for="simH">height (mm)</label><input id="simH" class="num" value="1.6"></div>
-        <div><label for="simFeed">feed</label><select id="simFeed"><option>probe</option><option>inset</option><option>edge</option></select></div>
-        <div><label for="simPts">sweep points</label><input id="simPts" class="num" value="201"></div>
-        <div><label for="simW">W (mm, optional)</label><input id="simW" class="num" value=""></div>
-        <div><label for="simL">L (mm, optional)</label><input id="simL" class="num" value=""></div>
-      </div>
-      <div class="checks">
-        <label><input type="checkbox" id="simInclude" checked> include sketch shapes</label>
-      </div>
-    </section>
-    <section>
-      <h2>Solver</h2>
-      <div class="fields three">
-        <div><label for="simMesh">mesh cells / wavelength</label><input id="simMesh" class="num" value="15"></div>
-        <div><label for="simSub">substrate cells</label><input id="simSub" class="num" value="8"></div>
-        <div><label for="simLoss">dielectric loss</label><select id="simLoss"><option>kappa</option><option>none</option></select></div>
-        <div><label for="simCap">max timesteps</label><input id="simCap" class="num" value="400000"></div>
-        <div><label for="simEnd">end criteria</label><input id="simEnd" class="num" value="0.0001"></div>
-      </div>
-      <div class="checks">
-        <label><input type="checkbox" id="simRefine" checked> port refine</label>
-        <label><input type="checkbox" id="simSnap" checked> edge snapping</label>
-        <label><input type="checkbox" id="simNf2ff"> NF2FF</label>
-      </div>
-      <div class="row">
-        <label for="simDir">run directory</label>
-        <input id="simDir" class="num" value="runs/web_run">
-      </div>
-    </section>
-  </div>
-  <div>
-    <section>
-      <h2>Run</h2>
-      <div class="actions">
-        <button onclick="generateModel()">Generate model</button>
-        <button class="primary" onclick="startRun()">Run simulation</button>
-        <button onclick="stopPolling()">Stop watching</button>
-      </div>
-      <div class="progress"><div id="simBar"></div></div>
-      <div id="simStatus" class="hint">idle. Generate the model, then run it. One run at a time; progress comes from the solver's own progress.json.</div>
-      <pre id="simDetail"></pre>
-    </section>
-  </div>
-</main>
-</div>
-
-<div id="view-results" style="display:none">
-<main>
-  <div>
-    <section>
-      <h2>Load a run</h2>
-      <div class="row">
-        <label for="resultsDir">run directory</label>
-        <input id="resultsDir" class="num" value="runs/web_run">
-      </div>
-      <div class="actions"><button class="primary" onclick="loadResults()">Load results</button></div>
-      <div class="result" id="resMetrics"></div>
-      <pre id="resProvenance"></pre>
-    </section>
-    <section>
-      <h2>Far field (if NF2FF ran)</h2>
-      <pre id="resFarfield">no far-field data loaded</pre>
-    </section>
-  </div>
-  <div>
-    <section>
-      <h2>S11</h2>
-      <div id="canvasWrap"><canvas id="cv2" class="chart" width="940" height="330"></canvas></div>
-      <pre id="resBands"></pre>
-    </section>
-  </div>
-</main>
-</div>
-
-<footer>offline - served by your own python - model output, not a measurement - DXF carries no units by convention</footer>
 <script>
 const state = { parameters: [["L", "30"], ["W", "20"], ["h_sub", "1.6"]], shapes: [], grid: null };
 const $ = (id) => document.getElementById(id);
+const VIEW_TITLES = {
+  modeling: ["Modeling", "draw blocks and define parameters"],
+  simulate: ["Simulate", "generate the deck and run the solver"],
+  results: ["Results", "read a run directory"],
+};
 
 function showView(name) {
   ["modeling", "simulate", "results"].forEach((view) => {
-    $("view-" + view).style.display = view === name ? "" : "none";
+    const el = $("view-" + view);
+    el.classList.toggle("active", view === name);
   });
-  document.querySelectorAll("nav.tabs button").forEach((button) => {
-    button.className = button.dataset.view === name ? "tab active" : "tab";
+  document.querySelectorAll("nav.nav button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === name);
   });
+  const title = VIEW_TITLES[name] || VIEW_TITLES.modeling;
+  $("viewTitle").textContent = title[0];
+  $("viewSub").textContent = title[1];
 }
 
 function setStatus(text, isError) {
@@ -870,7 +968,7 @@ function drawCanvas() {
   const width = canvas.width, height = canvas.height;
   ctx.clearRect(0, 0, width, height);
 
-  ctx.strokeStyle = "rgba(51,54,59,.55)";
+  ctx.strokeStyle = "rgba(48,53,62,.5)";
   ctx.lineWidth = 1;
   for (let gx = 0; gx < width; gx += 32) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke(); }
   for (let gy = 0; gy < height; gy += 32) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke(); }
@@ -885,7 +983,7 @@ function drawCanvas() {
   const Y = (y) => oy - y * scale;
 
   if (state.grid) {
-    ctx.fillStyle = "rgba(118, 196, 148, 0.30)";
+    ctx.fillStyle = "rgba(90, 209, 154, 0.28)";
     const c = state.grid.cell_mm;
     state.grid.cells.forEach((row, ri) => {
       for (let ci = 0; ci < row.length; ci++) {
@@ -908,20 +1006,26 @@ function drawCanvas() {
       shape.points.forEach((p, i) => { if (i === 0) { ctx.moveTo(X(p[0]), Y(p[1])); } else { ctx.lineTo(X(p[0]), Y(p[1])); } });
       if (shape.closed || shape.kind === "block") ctx.closePath();
     }
-    if (shape.kind === "block") { ctx.fillStyle = "rgba(76, 139, 245, 0.14)"; ctx.fill(); }
-    ctx.strokeStyle = "#4c8bf5";
-    ctx.shadowColor = "rgba(76,139,245,.55)";
-    ctx.shadowBlur = 8;
+    if (shape.kind === "block") {
+      const fill = ctx.createLinearGradient(0, 0, width, height);
+      fill.addColorStop(0, "rgba(76,139,245,.22)");
+      fill.addColorStop(1, "rgba(124,92,255,.16)");
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    ctx.strokeStyle = "#6ea1ff";
+    ctx.shadowColor = "rgba(90,120,255,.65)";
+    ctx.shadowBlur = 10;
     ctx.stroke();
     ctx.shadowBlur = 0;
   });
 
   if (!state.shapes.length && !state.grid) {
-    ctx.fillStyle = "#9aa0a9";
+    ctx.fillStyle = "#98a0ac";
     ctx.font = "13px Segoe UI";
     ctx.fillText("No shapes yet - add a block on the left.", 24, 34);
   }
-  ctx.fillStyle = "#9aa0a9";
+  ctx.fillStyle = "#98a0ac";
   ctx.font = "12px Consolas, monospace";
   ctx.fillText("millimetres", width - 92, height - 10);
 }
@@ -1068,7 +1172,7 @@ function drawS11(curve, resonanceGhz) {
   const width = canvas.width, height = canvas.height;
   ctx.clearRect(0, 0, width, height);
   if (!curve || !curve.length) {
-    ctx.fillStyle = "#9aa0a9";
+    ctx.fillStyle = "#98a0ac";
     ctx.font = "13px Segoe UI";
     ctx.fillText("Load a run to see the S11 curve.", 24, 34);
     return;
@@ -1082,7 +1186,7 @@ function drawS11(curve, resonanceGhz) {
   const X = (x) => padL + (x - xMin) / Math.max(1e-9, xMax - xMin) * (width - padL - padR);
   const Y = (y) => padT + (yMax - y) / Math.max(1e-9, yMax - yMin) * (height - padT - padB);
 
-  ctx.strokeStyle = "rgba(51,54,59,.75)";
+  ctx.strokeStyle = "rgba(48,53,62,.7)";
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     const x = xMin + (xMax - xMin) * i / 4;
@@ -1090,9 +1194,9 @@ function drawS11(curve, resonanceGhz) {
     const y = yMin + (yMax - yMin) * i / 4;
     ctx.beginPath(); ctx.moveTo(padL, Y(y)); ctx.lineTo(width - padR, Y(y)); ctx.stroke();
   }
-  ctx.strokeStyle = "#3a3d42";
+  ctx.strokeStyle = "#3a3f48";
   ctx.strokeRect(padL, padT, width - padL - padR, height - padT - padB);
-  ctx.fillStyle = "#9aa0a9";
+  ctx.fillStyle = "#98a0ac";
   ctx.font = "11px Consolas, monospace";
   for (let i = 0; i <= 4; i++) {
     const x = xMin + (xMax - xMin) * i / 4;
@@ -1103,7 +1207,7 @@ function drawS11(curve, resonanceGhz) {
   ctx.fillText("GHz", width - padR - 26, height - padB + 14);
   ctx.fillText("dB", 12, padT + 10);
 
-  ctx.strokeStyle = "rgba(154,160,169,.8)";
+  ctx.strokeStyle = "rgba(152,160,172,.8)";
   ctx.setLineDash([5, 4]);
   ctx.beginPath();
   ctx.moveTo(padL, Y(-10));
@@ -1112,8 +1216,8 @@ function drawS11(curve, resonanceGhz) {
   ctx.setLineDash([]);
 
   const gradient = ctx.createLinearGradient(0, padT, 0, height - padB);
-  gradient.addColorStop(0, "rgba(76,139,245,.30)");
-  gradient.addColorStop(1, "rgba(76,139,245,.02)");
+  gradient.addColorStop(0, "rgba(90,120,255,.32)");
+  gradient.addColorStop(1, "rgba(124,92,255,.02)");
   ctx.beginPath();
   ctx.moveTo(X(xs[0]), Y(ys[0]));
   curve.forEach((point, index) => { if (index > 0) ctx.lineTo(X(point[0] / 1e9), Y(point[1])); });
@@ -1123,10 +1227,10 @@ function drawS11(curve, resonanceGhz) {
   ctx.fillStyle = gradient;
   ctx.fill();
 
-  ctx.strokeStyle = "#4c8bf5";
+  ctx.strokeStyle = "#6ea1ff";
   ctx.lineWidth = 2;
-  ctx.shadowColor = "rgba(76,139,245,.55)";
-  ctx.shadowBlur = 8;
+  ctx.shadowColor = "rgba(90,120,255,.6)";
+  ctx.shadowBlur = 9;
   ctx.beginPath();
   curve.forEach((point, index) => {
     const px = X(point[0] / 1e9), py = Y(point[1]);
@@ -1141,7 +1245,7 @@ function drawS11(curve, resonanceGhz) {
     const mx = X(xs[best]), my = Y(ys[best]);
     ctx.fillStyle = "#ffd166";
     ctx.beginPath(); ctx.arc(mx, my, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#e8e9ec";
+    ctx.fillStyle = "#eef0f4";
     ctx.font = "12px Consolas, monospace";
     const label = resonanceGhz.toFixed(4) + " GHz";
     ctx.fillText(label, Math.min(mx + 8, width - padR - 92), Math.max(my - 8, padT + 12));
