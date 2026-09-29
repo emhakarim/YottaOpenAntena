@@ -69,3 +69,23 @@ drive the same core functions.
 * Tests cover the generate path offline (deck + manifest + sketch count), a synthetic run
   directory for results, and the run state machine through an injected runner
   (`webui.set_run_runner`) - nothing needs a solver in CI.
+
+## Cancellation (2026-09-29 night)
+
+The Run panel now has **Cancel run** (`/api/run_cancel`): the server sets a cancel event and
+the adapter's `_execute` kills the solver **process tree** (Windows `taskkill /T`, because
+`openEMS.exe` is a child of the script process - killing only the script leaves an orphan
+burning CPU).  The run status becomes `cancelled`; the page stops polling and says plainly
+that no results were written.  Tested at both levels: the adapter (a real subprocess, stopped
+by the event) and the web state machine (an injected runner that honours the event).
+
+## One-command start
+
+```powershell
+python scripts/start_webui.py                      # port 8077, opens the browser
+python scripts/start_webui.py --no-browser --port 8080
+```
+
+The script sets `OPENEMS_ROOT` from `tools/openEMS` when it exists, binds localhost, and
+refuses loudly when the port is already taken (two servers on one port would split
+connections and serve a stale page - the Windows double-bind footgun).

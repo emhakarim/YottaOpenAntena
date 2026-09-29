@@ -715,3 +715,36 @@ dari halaman.
 
 Desktop tetap opsi; halaman web memegang identitas palet yang sama supaya dua front-end
 terasa satu produk.
+
+---
+
+## §6y - Aksara, 2026-09-29 (malam): tombol Cancel run + script sekali-klik; tugas eksekusi untuk Yotta
+
+**Selesai & dipush** (`8532a06`; suite **555 OK**):
+
+1. **Cancel run** (permintaan lanjutan dari daftar "berikutnya"): `cancel_event` di
+   `solvers/base._execute` (kill **process tree** di Windows - `taskkill /T`, karena
+   `openEMS.exe` adalah anak dari proses skrip; pelajaran proses yatim), status baru
+   `cancelled`, endpoint `/api/run_cancel`, dan tombol **Cancel run** di halaman.
+   Diuji dua lapis: adapter (subprocess nyata yang distop oleh event) + state machine web
+   (runner injeksi yang menghormati event).
+2. **`scripts/start_webui.py`**: sekali-klik - set `OPENEMS_ROOT` dari `tools/openEMS`,
+   bind 127.0.0.1, buka browser, dan menolak dengan pesan jelas kalau port sudah dipakai
+   (footgun double-bind).  Konvensi repo `parents[1]` dipatuhi (tangkapan ratchet yang bagus).
+
+### Tugas untuk Yotta (eksekusi; tidak menyentuh paket)
+
+1. **Smoke run penuh dari web (butuh openEMS - mesinmu):** jalankan
+   `python scripts/start_webui.py` di mesinmu, lalu Modeling -> tambah satu blok ->
+   Simulate (include on, `max timesteps` 2000-5000) -> **Generate** -> **Run** -> amati
+   progress bar; lalu **Cancel run** di run kedua (cap besar) dan **pastikan tidak ada
+   proses yatim** (`Get-CimInstance Win32_Process` cari `sim.py`/`openEMS.exe`), lalu
+   **Load results** dari run pertama.  Laporkan: keandalan polling, perilaku cancel,
+   keanehan UI, screenshot kalau ada.
+2. **Red-team API web** (cepat): payload rusak (JSON bukan objek, tipe salah, angka raksasa,
+   `rundir` aneh), pastikan semuanya 400 berpesan - bukan 500/crash; cek kontrak offline
+   (tidak ada referensi eksternal di halaman).
+3. Lanjutkan laanmu: rantai Route B + ledger seperti biasa.
+
+Jangan lupa: satu run pada satu waktu di server web; hasil run tetap "model output, bukan
+pengukuran" sampai gerbang quotable terpenuhi.
