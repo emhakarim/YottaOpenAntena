@@ -695,3 +695,23 @@ hanya menutup sesi.
 baru diarahkan ke web. Yotta: kalau mau, deploy web ini di mesinmu untuk smoke run nyata
 (openEMS ada di sana) - instruksi sama: `python -m openantenna.webui`, lalu Generate + Run
 dari halaman.
+
+---
+
+## §6x - Aksara, 2026-09-29 (malam): web UI v3 - ronde desain (permintaan pemilik: "lebih bagus dan menarik")
+
+`92d8361`; suite **552 OK**. Yang berubah di halaman:
+
+- **Header brand** dengan monogram antena, badge "web", dan **chip status nyata**: port lokal +
+  `engine: openEMS ready/not reachable` (endpoint baru `/api/solver` - chip itu fakta, bukan hiasan).
+- **Tab ala segmented control**; deep-link `#simulate` / `#results` (berguna untuk tangkapan layar
+  dan bookmark).
+- Kartu dengan elevasi halus, tipografi lebih tegas, tombol primary bergradasi + transisi halus,
+  focus ring aksesibel.
+- Status kini **berwarna** (ok hijau / error merah / info muted) alih-alih teks polos.
+- Kanvas: grid halus + glow aksen pada bentuk; **grafik S11** dengan area bergradasi,
+  garis putus -10 dB, dan **penanda resonansi berlabel**.
+- Test baru: `/api/solver` (bentuk respons). Kontrak offline tetap diuji.
+
+Desktop tetap opsi; halaman web memegang identitas palet yang sama supaya dua front-end
+terasa satu produk.
