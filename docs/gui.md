@@ -37,9 +37,12 @@ describes what a run would use rather than what the widgets happen to say.
   (and would freeze CI) when a test loaded a bad run directory. Failures are written into
   the panel and shown non-modally.
 * **A/B comparisons state that a shift is only meaningful if one variable changed.**
-* **Multiple dielectric layers are refused, not silently collapsed.** The GUI warns on
-  load, and the Phase 1 generator raises `supports a single dielectric layer; got 2` — the
-  honest behaviour until the stackup is collapsed to an effective medium.
+* **Multiple dielectric layers are modelled, one material box per layer.** The generator
+  draws each dielectric layer on its own (kappa/none loss; the dispersive path is still
+  single-layer and refuses with a reason), and every layer interface becomes an exact mesh
+  line. The patch-synthesis formulas still assume a single dielectric: a stacked project
+  without explicit patch dimensions is refused rather than approximated, and the GUI warns
+  on load too.
 * **Every chart is matplotlib, styled to match the app.** Figure surface, text and grid
   follow the dark palette, so no tab glares white against the window; the styling pass is
   one rcParams update, skipped cleanly when matplotlib is absent. The roadmap lists a

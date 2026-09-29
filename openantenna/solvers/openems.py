@@ -113,6 +113,8 @@ EPS_SUB = $EPS_SUB         # substrate relative permittivity
 KAPPA_SUB = $KAPPA_SUB     # substrate conductivity [S/m] (loss)
 TAN_D_SUB = $TAN_D_SUB     # substrate loss tangent at F0 (reference value)
 MU_SUB = $MU_SUB
+MULTI_LAYER = $MULTI_LAYER     # True when the stackup carries more than one dielectric layer
+SUBSTRATE_TOP_Z = $SUBSTRATE_TOP_Z   # bottom of the patch-side (top) substrate layer [m]
 LOSS_MODEL = "$LOSS_MODEL"  # "kappa" (conductivity), "debye" (dispersive) or "none"
 DEBYE_EPS_INF = $DEBYE_EPS_INF        # Debye eps_inf (high-frequency permittivity)
 DEBYE_EPS_DELTA = $DEBYE_EPS_DELTA    # Debye pole strength (eps_s - eps_inf)
@@ -246,10 +248,26 @@ if LOSS_MODEL == "debye":
 else:
     substrate = CSX.AddMaterial("substrate", epsilon=EPS_SUB, mue=MU_SUB, kappa=KAPPA_SUB)
 substrate.AddBox(
-    [-GROUND_X / 2.0, -GROUND_Y / 2.0, -H_TOTAL],
+    [-GROUND_X / 2.0, -GROUND_Y / 2.0, SUBSTRATE_TOP_Z],
     [GROUND_X / 2.0, GROUND_Y / 2.0, 0.0],
     priority=1,
 )
+
+# Extra dielectric layers below the patch-side layer.  Each layer is its own material box;
+# the interface planes are added as exact mesh lines in the mesh section below.
+if MULTI_LAYER:
+    SUBSTRATE_EXTRA = $SUBSTRATE_EXTRA
+    for _index, (_z0, _z1, _eps, _kappa, _mue) in enumerate(SUBSTRATE_EXTRA, start=2):
+        _extra = CSX.AddMaterial("substrate_%d" % _index, epsilon=_eps, mue=_mue, kappa=_kappa)
+        _extra.AddBox(
+            [-GROUND_X / 2.0, -GROUND_Y / 2.0, _z0],
+            [GROUND_X / 2.0, GROUND_Y / 2.0, _z1],
+            priority=1,
+        )
+    print(
+        "SUBSTRATE: %d dielectric layer(s), one material box each; the top layer carries the patch"
+        % (len(SUBSTRATE_EXTRA) + 1)
+    )
 
 # Metals are modelled as infinitely thin sheets: a degenerate box whose start
 # and stop coincide in z.  openEMS snaps such a sheet onto the mesh.  Forcing a
@@ -451,6 +469,8 @@ for x0, y0 in ELEMENTS:
     mesh.AddLine("x", [x0 - W_PATCH / 2.0, x0 + W_PATCH / 2.0])
     mesh.AddLine("y", [y0 - L_PATCH / 2.0, y0 + L_PATCH / 2.0])
 mesh.AddLine("z", np.linspace(-H_TOTAL, 0.0, MESH_SUBSTRATE_CELLS + 1))
+if MULTI_LAYER:
+    mesh.AddLine("z", $SUBSTRATE_INTERFACES)
 mesh.AddLine("z", [DOM_Z_BOT, -H_TOTAL, 0.0, DOM_Z_TOP])
 mesh.AddLine("z", np.linspace(0.0, DOM_Z_TOP, 9))
 mesh.AddLine("z", np.linspace(DOM_Z_BOT, -H_TOTAL, 5))
@@ -855,12 +875,19 @@ class OpenEMSSolver(SolverAdapter):
     def render_script(self, project: Project) -> str:
         """Render the openEMS python script for ``project`` (no I/O)."""
         layers = project.substrate.dielectric_layers() or project.substrate.layers
-        if len(layers) > 1:
+        multi_layer = len(layers) > 1
+        if multi_layer and self.loss_model == "debye":
             raise ValueError(
-                "the Phase 1 openEMS generator supports a single dielectric layer; "
-                f"got {len(layers)}. Collapse the stackup to an effective medium first."
+                "the dispersive (debye) loss model is single-layer only for now: use "
+                "loss_model=kappa or none, or collapse the stackup to an effective medium."
             )
-        layer = layers[0]
+        if multi_layer and not project.patch.is_synthesised():
+            raise ValueError(
+                "a multi-layer stackup needs explicit patch dimensions: the synthesis "
+                "formulas assume a single dielectric.  Set the patch width and length, or "
+                "collapse the stackup to an effective medium."
+            )
+        layer = layers[-1]  # the layer at the patch; a single-layer stackup has exactly this one
 
         material_name = layer.material
         epsilon_r = 1.0
@@ -910,6 +937,36 @@ class OpenEMSSolver(SolverAdapter):
                 eps_delta_d = 2.0 * tan_delta * epsilon_r
                 tau_d = 1.0 / (2.0 * math.pi * project.sweep.center_hz)
         self.last_debye = (eps_inf_d, eps_delta_d, tau_d)
+
+        # ---- extra dielectric layers below the patch-side layer --------------------------
+        # One material box per layer (drawn by the template when MULTI_LAYER); everything
+        # above this point still describes the top layer, exactly as for a single layer.
+        # Interface planes become exact mesh lines so every layer boundary lands on a cell
+        # boundary.  layer-order: the model stores layers bottom -> top.
+        substrate_top_z = -layer.thickness_m if multi_layer else -project.substrate.total_thickness_m
+        extra_layers = []
+        interface_z = []
+        _z_cursor = -project.substrate.total_thickness_m
+        for _spec in layers[:-1]:
+            try:
+                _spec_material = get_material(_spec.material)
+            except KeyError:
+                raise ValueError(
+                    f"unknown substrate material {_spec.material!r}; define it in the "
+                    "material library before generating solver input"
+                ) from None
+            _spec_eps = float(_spec_material.epsilon_r)
+            _spec_tan = float(_spec_material.tan_delta)
+            _spec_kappa = (
+                (2.0 * math.pi * project.sweep.center_hz * EPS0 * _spec_eps * _spec_tan)
+                if (self.loss_model != "none" and _spec_tan > 0.0)
+                else 0.0
+            )
+            _z0 = _z_cursor
+            _z1 = _z_cursor + _spec.thickness_m
+            extra_layers.append([_z0, _z1, _spec_eps, _spec_kappa, float(_spec_material.mu_r)])
+            interface_z.append(_z1)
+            _z_cursor = _z1
 
         design = synthesize_patch(
             frequency_hz=project.sweep.center_hz,
@@ -1107,6 +1164,10 @@ class OpenEMSSolver(SolverAdapter):
             KAPPA_SUB=fmt(kappa_sub),
             TAN_D_SUB=fmt(tan_delta),
             MU_SUB=fmt(mu_r),
+            MULTI_LAYER="True" if multi_layer else "False",
+            SUBSTRATE_TOP_Z=fmt(substrate_top_z),
+            SUBSTRATE_EXTRA=repr(extra_layers),
+            SUBSTRATE_INTERFACES=repr(interface_z),
             LOSS_MODEL=self.loss_model,
             DEBYE_EPS_INF=fmt(eps_inf_d),
             DEBYE_EPS_DELTA=fmt(eps_delta_d),
@@ -1162,7 +1223,7 @@ class OpenEMSSolver(SolverAdapter):
         # stored result can be re-analysed without the material library that created
         # it (an analyser reading project.json only sees a material *name*).
         layers = project.substrate.dielectric_layers() or project.substrate.layers
-        layer = layers[0]
+        layer = layers[-1]  # the patch-side layer; a multi-layer stackup lists all below
         substrate_info: Dict[str, Any] = {
             "material": layer.material,
             "thickness_m": layer.thickness_m,
@@ -1179,6 +1240,11 @@ class OpenEMSSolver(SolverAdapter):
             )
         except KeyError:
             substrate_info["note"] = "material not found in the built-in material library"
+        if len(layers) > 1:
+            substrate_info["layers"] = [
+                {"material": entry.material, "thickness_m": entry.thickness_m}
+                for entry in layers
+            ]
 
         meta = {
             "solver": self.name,
