@@ -6,6 +6,7 @@ boundary, excitation and stop criteria held identical.
     python scripts/b2_coplanar_ab_test.py                 # write both decks, run nothing
     python scripts/b2_coplanar_ab_test.py --run           # prepare, run, summarise
     python scripts/b2_coplanar_ab_test.py --run --end-criteria 1e-3
+    python scripts/b2_coplanar_ab_test.py --arm line --inset-delta-mm -0.5 --run   # sweep point
 
 The structural side is already verified by tests (the deck contains the notch, the line and
 a port at the line end, and the mesh is refined across the line).  What is **not** claimed
@@ -35,7 +36,7 @@ ARMS = {
 }
 
 
-def build_project(arm: str, end_criteria: float):
+def build_project(arm: str, end_criteria: float, inset_delta_m: float = 0.0):
     from openantenna.geometry.patch import synthesize_patch
     from openantenna.model.project import (
         ArrayConfig,
@@ -47,6 +48,12 @@ def build_project(arm: str, end_criteria: float):
 
     design = synthesize_patch(FREQUENCY_HZ, 2.1, HEIGHT_M, "inset")
     width = design.feed_line_width_m if ARMS[arm] == "synthesised" else ARMS[arm]
+    inset_m = design.inset_depth_m + inset_delta_m
+    if not 0.0 <= inset_m <= design.length_m:
+        raise ValueError(
+            "inset %.3f mm is outside [0, patch length %.3f mm] - the overlap must stay on the "
+            "patch" % (inset_m * 1e3, design.length_m * 1e3)
+        )
     return Project(
         name=f"b2_{arm}",
         substrate=SubstrateStackup.single(MATERIAL, HEIGHT_M),
@@ -54,7 +61,7 @@ def build_project(arm: str, end_criteria: float):
             width_m=design.width_m,
             length_m=design.length_m,
             feed_mode="inset",
-            feed_inset_m=design.inset_depth_m,
+            feed_inset_m=inset_m,
             feed_line_width_m=width,
         ),
         array=ArrayConfig(nx=1, ny=1, spacing_x_lambda0=0.5, spacing_y_lambda0=0.5),
@@ -66,9 +73,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=str(Path("runs") / "b2_coplanar"))
     parser.add_argument("--run", action="store_true", help="run the decks instead of only writing them")
+    parser.add_argument("--arm", choices=("probe", "line", "both"), default="both",
+                        help="which feed arm(s) to write/run; the overlap sweep runs the line arm only")
+    parser.add_argument("--inset-delta-mm", type=float, default=0.0,
+                        help="shift the synthesised inset depth by this many millimetres "
+                             "(overlap sweep; the only value this knob moves is the inset)")
     parser.add_argument("--end-criteria", type=float, default=1e-3)
     parser.add_argument("--max-ts", type=int, default=400000,
-                        help="timestep cap carried into the deck (MAX_TS); Route B needs two caps)")
+                        help="timestep cap carried into the deck (MAX_TS); Route B needs two caps")
     args = parser.parse_args(argv)
 
     from openantenna.solvers.openems import OpenEMSSolver
@@ -77,9 +89,15 @@ def main(argv: list[str] | None = None) -> int:
     status = solver.available()
     print(f"solver available: {status.available} - {status.detail}")
 
+    arms = list(ARMS) if args.arm == "both" else [args.arm]
+    inset_delta_m = args.inset_delta_mm / 1e3
     prepared = {}
-    for arm in ARMS:
-        project, design = build_project(arm, args.end_criteria)
+    for arm in arms:
+        try:
+            project, design = build_project(arm, args.end_criteria, inset_delta_m)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         rundir = Path(args.out) / arm
         path = solver.prepare(project, rundir)
         prepared[arm] = path
@@ -87,7 +105,8 @@ def main(argv: list[str] | None = None) -> int:
         # deliberately has none, and a log that says otherwise is a lie.
         carried = project.patch.feed_line_width_m
         label = "(none - vertical probe)" if carried is None else f"{carried * 1e3:.3f} mm"
-        print(f"  {arm:5}: feed_line_width={label}, inset={design.inset_depth_m * 1e3:.3f} mm -> {path}")
+        print(f"  {arm:5}: feed_line_width={label}, "
+              f"inset={project.patch.feed_inset_m * 1e3:.3f} mm -> {path}")
 
     if not args.run:
         print("\nwritten only.  On a machine with openEMS:")
