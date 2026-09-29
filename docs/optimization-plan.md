@@ -38,6 +38,25 @@ truncation verdict.
   the tuned number quotable.
 - **E. Mesh check.** 15 vs 20 cells/lambda0 at the winner (`--differing-setting mesh`), same cap.
 
+## Execution mechanics, as built (2026-09-29)
+
+- **Step A** runs as `scripts/b2_overlap_sweep.py` (5 points m100..p100, 2 workers, cap 300k @ 1e-4;
+  per-point run dirs under `runs_b2/overlap/<tag>/line`). Sweep numbers are **screening only**, not
+  quotable; the winner is the deepest |S11| whose f_res sits inside [2.40, 2.50] GHz.
+- **Step D** is automated by `scripts/b2_routeb_followup.py`: it reads `runs_b2/overlap/winner.txt`,
+  re-runs the winner deck at cap 400k (300k vs 400k = 25 % apart, satisfying the >= 5 % rule), and
+  writes the verdict to `runs_b2/overlap/followup/verdict_<tag>_sweep300000_vs_400000.json` plus the
+  sentinel `runs_b2/overlap_followup_done.txt`. The launcher `followup_chain.ps1` is fired
+  automatically by `wait_then_followup.ps1` once the sweep sentinel lands (guarded by
+  `runs_b2/overlap_followup_launched.lock`). Refuses without a winner; idempotent when the follow-up
+  run already exists.
+- **Step E** rides `yotta_tools/parallel_batch.py` with the `--inset-delta-mm <winner>` knob: the
+  mesh15/mesh20 arms mirror the b2 line-arm build (synthesised width/length/line width;
+  `feed_inset_m` = 14.658 mm base + delta), so the pair is cut on the winner geometry. Read with
+  `two_setting_verdict --truncation-pair --differing-setting mesh`. Both arms must share the stop
+  condition: mesh15 is the slow arm (~399.8k steps needed at 1e-4 on the base geometry), so choose a
+  cap where both arms end the same way; a mixed stop pair is rejected by the verdict rules.
+
 ## Budget and stop rules
 
 - Measured classes: b2e4-class arms ~50 min at 400k (~40 min at 300k); patch-class arms up to ~1.5 h.
