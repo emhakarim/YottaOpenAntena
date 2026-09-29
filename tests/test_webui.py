@@ -152,7 +152,7 @@ class TestWebUI(unittest.TestCase):
 
         seen = []
 
-        def fake_runner(rundir, solver_kwargs, on_progress):
+        def fake_runner(rundir, solver_kwargs, on_progress, cancel_event):
             seen.append((str(rundir), solver_kwargs.get("max_timesteps")))
             snapshot = type(
                 "Snap", (), {"timestep": 250, "energy_db": -35.0, "elapsed_s": 1.5}
@@ -228,6 +228,37 @@ class TestWebUI(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIsInstance(body["available"], bool)
         self.assertIn("detail", body)
+
+
+    def test_an_injected_run_can_be_cancelled(self):
+        from openantenna import webui as webui_module
+
+        def fake_runner(rundir, solver_kwargs, on_progress, cancel_event):
+            cancel_event.wait(5)
+            raise webui_module._RunCancelled()
+
+        webui_module.set_run_runner(fake_runner)
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                Path(folder, "sim.py").write_text("# stub\n", encoding="utf-8")
+                status, first = _post(self.base, "/api/run", {"rundir": folder})
+                self.assertEqual(status, 200, first)
+                status, body = _post(self.base, "/api/run_cancel", {})
+                self.assertEqual(status, 200, body)
+                self.assertEqual(body["status"], "cancelling")
+                deadline = time.time() + 6
+                body = None
+                while time.time() < deadline:
+                    status, body = _post(self.base, "/api/run_status", {})
+                    if body["status"] == "cancelled":
+                        break
+                    time.sleep(0.1)
+                self.assertIsNotNone(body)
+                self.assertEqual(body["status"], "cancelled")
+                status, body = _post(self.base, "/api/run_cancel", {})
+                self.assertEqual(status, 400)
+        finally:
+            webui_module.set_run_runner(None)
 
 
 if __name__ == "__main__":

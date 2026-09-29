@@ -54,7 +54,7 @@ class SolverRun:
     """Outcome of one solver invocation."""
 
     rundir: Path
-    status: str  # "not_run" | "ok" | "failed"
+    status: str  # "not_run" | "ok" | "failed" | "cancelled"
     returncode: Optional[int] = None
     log: str = ""
     outputs: Dict[str, str] = field(default_factory=dict)
@@ -107,6 +107,7 @@ class SolverAdapter(abc.ABC):
         total_steps: Optional[int] = None,
         echo_progress: bool = False,
         on_progress: Optional[Callable[[SolverProgress], None]] = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> SolverRun:
         """Run a solver command, streaming its output instead of capturing it.
 
@@ -126,6 +127,7 @@ class SolverAdapter(abc.ABC):
 
         started = time.monotonic()
         timed_out = False
+        cancelled = False
 
         try:
             process = subprocess.Popen(
@@ -145,14 +147,41 @@ class SolverAdapter(abc.ABC):
                 log=f"could not launch {argv[0]}: {exc}",
             )
 
+        def _kill_tree() -> None:
+            # Windows keeps the solver's own children (openEMS.exe) alive when only the
+            # script process is killed - an orphan that keeps burning CPU for hours (the
+            # lesson the queue-runner audit recorded).  taskkill /T takes the tree.
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    capture_output=True,
+                    check=False,
+                )
+            else:
+                process.kill()
+
         def _kill() -> None:
             nonlocal timed_out
             timed_out = True
             process.kill()
 
+        def _watch_cancel() -> None:
+            nonlocal cancelled
+            cancel_event.wait()
+            if process.poll() is None:
+                cancelled = True
+                _kill_tree()
+
         timer = threading.Timer(timeout_s, _kill) if timeout_s else None
         if timer is not None:
             timer.start()
+        watcher = (
+            threading.Thread(target=_watch_cancel, daemon=True)
+            if cancel_event is not None
+            else None
+        )
+        if watcher is not None:
+            watcher.start()
 
         chunks: list[str] = []
         try:
@@ -175,6 +204,14 @@ class SolverAdapter(abc.ABC):
             printer.finish()
         log = "".join(chunks)
 
+        if cancelled:
+            return SolverRun(
+                rundir=rundir,
+                status="cancelled",
+                returncode=returncode,
+                log=f"cancelled by request\n{log}",
+                duration_s=duration,
+            )
         if timed_out:
             return SolverRun(
                 rundir=rundir,

@@ -199,8 +199,9 @@ def _generate(payload):
 
 _RUN_LOCK = threading.Lock()
 _RUN: dict = {
-    "status": "idle",  # idle | running | done | failed
+    "status": "idle",  # idle | running | done | failed | cancelled
     "rundir": None,
+    "cancel_event": None,
     "cap": None,
     "started_at": None,
     "finished_at": None,
@@ -211,17 +212,24 @@ _RUN: dict = {
 _RUN_RUNNER = None  # tests inject a deterministic runner here
 
 
+class _RunCancelled(Exception):
+    """The run was cancelled; the runner stops by raising this."""
+
+
 def set_run_runner(runner) -> None:
-    """Install a runner for tests: ``runner(rundir, solver_kwargs, on_progress) -> summary``."""
+    """Install a runner for tests:
+    ``runner(rundir, solver_kwargs, on_progress, cancel_event) -> summary``."""
     global _RUN_RUNNER
     _RUN_RUNNER = runner
 
 
-def _real_runner(rundir: Path, solver_kwargs: dict, on_progress) -> dict:
+def _real_runner(rundir: Path, solver_kwargs: dict, on_progress, cancel_event) -> dict:
     """The production runner: the same adapter call the desktop worker makes."""
     solver = OpenEMSSolver(**solver_kwargs)
     _RUN["cap"] = getattr(solver, "max_timesteps", None)
-    run = solver.run(rundir, on_progress=on_progress)
+    run = solver.run(rundir, on_progress=on_progress, cancel_event=cancel_event)
+    if run.status == "cancelled":
+        raise _RunCancelled()
     if run.status != "ok":
         log_tail = (getattr(run, "log", "") or "")[-1200:]
         raise RuntimeError(
@@ -231,7 +239,7 @@ def _real_runner(rundir: Path, solver_kwargs: dict, on_progress) -> dict:
     return solver.parse_results(rundir)
 
 
-def _run_worker(rundir: Path, solver_kwargs: dict) -> None:
+def _run_worker(rundir: Path, solver_kwargs: dict, cancel_event) -> None:
     runner = _RUN_RUNNER or _real_runner
 
     def on_progress(snapshot) -> None:
@@ -249,7 +257,11 @@ def _run_worker(rundir: Path, solver_kwargs: dict) -> None:
         }
 
     try:
-        summary = runner(rundir, solver_kwargs, on_progress)
+        summary = runner(rundir, solver_kwargs, on_progress, cancel_event)
+    except _RunCancelled:
+        with _RUN_LOCK:
+            _RUN.update(status="cancelled", finished_at=time.time(), progress=None)
+        return
     except Exception as exc:
         with _RUN_LOCK:
             _RUN.update(
@@ -275,7 +287,10 @@ def _run(payload):
     if not (path / "sim.py").exists():
         return None, "no sim.py in %s - generate the model first" % path
     solver_kwargs = _solver_kwargs_from(payload)
-    thread = threading.Thread(target=_run_worker, args=(path, solver_kwargs), daemon=True)
+    cancel_event = threading.Event()
+    thread = threading.Thread(
+        target=_run_worker, args=(path, solver_kwargs, cancel_event), daemon=True
+    )
     with _RUN_LOCK:
         _RUN.update(
             status="running",
@@ -285,9 +300,21 @@ def _run(payload):
             error=None,
             summary=None,
             progress=None,
+            cancel_event=cancel_event,
         )
     thread.start()
     return {"status": "running", "rundir": str(path)}, None
+
+
+def _run_cancel(payload=None):
+    """Ask the running simulation to stop; the runner kills the process tree."""
+    with _RUN_LOCK:
+        state = _RUN["status"]
+        event = _RUN.get("cancel_event")
+    if state != "running":
+        return None, "no run is in progress"
+    event.set()
+    return {"status": "cancelling"}, None
 
 
 def _run_status(payload=None):
@@ -409,6 +436,7 @@ _ROUTES = {
     "/api/patch": _patch,
     "/api/generate": _generate,
     "/api/run": _run,
+    "/api/run_cancel": _run_cancel,
     "/api/run_status": _run_status,
     "/api/results": _results,
     "/api/solver": _solver,
@@ -743,6 +771,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div class="actions">
             <button onclick="generateModel()">Generate model</button>
             <button class="primary" onclick="startRun()">Run simulation</button>
+            <button onclick="cancelRun()">Cancel run</button>
             <button onclick="stopPolling()">Stop watching</button>
           </div>
           <div class="progress"><div id="simBar"></div></div>
@@ -1105,6 +1134,12 @@ function stopPolling() {
   if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
 }
 
+async function cancelRun() {
+  const result = await post("/api/run_cancel", {});
+  if (!result.ok) { setSimStatus(result.body.error, "error"); return; }
+  setSimStatus("cancelling ... the solver process tree is being stopped.", "error");
+}
+
 async function startRun() {
   setSimStatus("starting ...");
   const result = await post("/api/run", simPayload());
@@ -1128,6 +1163,11 @@ async function pollRun() {
     $("simBar").style.width = "100%";
     setSimStatus("done.\n" + JSON.stringify(snapshot.summary, null, 1), "ok");
     if (snapshot.rundir) { $("resultsDir").value = snapshot.rundir; }
+  }
+  if (snapshot.status === "cancelled") {
+    stopPolling();
+    $("simBar").style.width = "0%";
+    setSimStatus("cancelled by request - no results were written.", "error");
   }
   if (snapshot.status === "failed") {
     stopPolling();

@@ -37,6 +37,7 @@ import math
 import os
 import shutil
 import sys
+import threading
 from importlib import util as importlib_util
 from pathlib import Path
 from string import Template
@@ -1313,6 +1314,7 @@ class OpenEMSSolver(SolverAdapter):
         rundir: str | Path,
         timeout_s: Optional[float] = None,
         on_progress: Optional[Callable[[Any], None]] = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> SolverRun:
         run_path = Path(rundir)
         status = self.available()
@@ -1342,6 +1344,7 @@ class OpenEMSSolver(SolverAdapter):
             total_steps=getattr(self, "max_timesteps", None),
             echo_progress=True,
             on_progress=on_progress,
+            cancel_event=cancel_event,
         )
         # Persist the solver log next to the results: convergence can only be
         # judged from it, and without it a run cannot be audited (review item N-02).
