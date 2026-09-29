@@ -25,9 +25,13 @@ Usage:
 
 Convergence is read from the engine log, never guessed:
 
-* "End criteria reached after N iterations"  -> converged (N timesteps)
 * "Max. number of timesteps was reached"     -> NOT converged (hit the cap)
-* neither line found                        -> unverifiable, which is not the same as converged
+* "End criteria reached after N iterations"  -> converged (N timesteps; other builds' wording)
+* a completed run ("Time for N iterations") WITHOUT the cap warning -> converged via the end
+  criteria: this openEMS build stops silently when the energy decay meets the stop criterion
+  (mesh20, 2026-09-28: 32,148 steps, -40.69 dB) - the absence of the cap warning beside a
+  completed run is the evidence
+* neither found                              -> unverifiable, which is not the same as converged
 
 Exit status is 0 even when the verdict is a rejection: a rejected experiment is a valid outcome,
 and a tool that fails on it would tempt callers to ignore its output.
@@ -52,6 +56,7 @@ BANDS = ((0.002, "di bawah ambang terima (<0,2 %)"),
 
 CONVERGED_RE = re.compile(r"End criteria reached after\s+([\d,]+)")
 CAP_HIT_RE = re.compile(r"Max\. number of timesteps was reached")
+CLEAN_STOP_RE = re.compile(r"Time for\s+([\d,]+)\s+iterations")
 TIMESTEP_RE = re.compile(r"Timestep:\s*([\d,]+)")
 
 
@@ -143,6 +148,10 @@ def _read_convergence(path: Path) -> tuple[bool | None, int | None, str]:
         return False, last, "hit the timestep cap before the end criteria (not converged)"
     if match := CONVERGED_RE.search(text):
         return True, int(match.group(1).replace(",", "")), "end criteria reached"
+    if match := CLEAN_STOP_RE.search(text):
+        return True, int(match.group(1).replace(",", "")), (
+            "end criteria met (engine returned early without a timestep-cap warning)"
+        )
     return None, None, "engine log has no convergence statement; treat as unverified"
 
 
@@ -213,8 +222,8 @@ def verdict(a: RunData, b: RunData, tolerance: float = DEFAULT_TOLERANCE,
                 )
         elif truncation_pair:
             reasons.append(
-                "mixed stop conditions (one run converged, one cap-limited); run a clean "
-                "truncation pair for Route B"
+                "mixed stop conditions (one run converged, one capped); the pair needs the "
+                "same stop condition on both runs"
             )
         else:
             for run in (a, b):

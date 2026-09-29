@@ -102,6 +102,41 @@ class TestVerdict(unittest.TestCase):
         self.assertIsNone(run.converged)
         self.assertTrue(run.convergence_note.startswith("engine log has no convergence statement"))
 
+    def test_clean_stop_without_a_cap_warning_is_converged(self) -> None:
+        """This openEMS build stops silently when the end criteria is met (mesh20, 2026-09-28)."""
+        directory = make_run(self.base, "mesh20", 500, samples=1001, converged=False, cap=300000)
+        (directory / "run.stdout.log").write_text(
+            "Timestep: 32148 || Speed: 37.9 MC/s || Energy: ~3.8e-18 (-40.69dB)\n"
+            "Time for 32148 iterations with 743700.00 cells : 497.24 sec\n"
+            "Speed: 48.08 MCells/s\n", encoding="utf-8")
+        run = RunData(directory)
+        self.assertTrue(run.converged)
+        self.assertEqual(run.timesteps, 32148)
+        self.assertIn("end criteria", run.convergence_note)
+
+    def test_cap_warning_still_wins_when_the_run_completed(self) -> None:
+        directory = make_run(self.base, "capped", 500, samples=1001, converged=False, cap=300000)
+        (directory / "run.stdout.log").write_text(
+            "Timestep: 300000 || Energy: ~1e-11\n"
+            "RunFDTD: Warning: Max. number of timesteps was reached before the end-criteria "
+            "of -40dB was reached...\n"
+            "Time for 300000 iterations with 586432.00 cells : 2933.57 sec\n", encoding="utf-8")
+        run = RunData(directory)
+        self.assertFalse(run.converged)
+        self.assertEqual(run.timesteps, 300000)
+
+    def test_mixed_stop_conditions_are_rejected_for_a_pair(self) -> None:
+        a = RunData(make_run(self.base, "mesh15", 500, samples=1001, converged=False, cap=300000))
+        b_dir = make_run(self.base, "mesh20", 500, samples=1001, converged=False, cap=300000)
+        (b_dir / "run.stdout.log").write_text(
+            "Timestep: 32148 || Energy: ~3.8e-18 (-40.69dB)\n"
+            "Time for 32148 iterations with 743700.00 cells : 497.24 sec\n",
+            encoding="utf-8")
+        b = RunData(b_dir)
+        result = verdict(a, b, truncation_pair=True, differing_setting="mesh")
+        self.assertEqual(result["verdict"], "rejected")
+        self.assertTrue(any("mixed stop conditions" in reason for reason in result["reasons"]))
+
     def test_truncation_pair_different_caps_is_accepted_under_route_b(self) -> None:
         a = RunData(make_run(self.base, "trunc_300k", 500, samples=1001, converged=False, cap=300000))
         b = RunData(make_run(self.base, "trunc_400k", 500, samples=1001, converged=False, cap=400000))
