@@ -133,7 +133,13 @@ def validate_polygon(
     Near-duplicates within ``EPSILON_M`` are treated the same way, so no zero-length edge
     can reach the solver (review note, Yotta §6o).
     """
-    coerced = [_point(item, where) for item in points]
+    try:
+        items = list(points)
+    except TypeError:
+        raise ValueError(
+            "%s: expected an iterable of (x, y) points, got %r" % (where, points)
+        ) from None
+    coerced = [_point(item, where) for item in items]
     deduped: List[Point] = []
     for point in coerced:
         if not deduped or not _close(point, deduped[-1]):

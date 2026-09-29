@@ -51,6 +51,13 @@ class TestPolygonValidation(unittest.TestCase):
             validate_polygon([(0, 0), (1, 1)], where="sketch polygon 2")
         self.assertIn("sketch polygon 2", str(caught.exception))
 
+    def test_a_non_iterable_polygon_is_a_value_error(self):
+        # red-team finding (Yotta §6s): validate_polygon(5) raised TypeError; the
+        # documented contract is ValueError with a reason.
+        with self.assertRaises(ValueError) as caught:
+            validate_polygon(5)
+        self.assertIn("iterable", str(caught.exception))
+
 
 class TestProjectCarriesSketchPolygons(unittest.TestCase):
     def test_round_trip_and_backwards_compatible_files(self):

@@ -52,6 +52,18 @@ class TestExpressionEvaluation(unittest.TestCase):
                 with self.assertRaises(ParameterError):
                     evaluate_expression(expression, {})
 
+    def test_huge_literals_and_non_finite_values_are_parameter_errors(self):
+        # red-team finding (Yotta §6s): float(big-int) leaked a raw OverflowError, and
+        # non-finite literals/values slipped through - both are ParameterError now.
+        with self.assertRaises(ParameterError):
+            evaluate_expression("9" * 400, {})
+        with self.assertRaises(ParameterError):
+            evaluate_expression("1e999", {})
+        with self.assertRaises(ParameterError):
+            evaluate_expression("a * 2", {"a": float("inf")})
+        with self.assertRaises(ParameterError):
+            evaluate_expression("a", {"a": float("nan")})
+
 
 class TestParameterTable(unittest.TestCase):
     def test_forward_references_resolve(self):
@@ -89,6 +101,12 @@ class TestParameterTable(unittest.TestCase):
         values, errors = table.resolve()
         self.assertEqual(values, {})
         self.assertIn("2bad", errors)
+
+    def test_a_table_records_an_overflow_instead_of_raising(self):
+        table = ParameterTable([("big", "9" * 400), ("fine", "2")])
+        values, errors = table.resolve()
+        self.assertIn("big", errors)
+        self.assertAlmostEqual(values["fine"], 2.0)
 
 
 if __name__ == "__main__":

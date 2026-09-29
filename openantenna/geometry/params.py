@@ -13,6 +13,7 @@ booleans - a drawing file (or a sketch table cell) must never be able to execute
 from __future__ import annotations
 
 import ast
+import math
 
 from typing import Dict, Iterable, List, Tuple
 
@@ -41,16 +42,31 @@ def evaluate_expression(expression: str, names: Dict[str, float]) -> float:
     except RecursionError:
         raise ParameterError("expression is nested too deeply to parse") from None
     try:
-        return _evaluate(tree.body, names)
+        result = _evaluate(tree.body, names)
     except RecursionError:
         raise ParameterError("expression is nested too deeply to evaluate") from None
+    except OverflowError:
+        raise ParameterError("the expression overflows to an unrepresentable number") from None
+    if not math.isfinite(result):
+        raise ParameterError(
+            "the expression evaluates to %r; only finite numbers are allowed" % (result,)
+        )
+    return result
 
 
 def _evaluate(node: ast.AST, names: Dict[str, float]) -> float:
     if isinstance(node, ast.Constant):
         if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
             raise ParameterError("only numbers are allowed; got %r" % (node.value,))
-        return float(node.value)
+        try:
+            as_float = float(node.value)
+        except OverflowError:
+            raise ParameterError(
+                "numeric literal %s... is out of range" % str(node.value)[:16]
+            ) from None
+        if not math.isfinite(as_float):
+            raise ParameterError("literal numbers must be finite; got %r" % (node.value,))
+        return as_float
     if isinstance(node, ast.Name):
         if node.id in names:
             return float(names[node.id])
