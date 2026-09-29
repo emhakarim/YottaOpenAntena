@@ -529,3 +529,60 @@ Catatan proses (terulang, lalu diperbaiki): perbaikan hash di entri ini sempat g
 tanda backtick dikirim lewat `python -c` di PowerShell - backtick adalah karakter escape di
 sana, jadi assert-nya mencocokkan teks yang salah sementara commit tetap berjalan.  Aturan
 lama berlaku: skrip bantu ditulis sebagai **berkas**, bukan perintah inline.
+
+
+---
+
+## 6s - Yotta, 2026-09-29 (sore): panen malam - quotable PERTAMA (line & probe) + jawaban 6p
+
+**Gerbang terbuka.** Semua rantai malam selesai (mesh 20:52; loss+ground 00:11); buku besar
+diperbarui dengan registri lengkap. Hasil quotable pertama proyek ini - keduanya Route B,
+kutip dengan caveat dari berkas:
+
+- **Line feed coplanar: f_res = 2,4390 GHz; -28,94 dB / VSWR 1,07** pada cap 399.788 langkah;
+  pindah resonansi 300k -> 400k = **0,000 %** (`runs_b2/verdict_trunc_line.json`). Caveat:
+  caps 300.000/399.788; end criteria tak pernah tercapai. (Di 300k kedalamannya baru -16,38 dB -
+  resonansinya stabil; kedalaman belum - kutip apa adanya.)
+- **Probe feed: f_res = 2,3067 GHz, -4,52 dB** pada cap 400k (2,3030 di 300k; pindah **0,159 %**;
+  `runs_b2/verdict_trunc_probe.json`). Caveat sama.
+
+Sisanya ditolak, masing-masing dengan alasan dari verdict-nya (bukan tafsiran): port-refine
+0,599 %/0,301 %; loss PTFE 0,599 %; loss FR-4 / FR-4-none / gm050 = artefak tepi sapuan; gm025
+0,599 %; mesh15-vs-20 1,505 %. Registri lengkap: `docs/results-ledger.md`.
+
+**Determinisme (bukti hash):** konfigurasi default di 300k dijalankan 4x oleh batch berbeda
+(prab_on, loss_ptfe, gm025, mesh15) - `s11.csv` identik byte (sha256, prefix 9609B3905F4F);
+di 400k 3x identik (F7DBFAB2AB64). Reproducibility terbukti kuat; tetap bukan konvergensi.
+
+**Catatan mesh (penting untuk kalian):** arm mesh20 ternyata **memenuhi kriteria -40 dB** di
+langkah ke-32.148 (berhenti bersih, 8 menit); alat verdict kita belum mengenali pola berhenti
+tanpa peringatan "max timesteps" dan melabelinya "unverified" - perbaikan alat diantrekan.
+Selisih mesh15 (cap, 2,4573 GHz) vs mesh20 (konvergen, 2,4206 GHz) = ~1,5 %; ini alasan nyata
+untuk langkah E kampanye (cek mesh pada pemenang).
+
+**Jawaban 6p (tanpa menyentuh paket):**
+
+1. **Runtime smoke: LULUS.** Dek ber-poligon (20x10 mm) dijalankan cap 4.000 langkah: exit 0;
+   `Property #3 Metal "sketch"` + `Primitive #3 "Polygon" Priority 3` terdaftar; **tanpa**
+   peringatan "Unused primitive"; `SKETCH: 1 polygon(s)` tercetak dari deck; s11.csv tertulis.
+2. **Red-team whitelist: bersih dari eksekusi; 2 temuan reproduksi.** (a) literal angka raksasa
+   (~309-4300 digit, mis. "9"x400) lolos sebagai **OverflowError mentah** dari
+   `evaluate_expression` - dan `ParameterTable.resolve()` ikut melempar OverflowError alih-alih
+   mencatatnya di tabel (titik: `float(node.value)` di luar jangkauan try); (b)
+   `validate_polygon(5)` (non-iterable) melempar **TypeError**, bukan ValueError (kontrak
+   docstring bilang ValueError). Observasi non-blocking: `1e999` -> `inf` dan nama bernilai NaN
+   lolos di lapisan parameter (validator poligon tetap menolaknya); dedup 1 juta titik ~0,84 s
+   (terbatas, hasil tetap benar). Semua vektor eksekusi (`__import__`, atribut, subscript, lambda,
+   string, bool, dict) ditolak; kedalaman kurung & rantai raksasa ditolak cepat (< 0,2 s).
+3. **Equivalensi dek: terkonfirmasi.** Proyek sama tanpa poligon, src22 vs main: `project.json`
+   **identik**; `sim.py` beda hanya blok **inert** (`SKETCH_POLYGONS = []` + guard, blok corporate
+   feed `[]` + guard) dan satu refactor baris print FEED. Tree asal: src22 (generator lama, dipakai
+   rantai malam) vs main (head menyusul merge malam ini: d993249, 7c5b556) - sesuai aturan
+   `docs/sync-2026-09-28.md`.
+
+**Housekeeping:** clone cron pelapor (efek bug remove->respawn) dikarantina dengan *disable*,
+bukan remove - tidak menyentuh data; sentinel laporan utuh.
+
+**Langkah berikutnya (Yotta):** (1) perbaikan parser konvergensi `two_setting_verdict` untuk
+berhenti-bersih; (2) kampanye optimasi - gate sudah terbuka, mulai dari langkah A
+(`docs/optimization-plan.md`) begitu knob geometri sweep siap.
