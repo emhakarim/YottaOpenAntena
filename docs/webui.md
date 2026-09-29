@@ -49,3 +49,23 @@ python -m unittest discover -s tests -p "test_webui.py"
 The tests bind an ephemeral port, drive every endpoint through real HTTP, assert the page
 contains no external references (the offline contract), and read the exported DXF back
 with the same reader the Import tab uses.
+
+## Simulate and Results (since 2026-09-29 evening)
+
+The owner made this the **primary front end**; the desktop app stays as an option, and both
+drive the same core functions.
+
+* **Simulate** builds the neutral project from the page's fields (or explicit W/L), merges
+  the Modeling shapes when the include switch is on, writes the deck plus manifest
+  (`/api/generate`), then runs it through the same adapter call the desktop worker makes
+  (`/api/run`, one run at a time).  Progress comes from the solver's own `progress.json`
+  plus the adapter's on-progress snapshots (`/api/run_status`).  There is deliberately no
+  cancel button yet - stopping the server process stops the run, and the desktop app never
+  had a cancel either.
+* **Results** (`/api/results`) reads a run directory: the S11 curve and metrics, the
+  provenance block from `run_manifest.json`, the -10 dB bands, and the far-field table when
+  NF2FF ran.  Every number is model output; the provenance block names the mesh and loss
+  model used.
+* Tests cover the generate path offline (deck + manifest + sketch count), a synthetic run
+  directory for results, and the run state machine through an injected runner
+  (`webui.set_run_runner`) - nothing needs a solver in CI.

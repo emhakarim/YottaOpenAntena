@@ -1,10 +1,12 @@
-"""Endpoint tests for the local web UI prototype (stdlib only, ephemeral port)."""
+"""Endpoint tests for the local web UI (stdlib only, ephemeral port, no solver needed)."""
 
 from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -51,6 +53,8 @@ class TestWebUI(unittest.TestCase):
         self.assertNotIn('src="http', html)
         self.assertNotIn('href="http', html)
         self.assertIn("127.0.0.1", html)
+        for view in ("Modeling", "Simulate", "Results"):
+            self.assertIn(view, html)
 
     def test_parameters_resolve_with_warnings_as_data(self):
         status, body = _post(
@@ -77,8 +81,6 @@ class TestWebUI(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("SECTION", body["dxf"])
         self.assertTrue(any("skipped" in note for note in body["notes"]))
-        import tempfile
-
         from openantenna.geometry.cad import read_dxf
 
         with tempfile.TemporaryDirectory() as folder:
@@ -112,6 +114,113 @@ class TestWebUI(unittest.TestCase):
         status, body = _post(self.base, "/api/dxf", {"shapes": shapes})
         self.assertEqual(status, 400)
         self.assertIn("skipped", body["error"])
+
+    def test_generate_writes_a_deck_with_sketch_polygons(self):
+        shapes = [{"kind": "block", "points": [[0, 0], [20, 0], [20, 10], [0, 10]], "thickness": "h_sub"}]
+        with tempfile.TemporaryDirectory() as folder:
+            rundir = Path(folder) / "web_run"
+            status, body = _post(
+                self.base,
+                "/api/generate",
+                {
+                    "rundir": str(rundir),
+                    "frequency_ghz": 2.45,
+                    "material": "PTFE",
+                    "height_mm": 1.6,
+                    "feed": "probe",
+                    "sweep_points": 51,
+                    "shapes": shapes,
+                },
+            )
+            self.assertEqual(status, 200, body)
+            self.assertTrue((rundir / "sim.py").exists())
+            self.assertTrue((rundir / "run_manifest.json").exists())
+            self.assertEqual(body["sketch_polygons"], 1)
+            manifest = json.loads((rundir / "run_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["sketch_polygons"], 1)
+            script = (rundir / "sim.py").read_text(encoding="utf-8")
+            self.assertIn("AddPolygon", script)
+
+    def test_run_refuses_without_a_generated_deck(self):
+        with tempfile.TemporaryDirectory() as folder:
+            status, body = _post(self.base, "/api/run", {"rundir": folder})
+        self.assertEqual(status, 400)
+        self.assertIn("generate", body["error"])
+
+    def test_the_run_state_machine_with_an_injected_runner(self):
+        from openantenna import webui as webui_module
+
+        seen = []
+
+        def fake_runner(rundir, solver_kwargs, on_progress):
+            seen.append((str(rundir), solver_kwargs.get("max_timesteps")))
+            snapshot = type(
+                "Snap", (), {"timestep": 250, "energy_db": -35.0, "elapsed_s": 1.5}
+            )()
+            on_progress(snapshot)
+            time.sleep(0.6)
+            return {"resonance_hz": 2.45e9, "worst_match_db": -20.0, "vswr_at_resonance": 1.2}
+
+        webui_module.set_run_runner(fake_runner)
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                Path(folder, "sim.py").write_text("# stub\n", encoding="utf-8")
+                status, first = _post(self.base, "/api/run", {"rundir": folder, "max_timesteps": 1000})
+                self.assertEqual(status, 200, first)
+                self.assertEqual(first["status"], "running")
+                status, busy = _post(self.base, "/api/run", {"rundir": folder})
+                self.assertEqual(status, 400)
+                self.assertIn("already", busy["error"])
+                deadline = time.time() + 6
+                body = None
+                while time.time() < deadline:
+                    status, body = _post(self.base, "/api/run_status", {})
+                    if body["status"] == "done":
+                        break
+                    time.sleep(0.1)
+                self.assertIsNotNone(body)
+                self.assertEqual(body["status"], "done")
+                self.assertAlmostEqual(body["summary"]["resonance_hz"], 2.45e9)
+                self.assertEqual(seen, [(folder, 1000)])
+        finally:
+            webui_module.set_run_runner(None)
+
+    def test_results_reads_a_synthetic_run(self):
+        with tempfile.TemporaryDirectory() as folder:
+            run = Path(folder)
+            (run / "s11.csv").write_text(
+                "freq_hz,s11_re,s11_im\n"
+                "2200000000,0.4,-0.1\n"
+                "2450000000,0.05,-0.01\n"
+                "2700000000,0.3,-0.2\n",
+                encoding="utf-8",
+            )
+            (run / "run_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "solver": "openEMS",
+                        "generator_version": "test",
+                        "boundary": "PML",
+                        "substrate": {"material": "PTFE", "thickness_m": 1.6e-3},
+                        "mesh": {
+                            "cells_per_wavelength": 15,
+                            "substrate_cells": 8,
+                            "port_refine": True,
+                            "converged": True,
+                        },
+                        "dielectric_loss": {"model": "kappa"},
+                        "max_timesteps": 400000,
+                        "warnings": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            status, body = _post(self.base, "/api/results", {"rundir": str(run)})
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["points"], 3)
+        self.assertAlmostEqual(body["resonance_ghz"], 2.45, places=6)
+        self.assertEqual(body["provenance"]["substrate"], "PTFE")
+        self.assertIsNone(body["farfield"])
 
 
 if __name__ == "__main__":
