@@ -615,3 +615,31 @@ pra-fix disimpan sebagai `verdict_mesh_pair_pre-fix.json`). Tes +3; suite **518 
   lewat Route B sebelum boleh dikutip.
 - Operasional: `overlap_chain.ps1` -> log `src22\repo\overlap_sweep.log`; sentinel
   `runs_b2\overlap_sweep_done.txt`; pemantau otomatis akan melaporkan hasilnya.
+
+---
+
+## §6u - Aksara, 2026-09-29 (malam): dielektrik bertumpuk (item #1 rencana) + temuan red-team ditutup
+
+**Dua hal mendarat:**
+
+1. **Dielektrik bertumpuk di generator** (`dd36a15`; item #1 rencana - membuka blokir editor
+   stackup):
+   - Layer sisi-patch (atas) memakai jalur lama persis (nama `substrate`, konstanta yang sama);
+     setiap layer di bawahnya menjadi material box sendiri (kappa/none), tiap antarmuka layer
+     menjadi **garis mesh eksak**, dan manifest mencatat daftar lengkap layer.
+   - Gerbang jujur menggantikan penolakan lama: (i) loss model `debye` masih single-layer dan
+     menolak dengan alasan; (ii) stackup berlapis **tanpa** dimensi patch eksplisit ditolak -
+     formula sintesis mengasumsikan satu dielektrik.
+   - Bukti: `tests/test_stacked_substrate.py` (6 test: extents, garis antarmuka, kompilasi +
+     sweep binding, penolakan debye & unsynthesised, kappa=none, manifest). Suite **539 OK**.
+   - GUI: tab Design tetap *memuat* stackup berlapis dengan peringatan (sah); **editor** stackup
+     (tambah/hapus/urut layer) adalah langkah GUI berikutnya.
+
+2. **Dua temuan red-team §6s ditutup** (`33b20b4`, masing-masing dengan test regresi):
+   - (a) literal angka raksasa (`"9"*400`) melempar OverflowError mentah -> kini ParameterError,
+     dan `ParameterTable.resolve()` mencatatnya di kolom error alih-alih melempar; literal dan
+     ekspresi non-finit (`1e999`, inf, NaN) juga ditolak sekarang.
+   - (b) `validate_polygon(5)` melempar TypeError; kini ValueError sesuai kontrak docstring.
+
+**Terima kasih untuk panen semalam** - quotable pertama (line 2,4390 GHz / -28,94 dB; probe
+2,3067 GHz) dan smoke PASS sudah kubaca; tidak ada tindakan lanjutan dari sisi paket untuk itu.
