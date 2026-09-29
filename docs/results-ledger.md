@@ -30,6 +30,7 @@ with the caveat the tool prints (the two caps, and the fact that the end criteri
 | b1s1 gm050 truncation pair | 2.0830 GHz (edge) vs 2.1417 | Route B | - | `runs/verdict_truncB_gm050.json` | rejected (edge artefact) |
 | mesh 15 vs 20 (same cap) | 2.4573 (cap-limited) vs 2.4206 (converged) GHz | mesh pair, cap 300k | 1.5047 % | `runs/verdict_mesh_pair.json` | rejected - mixed stop conditions (mesh20 confirmed CONVERGED at 32,148 steps after the 2026-09-29 parser fix; a clean mesh pair needs equal stop conditions on both arms; pre-fix copy kept as `runs/verdict_mesh_pair_pre-fix.json`) |
 | mesh15 vs k1c 400k | 2.4573 vs 2.4427 | Route B | 0.599 % | `runs/verdict_mesh15_vs_400k.json` | rejected |
+| **m050 winner truncation pair (step D)** | 2.4280 GHz; -16.90 dB @300k vs 2.4316 GHz; **-26.96 dB @399,788** | Route B, caps 300000/399788 | **0.151 %** | `runs_b2/overlap/followup/verdict_m050_sweep300000_vs_400000.json` | **ACCEPTED - quotable with caveat** (tuned overlap -0.5 mm; depth still deepening at 300k) |
 
 ## Three facts that travel with the register
 
@@ -59,7 +60,7 @@ with the caveat the tool prints (the two caps, and the fact that the end criteri
 3. Accepted rows must be quoted together with the caveat the tool prints. Raw numbers without an
    accepted verdict stay out of any report.
 
-## Campaign log: step A - overlap sweep (screening, 2026-09-29)
+## Campaign log: steps A + D - overlap sweep and winner confirmation (2026-09-29)
 
 Run on the line feed, cap 300000 @ 1e-4, band 2.4-2.5 GHz, two workers; per-point runs, logs and the
 summary live under `runs_b2/overlap/` (`sweep_summary.json`, `winner.txt`). Every point is
@@ -75,7 +76,10 @@ resonance (2.4390 GHz).
 | p050 | +0.5 mm | 2.4390 | -16.391 | 1.357 |
 | p100 | +1.0 mm | 2.4426 | -16.020 | 1.376 |
 
-Winner = m050 (deepest |S11| with f_res inside the 2.40-2.50 GHz window). Step D re-runs it at cap
-400000; the truncation-pair verdict decides whether the tuned number becomes quotable
-(`runs_b2/overlap/followup/verdict_m050_sweep300000_vs_400000.json`, pending at the time of this
-entry).
+Winner = m050 (deepest |S11| with f_res inside the 2.40-2.50 GHz window). Step D re-ran it at cap
+400000 and the truncation pair came back **ACCEPTED** (shift **0.151 %** <= 0.20 %; caps
+300000/399788): 2.4280 GHz / -16.90 dB / VSWR 1.333 at 300k vs 2.4316 GHz / **-26.96 dB** /
+VSWR 1.094 at 399,788 - the third quotable result, under the usual Route B caveat that the end
+criteria was never reached (`runs_b2/overlap/followup/verdict_m050_sweep300000_vs_400000.json`).
+Step E re-tests the mesh question on this winner with equal stop conditions: both arms cap-limited
+at 300k with the end criteria set out of reach (1e-8), so the mesh comparison itself is valid.
