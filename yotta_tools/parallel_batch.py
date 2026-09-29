@@ -32,7 +32,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from openantenna.geometry.patch import resonant_frequency_cavity, resonant_frequency
+from openantenna.geometry.patch import (
+    resonant_frequency,
+    resonant_frequency_cavity,
+    synthesize_patch,
+)
 from openantenna.model.project import (
     ArrayConfig,
     FrequencySweep,
@@ -48,11 +52,31 @@ WIDTH = 0.049142672841793994
 LENGTH = 0.041378916081297096
 
 
-def project(name: str, material: str = "PTFE", height_m: float = H) -> Project:
+def project(name: str, material: str = "PTFE", height_m: float = H,
+            inset_delta_m: float = 0.0) -> Project:
+    patch = PatchGeometry(width_m=WIDTH, length_m=LENGTH, feed_mode="inset")
+    if inset_delta_m:
+        # Step E: cut the mesh pair on the sweep winner, not just the base patch.  The
+        # geometry mirrors scripts/b2_coplanar_ab_test.py (line arm) so the winner run
+        # and this mesh pair describe the same physical antenna.
+        design = synthesize_patch(2.45e9, ER, height_m, "inset")
+        inset_m = design.inset_depth_m + inset_delta_m
+        if not 0.0 <= inset_m <= design.length_m:
+            raise ValueError(
+                "inset %.3f mm is outside [0, patch length %.3f mm] - the overlap must stay on the "
+                "patch" % (inset_m * 1e3, design.length_m * 1e3)
+            )
+        patch = PatchGeometry(
+            width_m=design.width_m,
+            length_m=design.length_m,
+            feed_mode="inset",
+            feed_inset_m=inset_m,
+            feed_line_width_m=design.feed_line_width_m,
+        )
     return Project(
         name=name,
         substrate=SubstrateStackup.single(material, height_m),
-        patch=PatchGeometry(width_m=WIDTH, length_m=LENGTH, feed_mode="inset"),
+        patch=patch,
         array=ArrayConfig(nx=1, ny=1),
         sweep=FrequencySweep(start_hz=2.083e9, stop_hz=2.817e9, points=101),
     )
@@ -99,7 +123,8 @@ PRESETS: dict[str, list[dict]] = {
 }
 
 
-def run_case(case: dict, workers_timeout: float, common: dict, tag: str = "") -> dict:
+def run_case(case: dict, workers_timeout: float, common: dict, tag: str = "",
+             inset_delta_m: float = 0.0) -> dict:
     # `tag` keeps two batches of the same preset (e.g. the two convergence settings) in
     # separate run directories - never let two harnesses share one directory.
     rundir = REPO_ROOT / "runs" / f"batch_{tag}{case['name']}"
@@ -107,7 +132,8 @@ def run_case(case: dict, workers_timeout: float, common: dict, tag: str = "") ->
         shutil.rmtree(rundir, ignore_errors=True)
     kwargs = {**common, **case["kwargs"]}
     solver = OpenEMSSolver(**kwargs)
-    solver.prepare(project(case["name"], material=case.get("material", "PTFE")), rundir)
+    solver.prepare(project(case["name"], material=case.get("material", "PTFE"),
+                           inset_delta_m=inset_delta_m), rundir)
 
     log_path = rundir / "run.stdout.log"
     started = time.time()
@@ -122,7 +148,7 @@ def run_case(case: dict, workers_timeout: float, common: dict, tag: str = "") ->
     return {"case": case, "rundir": rundir, "proc": proc, "t0": started, "log": log_path, "solver": solver}
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run independent solver cases concurrently.")
     parser.add_argument("--preset", required=True, choices=sorted(PRESETS))
     parser.add_argument("--workers", type=int, default=4)
@@ -130,7 +156,10 @@ def main() -> int:
     parser.add_argument("--max-ts", type=int, default=20000)
     parser.add_argument("--timeout-s", type=float, default=3600.0)
     parser.add_argument("--tag", default="", help="prefix for run directories (keeps two settings apart)")
-    args = parser.parse_args()
+    parser.add_argument("--inset-delta-mm", type=float, default=0.0,
+                        help="shift the synthesised inset depth by this many millimetres "
+                             "(step E: cut the mesh pair on the overlap-sweep winner)")
+    args = parser.parse_args(argv)
 
     if not os.environ.get("OPENEMS_ROOT"):
         print("ERROR: OPENEMS_ROOT is not set", file=sys.stderr)
@@ -143,6 +172,8 @@ def main() -> int:
     }
     cases = PRESETS[args.preset]
     print(f"preset {args.preset}: {len(cases)} cases, {args.workers} at a time")
+    if args.inset_delta_mm:
+        print(f"inset delta: {args.inset_delta_mm:+.2f} mm (winner geometry from the overlap sweep)")
     cavity = resonant_frequency_cavity(ER, H, WIDTH, LENGTH)
     tl = resonant_frequency(ER, H, WIDTH, LENGTH)
     print(f"reference: cavity {cavity/1e9:.4f} GHz | transmission-line {tl/1e9:.4f} GHz\n")
@@ -154,7 +185,7 @@ def main() -> int:
         while pending and len(running) < args.workers:
             case = pending.pop(0)
             print(f"  start {case['name']}: {case['label']}")
-            running.append(run_case(case, args.timeout_s, common, args.tag))
+            running.append(run_case(case, args.timeout_s, common, args.tag, args.inset_delta_mm / 1e3))
         time.sleep(2.0)
         for entry in list(running):
             code = entry["proc"].poll()
@@ -194,7 +225,8 @@ def main() -> int:
 
     summary = {
         "preset": args.preset,
-        "settings": {"end_criteria": args.end_criteria, "max_timesteps": args.max_ts, "nf2ff": False, "port_refine": True},
+        "settings": {"end_criteria": args.end_criteria, "max_timesteps": args.max_ts, "nf2ff": False,
+                     "port_refine": True, "inset_delta_mm": args.inset_delta_mm},
         "reference_cavity_hz": cavity,
         "cases": done,
     }
