@@ -586,3 +586,32 @@ bukan remove - tidak menyentuh data; sentinel laporan utuh.
 **Langkah berikutnya (Yotta):** (1) perbaikan parser konvergensi `two_setting_verdict` untuk
 berhenti-bersih; (2) kampanye optimasi - gate sudah terbuka, mulai dari langkah A
 (`docs/optimization-plan.md`) begitu knob geometri sweep siap.
+
+---
+
+## 6t - Yotta, 2026-09-29 (malam): fix parser konvergensi + kampanye optimasi langkah A diluncurkan
+
+**1. Fix `two_setting_verdict` (parser konvergensi).** Temuan dari panen tadi: build openEMS di
+mesin ini berhenti **tanpa pesan** saat end criteria terpenuhi - ia hanya mencetak peringatan saat
+mentok cap. Aturan baru di `_read_convergence`: peringatan cap -> tidak konvergen; tidak ada
+peringatan + run selesai ("Time for N iterations") -> **konvergen via end criteria** (catatan
+eksplisit di verdict). **mesh20 terkonfirmasi konvergen**: 32.148 langkah, energi -40,69 dB.
+Pemindaian 22 log run: hanya mesh20 yang berpola berhenti-bersih, jadi tidak ada verdict lama yang
+berubah. Pasangan mesh tetap rejected - kini dengan alasan yang benar: **stop condition campuran**;
+protokol pair mesh yang bersih menyusul. `runs\verdict_mesh_pair.json` dihitung ulang (salinan
+pra-fix disimpan sebagai `verdict_mesh_pair_pre-fix.json`). Tes +3; suite **518 OK**.
+
+**2. Kampanye optimasi langkah A (sweep overlap line feed) - gerbang terbuka, rantai jalan.**
+- `scripts/b2_coplanar_ab_test.py`: knob baru `--arm` (probe/line/both) + `--inset-delta-mm`
+  (menggeser HANYA inset; guard: hasil harus tetap di [0, panjang patch]); perilaku default
+  tidak berubah (0.0 = identitas). Bukti mekanis: FEED_INSET di dek = 14,658 mm + delta
+  (p000/m100/m050/p050/p100 tepat bergeser 1,0/0,5 mm - lihat log).
+- `scripts/b2_overlap_sweep.py` (baru): 5 titik -1,0/-0,5/0/+0,5/+1,0 mm; cap 300k
+  @EndCriteria 1e-4; 2 worker; direktori per titik (`runs_b2\overlap\{tag}`); idempoten
+  (s11.csv = selesai); timeout per titik memakai kill-process-tree; **pemilih pemenang**:
+  |S11| terdalam dengan f_res di [2,40; 2,50] GHz -> `sweep_summary.json` + `winner.txt`.
+- Baseline p000 harus mereproduksi line 2,4390 GHz (sanity + determinisme sekaligus).
+- **Angka sweep = penyaringan, BUKAN kutipan.** Pemenang menyusul langkah D (pasangan 400k)
+  lewat Route B sebelum boleh dikutip.
+- Operasional: `overlap_chain.ps1` -> log `src22\repo\overlap_sweep.log`; sentinel
+  `runs_b2\overlap_sweep_done.txt`; pemantau otomatis akan melaporkan hasilnya.

@@ -28,7 +28,7 @@ with the caveat the tool prints (the two caps, and the fact that the end criteri
 | b1s1 ground 0.25/0.50 | 2.4427 vs 2.1417 GHz | 1e-4, cap 400k both | 13.129 % | `runs/verdict_b1s1.json` | rejected (strict); large physical signal |
 | b1s1 gm025 truncation pair | 2.4573 vs 2.4427 | Route B | 0.599 % | `runs/verdict_truncB_gm025.json` | rejected |
 | b1s1 gm050 truncation pair | 2.0830 GHz (edge) vs 2.1417 | Route B | - | `runs/verdict_truncB_gm050.json` | rejected (edge artefact) |
-| mesh 15 vs 20 (same cap) | 2.4573 vs 2.4206 GHz | mesh pair, cap 300k | 1.5047 % | `runs/verdict_mesh_pair.json` | rejected (shift > 0.2 %; the mesh20 arm actually met the -40 dB energy criterion at 32,148 steps - the tool labels clean early stops "unverified", fix queued) |
+| mesh 15 vs 20 (same cap) | 2.4573 (cap-limited) vs 2.4206 (converged) GHz | mesh pair, cap 300k | 1.5047 % | `runs/verdict_mesh_pair.json` | rejected - mixed stop conditions (mesh20 confirmed CONVERGED at 32,148 steps after the 2026-09-29 parser fix; a clean mesh pair needs equal stop conditions on both arms; pre-fix copy kept as `runs/verdict_mesh_pair_pre-fix.json`) |
 | mesh15 vs k1c 400k | 2.4573 vs 2.4427 | Route B | 0.599 % | `runs/verdict_mesh15_vs_400k.json` | rejected |
 
 ## Three facts that travel with the register
@@ -47,8 +47,9 @@ with the caveat the tool prints (the two caps, and the fact that the end criteri
   match the project has produced and is now quotable **with the caveat**, not as a converged result.
 - **The mesh question is open and matters (~1.5 %).** mesh20 stopped cleanly at 32,148 steps having
   met the -40 dB energy criterion and lands at 2.4206 GHz; the cap-limited mesh15 (default mesh)
-  sits at 2.4573 GHz. A third of the campaign exists precisely to close this; the mesh verdict row
-  stays rejected until a proper pair is possible.
+  sits at 2.4573 GHz. The parser fix landed 2026-09-29 and confirms the mesh20 arm as converged;
+  the campaign's step E re-runs this check on the winner. The mesh verdict row stays rejected until
+  a pair with equal stop conditions exists.
 
 ## How a row changes state
 
