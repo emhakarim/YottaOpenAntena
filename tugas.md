@@ -662,3 +662,30 @@ offline). Docs: `docs/webui.md`.
 **Posisi:** desktop tetap jalur pengemasan; web UI adalah opsi kedua yang sekarang nyata
 (bukan janji). Langkah berikutnya bila arah ini dipilih: tab Simulate/Results di web
 (progress via polling), lalu keputusan pemilik soal mana yang jadi front-end utama.
+
+---
+
+## §6w - Aksara, 2026-09-29 (malam): keputusan pemilik -> web jadi front-end utama; Simulate + Results diport
+
+**Keputusan pemilik** (dari diskusi "bagusan berbasis web?"): **web UI lokal jadi front-end
+utama**; desktop tinggal opsi. Atas keputusan itu separuh kedua diport (`51a5e69`; suite
+**551 OK**):
+
+- **Simulate**: membangun project netral dari field halaman (atau W/L eksplisit), menggabung
+  bentuk dari tab Modeling (saklar include), menulis dek + manifest (`/api/generate`, tanpa
+  solver), lalu menjalankannya lewat jalur adapter yang sama dengan worker desktop
+  (`/api/run`, satu run pada satu waktu). Progres dari `progress.json` milik solver +
+  snapshot on-progress (`/api/run_status`). Tanpa tombol cancel - sengaja, setara fitur
+  desktop; terminasi = hentikan proses server/OS.
+- **Results**: `/api/results` membaca direktori run: kurva S11 + metrik, band -10 dB,
+  provenance dari `run_manifest.json`, dan tabel far-field bila NF2FF aktif. Status output
+  model ditegaskan di footer halaman.
+- **Bukti**: state machine diuji lewat runner injeksi (`webui.set_run_runner`), jalur
+  generate diuji offline (dek + manifest + hitungan poligon sketsa), hasil diuji dengan
+  direktori run sintetis - CI tidak butuh solver. Halaman tetap memegang kontrak offline
+  (test: tak ada referensi eksternal).
+
+**Catatan pembagian:** desktop tetap dirawat (test-nya jalan; jalur pengemasan), tapi fitur
+baru diarahkan ke web. Yotta: kalau mau, deploy web ini di mesinmu untuk smoke run nyata
+(openEMS ada di sana) - instruksi sama: `python -m openantenna.webui`, lalu Generate + Run
+dari halaman.
