@@ -19,6 +19,8 @@ a wrong number; refusing it at construction is the only honest option.
 
 from __future__ import annotations
 
+import math
+
 from typing import Iterable, List, Sequence, Tuple
 
 Point = Tuple[float, float]
@@ -160,3 +162,39 @@ def validate_polygon(
     if polygon_area(polygon) == 0.0:
         raise ValueError("%s: the polygon has zero area (all points on one line?)" % where)
     return polygon
+
+
+def shapes_to_polygons(shapes, *, units_scale: float = 1e-3):
+    """Convert GUI-shaped dicts (``kind``/``points``/``closed``) to validated polygons.
+
+    One place, shared by the desktop modeling tab and the local web UI, so the
+    drawing-to-metal rules cannot drift between front ends.  Closed shapes only: a block
+    footprint and a closed polyline become polygons; a circle is polygonised into chords
+    the way the DXF reader does it; an open trace is skipped because a stroked line is not
+    a filled region (docs/sketch-to-deck.md).  Returns ``(polygons, notes)`` where every
+    skip is explained.
+    """
+    from .cad import polygonise_arc
+
+    polygons = []
+    notes = []
+    for index, shape in enumerate(shapes, start=1):
+        label = "shape %d" % index
+        kind = str(shape.get("kind") or "trace")
+        if kind == "circle":
+            (cx, cy), (px, py) = shape["points"]
+            points = polygonise_arc(cx, cy, math.hypot(px - cx, py - cy), 0.0, 0.0)
+        elif kind == "block" or shape.get("closed"):
+            points = list(shape["points"])
+        else:
+            notes.append("%s (%s) skipped: an open trace is not a filled region" % (label, kind))
+            continue
+        try:
+            polygons.append(
+                validate_polygon(
+                    [(x * units_scale, y * units_scale) for x, y in points], where=label
+                )
+            )
+        except ValueError as exc:
+            notes.append("%s skipped: %s" % (label, exc))
+    return polygons, notes

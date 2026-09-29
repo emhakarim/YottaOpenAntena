@@ -2515,37 +2515,14 @@ class SketchTab(QWidget):
         return len(self.shapes) - 1
 
     def project_polygons(self):
-        """The drawn shapes as closed polygons in metres, for a solver project.
+        """The drawn shapes as closed polygons in metres (rules live in geometry.sketch).
 
-        Closed shapes only, per docs/sketch-to-deck.md: polygon/rectangle and block
-        footprints become polygons; a circle is polygonised into chords the way the DXF
-        reader does it; an open trace is skipped, because a stroked line is not a filled
-        region.  Returns ``(polygons, notes)``.
+        The shared helper keeps this tab and the local web UI from drifting apart; see
+        docs/sketch-to-deck.md for the rules and the skip notes.  Returns ``(polygons, notes)``.
         """
-        from openantenna.geometry.cad import polygonise_arc
-        from openantenna.geometry.sketch import validate_polygon
+        from openantenna.geometry.sketch import shapes_to_polygons
 
-        polygons = []
-        notes = []
-        for index, shape in enumerate(self.shapes, start=1):
-            label = "shape %d" % index
-            if shape["kind"] == "circle":
-                (cx, cy), (px, py) = shape["points"]
-                points = polygonise_arc(cx, cy, math.hypot(px - cx, py - cy), 0.0, 0.0)
-            elif shape["kind"] == "block" or shape.get("closed"):
-                points = list(shape["points"])
-            else:
-                notes.append("%s (trace) skipped: an open trace is not a filled region" % label)
-                continue
-            try:
-                polygons.append(
-                    validate_polygon(
-                        [(x * 1e-3, y * 1e-3) for x, y in points], where=label
-                    )
-                )
-            except ValueError as exc:
-                notes.append("%s skipped: %s" % (label, exc))
-        return polygons, notes
+        return shapes_to_polygons(self.shapes)
 
     def simulation_polygons(self):
         """What a generated deck would carry - empty unless the include box is ticked."""

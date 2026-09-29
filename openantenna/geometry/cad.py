@@ -424,10 +424,8 @@ def occupancy_fraction(rows: Iterable[Iterable[bool]]) -> float:
     return occupied / total if total else 0.0
 
 
-def write_dxf(
-    path: str | Path, entities, *, layer: str = "sketch"
-) -> Path:
-    """Write a minimal DXF (LINE / LWPOLYLINE / CIRCLE) that :func:`read_dxf` reads back.
+def dxf_text(entities, *, layer: str = "sketch") -> str:
+    """Build a minimal DXF (LINE / LWPOLYLINE / CIRCLE) that :func:`read_dxf` reads back.
 
     The writer speaks exactly the entity subset the reader supports, so a write/read round
     trip is exact for the kinds this module claims.  ``entities`` is a sequence of:
@@ -440,7 +438,6 @@ def write_dxf(
     unit and states it; this writer does not guess one, and it refuses an empty list rather
     than emitting a file no reader would accept.
     """
-    target = Path(path)
     body = []
     for entity in entities:
         kind = entity[0]
@@ -472,6 +469,11 @@ def write_dxf(
             )
     if not body:
         raise ValueError("refusing to write an empty DXF: no entities given")
-    text = "0\nSECTION\n2\nENTITIES\n" + "".join(body) + "0\nENDSEC\n0\nEOF\n"
-    target.write_text(text, encoding="utf-8")
+    return "0\nSECTION\n2\nENTITIES\n" + "".join(body) + "0\nENDSEC\n0\nEOF\n"
+
+
+def write_dxf(path: str | Path, entities, *, layer: str = "sketch") -> Path:
+    """Write :func:`dxf_text` to a file; returns the path."""
+    target = Path(path)
+    target.write_text(dxf_text(entities, layer=layer), encoding="utf-8")
     return target

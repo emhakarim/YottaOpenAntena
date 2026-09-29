@@ -112,5 +112,27 @@ class TestDeckDrawsSketchPolygons(unittest.TestCase):
         self.assertIn("outside the ground plate", str(caught.exception))
 
 
+class TestShapeConversion(unittest.TestCase):
+    def test_closed_shapes_become_polygons_and_traces_are_skipped(self):
+        from openantenna.geometry.sketch import shapes_to_polygons
+
+        shapes = [
+            {"kind": "block", "points": [[0, 0], [20, 0], [20, 10], [0, 10]], "thickness": "1.6"},
+            {"kind": "polyline", "points": [[0, 12], [5, 15]], "closed": False},
+        ]
+        polygons, notes = shapes_to_polygons(shapes)
+        self.assertEqual(len(polygons), 1)
+        self.assertAlmostEqual(polygon_area(polygons[0]), 200e-6, places=12)  # 20x10 mm, in metres
+        self.assertTrue(any("skipped" in note for note in notes))
+
+    def test_a_circle_becomes_chords_like_the_dxf_reader(self):
+        from openantenna.geometry.sketch import shapes_to_polygons
+
+        shapes = [{"kind": "circle", "points": [[20, 15], [25, 15]]}]
+        polygons, notes = shapes_to_polygons(shapes)
+        self.assertEqual(notes, [])
+        self.assertEqual(len(polygons[0]), 48)  # 48 chords, the closing point deduped
+
+
 if __name__ == "__main__":
     unittest.main()
