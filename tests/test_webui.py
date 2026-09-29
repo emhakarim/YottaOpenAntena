@@ -223,5 +223,12 @@ class TestWebUI(unittest.TestCase):
         self.assertIsNone(body["farfield"])
 
 
+    def test_solver_status_endpoint_reports_a_shape(self):
+        status, body = _post(self.base, "/api/solver", {})
+        self.assertEqual(status, 200)
+        self.assertIsInstance(body["available"], bool)
+        self.assertIn("detail", body)
+
+
 if __name__ == "__main__":
     unittest.main()

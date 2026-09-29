@@ -392,6 +392,16 @@ def _results(payload):
     }, None
 
 
+def _solver(payload=None):
+    """Is the openEMS engine reachable from this server?  (For the page's status chip.)"""
+    status = OpenEMSSolver().available()
+    return {
+        "available": bool(status.available),
+        "binary": status.binary_path,
+        "detail": status.detail,
+    }, None
+
+
 _ROUTES = {
     "/api/resolve": _resolve,
     "/api/dxf": _dxf,
@@ -401,6 +411,7 @@ _ROUTES = {
     "/api/run": _run,
     "/api/run_status": _run_status,
     "/api/results": _results,
+    "/api/solver": _solver,
 }
 
 INDEX_HTML = r"""<!DOCTYPE html>
@@ -411,65 +422,131 @@ INDEX_HTML = r"""<!DOCTYPE html>
 <title>OpenAntenna Studio - local web UI</title>
 <style>
   :root {
-    --bg: #1e1f22; --panel: #2b2d31; --panel2: #313338; --border: #3a3d42;
-    --text: #e6e6e6; --muted: #a8adb5; --accent: #4c8bf5; --danger: #ff7b72; --ok: #76c494;
+    --bg: #17181c; --surface: #202226; --panel: #232529; --panel2: #2b2e33; --border: #33363b;
+    --text: #e8e9ec; --muted: #9aa0a9; --accent: #4c8bf5; --accent-soft: rgba(76,139,245,.16);
+    --danger: #ff7b72; --ok: #76c494;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", Inter, system-ui, sans-serif; }
-  header { padding: 16px 22px 4px; }
-  h1 { font-size: 18px; margin: 0 0 2px; font-weight: 600; }
-  .sub { color: var(--muted); font-size: 12.5px; }
-  nav.tabs { display: flex; gap: 6px; padding: 10px 22px 0; }
-  nav.tabs button { background: transparent; border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; color: var(--muted); padding: 7px 16px; font-size: 13.5px; }
-  nav.tabs button.active { background: var(--panel); border-color: var(--border); color: var(--text); font-weight: 600; }
-  main { display: grid; grid-template-columns: 400px 1fr; gap: 14px; padding: 12px 22px 26px; align-items: start; }
+  body {
+    margin: 0; color: var(--text);
+    font: 14px/1.55 "Segoe UI", Inter, system-ui, sans-serif;
+    background-color: var(--bg);
+    background-image: radial-gradient(1100px 520px at 12% -12%, rgba(76,139,245,.09), transparent 62%);
+    background-repeat: no-repeat;
+  }
+  ::selection { background: rgba(76,139,245,.35); }
+
+  header { padding: 18px 22px 2px; }
+  .brandrow { display: flex; align-items: center; gap: 13px; }
+  .mark {
+    width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto;
+    display: grid; place-items: center;
+    background: linear-gradient(160deg, #5d97f7, #3d76d8);
+    box-shadow: 0 6px 16px rgba(76,139,245,.35), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  h1 { font-size: 19px; margin: 0; font-weight: 650; letter-spacing: .1px; }
+  .badge { font-size: 11px; font-weight: 600; color: #cfe0ff; background: var(--accent-soft);
+           border: 1px solid rgba(76,139,245,.45); border-radius: 999px; padding: 1px 9px; vertical-align: 2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+  .chips { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .chip { border: 1px solid var(--border); background: var(--panel); border-radius: 999px;
+          padding: 3px 11px; font-size: 12px; color: var(--muted);
+          font-family: Consolas, "Cascadia Mono", monospace; }
+  .chip.ok  { color: #b9e4c9; border-color: rgba(118,196,148,.55); background: rgba(118,196,148,.08); }
+  .chip.bad { color: #ffb4ae; border-color: rgba(255,123,114,.55); background: rgba(255,123,114,.08); }
+
+  nav.tabs { display: flex; gap: 4px; margin: 12px 22px 0; padding: 4px; width: max-content;
+             background: var(--surface); border: 1px solid var(--border); border-radius: 999px; }
+  nav.tabs button { border: none; background: transparent; color: var(--muted); border-radius: 999px;
+                    padding: 6px 18px; font: inherit; font-size: 13.5px; cursor: pointer; transition: all .15s ease; }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active { background: var(--accent-soft); color: #cfe0ff; font-weight: 600;
+                           box-shadow: inset 0 0 0 1px rgba(76,139,245,.45); }
+
+  main { display: grid; grid-template-columns: 400px 1fr; gap: 14px; padding: 14px 22px 26px; align-items: start; }
   @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
-  section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
-  section.fill { grid-column: 1 / -1; }
-  .colstack { display: contents; }
-  h2 { font-size: 12.5px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+
+  section {
+    background: linear-gradient(180deg, rgba(255,255,255,.022), rgba(255,255,255,0)), var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; margin-bottom: 14px;
+    box-shadow: 0 10px 26px rgba(0,0,0,.20);
+  }
+  h2 { display: flex; align-items: center; gap: 8px; font-size: 11.5px; margin: 0 0 10px;
+       color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 650; }
+  h2::before { content: ""; width: 3px; height: 12px; background: var(--accent); border-radius: 2px; }
+
   label { color: var(--muted); font-size: 12px; }
-  input, select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; font: inherit; font-size: 13px; width: 100%; }
-  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  input, select {
+    background: #1b1c20; color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 9px; font: inherit; font-size: 13px; width: 100%; transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(76,139,245,.16); }
   input.num, .num { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
-  button { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
-  button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  button.primary:hover { background: #5d97f7; }
+
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+           padding: 6px 13px; font: inherit; font-size: 13px; cursor: pointer; transition: all .15s ease; }
+  button:hover { border-color: var(--accent); color: #fff; }
+  button:active { transform: translateY(1px); }
+  button.primary { background: linear-gradient(180deg, #5d97f7, #4c8bf5); border-color: #4c8bf5; color: #fff;
+                   font-weight: 600; box-shadow: 0 6px 14px rgba(76,139,245,.25), inset 0 1px 0 rgba(255,255,255,.22); }
+  button.primary:hover { filter: brightness(1.08); }
   button.mini { padding: 2px 8px; font-size: 12px; }
+
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 4px 6px; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+  th, td { text-align: left; padding: 5px 6px; font-size: 12.5px; border-bottom: 1px solid rgba(51,54,59,.7); }
   th { color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
   td.err { color: var(--danger); }
+
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
   .row > label { white-space: nowrap; }
-  .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+  .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 9px; }
   .fields.three { grid-template-columns: repeat(3, 1fr); }
   .fields label { font-size: 11px; }
   .checks { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 4px 0 10px; }
   .checks label { display: flex; gap: 6px; align-items: center; color: var(--text); font-size: 13px; }
-  .checks input { width: auto; }
-  #canvasWrap { background: #232428; border: 1px solid var(--border); border-radius: 10px; padding: 8px; }
-  canvas { width: 100%; height: 420px; display: block; border-radius: 6px; }
+  .checks input { width: auto; accent-color: var(--accent); }
+
+  #canvasWrap { background: #1a1b1f; border: 1px solid var(--border); border-radius: 12px; padding: 8px; }
+  canvas { width: 100%; height: 420px; display: block; border-radius: 8px; }
   canvas.chart { height: 330px; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-  #status, #simStatus { min-height: 20px; color: var(--muted); font-size: 12.5px; margin-top: 8px; white-space: pre-wrap; }
-  #status.error, #simStatus.error { color: var(--danger); }
-  #simStatus.ok { color: var(--ok); }
-  .result { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 8px; }
-  .kv { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; }
-  .kv .k { color: var(--muted); font-size: 11.5px; }
-  .kv .v { font-family: Consolas, monospace; font-size: 14px; }
-  .progress { height: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; margin-top: 10px; }
-  .progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .3s ease; }
-  pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-family: Consolas, monospace; font-size: 12px; color: var(--muted); white-space: pre-wrap; max-height: 240px; overflow: auto; margin: 8px 0 0; }
-  footer { color: var(--muted); font-size: 12px; padding: 0 22px 20px; }
+
+  .hint { border: 1px solid var(--border); border-left: 3px solid var(--border); background: rgba(255,255,255,.02);
+          border-radius: 8px; padding: 8px 11px; font-size: 12.5px; color: var(--muted);
+          margin-top: 9px; white-space: pre-wrap; min-height: 20px; }
+  .hint.error { border-left-color: var(--danger); color: #ffb4ae; }
+  .hint.ok    { border-left-color: var(--ok); color: #b9e4c9; }
+
+  .result { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 9px; }
+  .kv { background: #1b1c20; border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+  .kv .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .kv .v { font-family: Consolas, monospace; font-size: 15px; margin-top: 1px; }
+
+  .progress { height: 14px; background: #1b1c20; border: 1px solid var(--border); border-radius: 999px;
+              overflow: hidden; margin-top: 10px; }
+  .progress > div { height: 100%; width: 0%; background: linear-gradient(90deg, #4c8bf5, #7aa9ff);
+                    border-radius: 999px; transition: width .35s ease; }
+
+  pre { background: #17181c; border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px;
+        font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; color: var(--muted);
+        white-space: pre-wrap; max-height: 260px; overflow: auto; margin: 9px 0 0; }
+  footer { color: var(--muted); font-size: 12px; padding: 2px 22px 20px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>OpenAntenna Studio - local web UI <span style="color:var(--muted);font-weight:400;font-size:13px">(primary)</span></h1>
-  <div class="sub">Offline and stdlib-only: this page and its data are served by your own Python process on 127.0.0.1, using the same core functions as the desktop app. Nothing external is loaded.</div>
+  <div class="brandrow">
+    <span class="mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 15V9M9 9L4 4M9 9l5-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg></span>
+    <div>
+      <h1>OpenAntenna Studio <span class="badge">web</span></h1>
+      <div class="sub">Offline and stdlib-only - served by your own Python on 127.0.0.1, using the same core functions as the desktop app. Nothing external is loaded.</div>
+    </div>
+    <div class="chips">
+      <span class="chip" id="chipPort">127.0.0.1:8077</span>
+      <span class="chip" id="engineChip">engine: checking ...</span>
+    </div>
+  </div>
 </header>
 <nav class="tabs">
   <button class="tab active" data-view="modeling" onclick="showView('modeling')">Modeling</button>
@@ -528,7 +605,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <button onclick="drawCanvas()">Outlines only</button>
         <button onclick="exportDxf()">Export DXF</button>
       </div>
-      <div id="status"></div>
+      <div id="status" class="hint">ready. Add a block or draw, then preview on the solver grid.</div>
     </section>
   </div>
 </main>
@@ -582,7 +659,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <button onclick="stopPolling()">Stop watching</button>
       </div>
       <div class="progress"><div id="simBar"></div></div>
-      <div id="simStatus">idle. Generate the model, then run it. One run at a time; the solver keeps its own progress in progress.json.</div>
+      <div id="simStatus" class="hint">idle. Generate the model, then run it. One run at a time; progress comes from the solver's own progress.json.</div>
       <pre id="simDetail"></pre>
     </section>
   </div>
@@ -634,19 +711,38 @@ function showView(name) {
 function setStatus(text, isError) {
   const el = $("status");
   el.textContent = text || "";
-  el.className = isError ? "error" : "";
+  el.className = isError ? "hint error" : "hint";
 }
 
 function setSimStatus(text, kind) {
   const el = $("simStatus");
   el.textContent = text || "";
-  el.className = kind || "";
+  el.className = "hint" + (kind ? " " + kind : "");
 }
 
 async function post(path, payload) {
   const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   const body = await response.json();
   return { ok: response.ok, body: body };
+}
+
+async function checkEngine() {
+  const chip = $("engineChip");
+  try {
+    const result = await post("/api/solver", {});
+    if (result.ok && result.body.available) {
+      chip.textContent = "engine: openEMS ready";
+      chip.className = "chip ok";
+      chip.title = result.body.detail || "";
+    } else {
+      chip.textContent = "engine: not reachable";
+      chip.className = "chip bad";
+      chip.title = (result.body && result.body.detail) || "";
+    }
+  } catch (err) {
+    chip.textContent = "engine: unknown";
+    chip.className = "chip";
+  }
 }
 
 // ---------------- modeling: parameters ----------------
@@ -773,6 +869,12 @@ function drawCanvas() {
   const ctx = canvas.getContext("2d");
   const width = canvas.width, height = canvas.height;
   ctx.clearRect(0, 0, width, height);
+
+  ctx.strokeStyle = "rgba(51,54,59,.55)";
+  ctx.lineWidth = 1;
+  for (let gx = 0; gx < width; gx += 32) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke(); }
+  for (let gy = 0; gy < height; gy += 32) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke(); }
+
   const b = viewBounds();
   const pad = 24;
   const spanX = Math.max(1e-9, b.x1 - b.x0), spanY = Math.max(1e-9, b.y1 - b.y0);
@@ -796,7 +898,6 @@ function drawCanvas() {
   }
 
   ctx.lineWidth = 2;
-  ctx.strokeStyle = "#4c8bf5";
   state.shapes.forEach((shape) => {
     ctx.beginPath();
     if (shape.kind === "circle") {
@@ -808,17 +909,21 @@ function drawCanvas() {
       if (shape.closed || shape.kind === "block") ctx.closePath();
     }
     if (shape.kind === "block") { ctx.fillStyle = "rgba(76, 139, 245, 0.14)"; ctx.fill(); }
+    ctx.strokeStyle = "#4c8bf5";
+    ctx.shadowColor = "rgba(76,139,245,.55)";
+    ctx.shadowBlur = 8;
     ctx.stroke();
+    ctx.shadowBlur = 0;
   });
 
   if (!state.shapes.length && !state.grid) {
-    ctx.fillStyle = "#a8adb5";
+    ctx.fillStyle = "#9aa0a9";
     ctx.font = "13px Segoe UI";
-    ctx.fillText("No shapes yet - add a block on the left.", 24, 32);
+    ctx.fillText("No shapes yet - add a block on the left.", 24, 34);
   }
-  ctx.fillStyle = "#a8adb5";
+  ctx.fillStyle = "#9aa0a9";
   ctx.font = "12px Consolas, monospace";
-  ctx.fillText("millimetres", width - 90, height - 8);
+  ctx.fillText("millimetres", width - 92, height - 10);
 }
 
 async function showGrid() {
@@ -954,15 +1059,20 @@ async function loadResults() {
   $("resBands").textContent = body.bands.length
     ? body.bands.map((band) => "-10 dB band: " + (band[0] / 1e9).toFixed(4) + " - " + (band[1] / 1e9).toFixed(4) + " GHz  (" + (band[2] / 1e6).toFixed(1) + " MHz)").join("\n")
     : "no -10 dB band in this sweep";
-  drawS11(body.curve);
+  drawS11(body.curve, body.resonance_ghz);
 }
 
-function drawS11(curve) {
+function drawS11(curve, resonanceGhz) {
   const canvas = $("cv2");
   const ctx = canvas.getContext("2d");
   const width = canvas.width, height = canvas.height;
   ctx.clearRect(0, 0, width, height);
-  if (!curve || !curve.length) return;
+  if (!curve || !curve.length) {
+    ctx.fillStyle = "#9aa0a9";
+    ctx.font = "13px Segoe UI";
+    ctx.fillText("Load a run to see the S11 curve.", 24, 34);
+    return;
+  }
   const padL = 64, padR = 20, padT = 18, padB = 40;
   const xs = curve.map((p) => p[0] / 1e9);
   const ys = curve.map((p) => p[1]);
@@ -972,21 +1082,28 @@ function drawS11(curve) {
   const X = (x) => padL + (x - xMin) / Math.max(1e-9, xMax - xMin) * (width - padL - padR);
   const Y = (y) => padT + (yMax - y) / Math.max(1e-9, yMax - yMin) * (height - padT - padB);
 
-  ctx.strokeStyle = "#3a3d42";
+  ctx.strokeStyle = "rgba(51,54,59,.75)";
   ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const x = xMin + (xMax - xMin) * i / 4;
+    ctx.beginPath(); ctx.moveTo(X(x), padT); ctx.lineTo(X(x), height - padB); ctx.stroke();
+    const y = yMin + (yMax - yMin) * i / 4;
+    ctx.beginPath(); ctx.moveTo(padL, Y(y)); ctx.lineTo(width - padR, Y(y)); ctx.stroke();
+  }
+  ctx.strokeStyle = "#3a3d42";
   ctx.strokeRect(padL, padT, width - padL - padR, height - padT - padB);
-  ctx.fillStyle = "#a8adb5";
+  ctx.fillStyle = "#9aa0a9";
   ctx.font = "11px Consolas, monospace";
   for (let i = 0; i <= 4; i++) {
     const x = xMin + (xMax - xMin) * i / 4;
     ctx.fillText(x.toFixed(2), X(x) - 16, height - padB + 14);
     const y = yMin + (yMax - yMin) * i / 4;
-    ctx.fillText(y.toFixed(1), 10, Y(y) + 3);
+    ctx.fillText(y.toFixed(1), 12, Y(y) + 3);
   }
   ctx.fillText("GHz", width - padR - 26, height - padB + 14);
-  ctx.fillText("dB", 10, padT + 10);
+  ctx.fillText("dB", 12, padT + 10);
 
-  ctx.strokeStyle = "#a8adb5";
+  ctx.strokeStyle = "rgba(154,160,169,.8)";
   ctx.setLineDash([5, 4]);
   ctx.beginPath();
   ctx.moveTo(padL, Y(-10));
@@ -994,21 +1111,51 @@ function drawS11(curve) {
   ctx.stroke();
   ctx.setLineDash([]);
 
+  const gradient = ctx.createLinearGradient(0, padT, 0, height - padB);
+  gradient.addColorStop(0, "rgba(76,139,245,.30)");
+  gradient.addColorStop(1, "rgba(76,139,245,.02)");
+  ctx.beginPath();
+  ctx.moveTo(X(xs[0]), Y(ys[0]));
+  curve.forEach((point, index) => { if (index > 0) ctx.lineTo(X(point[0] / 1e9), Y(point[1])); });
+  ctx.lineTo(X(xs[xs.length - 1]), height - padB);
+  ctx.lineTo(X(xs[0]), height - padB);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
   ctx.strokeStyle = "#4c8bf5";
   ctx.lineWidth = 2;
+  ctx.shadowColor = "rgba(76,139,245,.55)";
+  ctx.shadowBlur = 8;
   ctx.beginPath();
   curve.forEach((point, index) => {
     const px = X(point[0] / 1e9), py = Y(point[1]);
     if (index === 0) { ctx.moveTo(px, py); } else { ctx.lineTo(px, py); }
   });
   ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  if (resonanceGhz) {
+    let best = 0;
+    curve.forEach((point, index) => { if (Math.abs(point[0] / 1e9 - resonanceGhz) < Math.abs(curve[best][0] / 1e9 - resonanceGhz)) best = index; });
+    const mx = X(xs[best]), my = Y(ys[best]);
+    ctx.fillStyle = "#ffd166";
+    ctx.beginPath(); ctx.arc(mx, my, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#e8e9ec";
+    ctx.font = "12px Consolas, monospace";
+    const label = resonanceGhz.toFixed(4) + " GHz";
+    ctx.fillText(label, Math.min(mx + 8, width - padR - 92), Math.max(my - 8, padT + 12));
+  }
 }
 
 // ---------------- boot ----------------
 renderParams();
 renderShapes();
 drawCanvas();
-drawS11([]);
+drawS11([], null);
+checkEngine();
+const initialView = (location.hash || "").replace("#", "");
+if (["modeling", "simulate", "results"].indexOf(initialView) >= 0) { showView(initialView); }
 </script>
 </body>
 </html>"""
