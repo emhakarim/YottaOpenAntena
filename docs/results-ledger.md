@@ -58,3 +58,24 @@ with the caveat the tool prints (the two caps, and the fact that the end criteri
 2. The verdict JSON lands next to the run; the row here records its path, the shift and the status.
 3. Accepted rows must be quoted together with the caveat the tool prints. Raw numbers without an
    accepted verdict stay out of any report.
+
+## Campaign log: step A - overlap sweep (screening, 2026-09-29)
+
+Run on the line feed, cap 300000 @ 1e-4, band 2.4-2.5 GHz, two workers; per-point runs, logs and the
+summary live under `runs_b2/overlap/` (`sweep_summary.json`, `winner.txt`). Every point is
+cap-limited (`converged=false`), so **none of these numbers may be quoted** - the sweep only
+screens. The baseline point doubles as a determinism check and reproduces the accepted line-feed
+resonance (2.4390 GHz).
+
+| tag | inset delta | f_res (GHz) | \|S11\| (dB) | VSWR |
+|---|---|---|---|---|
+| m100 | -1.0 mm | 2.4316 | -16.858 | 1.335 |
+| **m050 - winner** | **-0.5 mm** | **2.4280** | **-16.901** | **1.333** |
+| p000 - baseline | 0.0 mm | 2.4390 | -16.376 | 1.358 |
+| p050 | +0.5 mm | 2.4390 | -16.391 | 1.357 |
+| p100 | +1.0 mm | 2.4426 | -16.020 | 1.376 |
+
+Winner = m050 (deepest |S11| with f_res inside the 2.40-2.50 GHz window). Step D re-runs it at cap
+400000; the truncation-pair verdict decides whether the tuned number becomes quotable
+(`runs_b2/overlap/followup/verdict_m050_sweep300000_vs_400000.json`, pending at the time of this
+entry).
