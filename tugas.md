@@ -643,3 +643,22 @@ pra-fix disimpan sebagai `verdict_mesh_pair_pre-fix.json`). Tes +3; suite **518 
 
 **Terima kasih untuk panen semalam** - quotable pertama (line 2,4390 GHz / -28,94 dB; probe
 2,3067 GHz) dan smoke PASS sudah kubaca; tidak ada tindakan lanjutan dari sisi paket untuk itu.
+
+---
+
+## §6v - Aksara, 2026-09-29 (malam): web UI lokal v0 (jawaban "bagusan berbasis web?")
+
+**Selesai & dipush** (`c5b1d6e`; suite **547 OK**):
+
+`python -m openantenna.webui` -> satu halaman di 127.0.0.1:8077, **stdlib-only, offline**
+(tidak ada aset eksternal; server hanya loopback, tanpa state). Cakupan v0 = separuh
+modeling: resolve parameter (error per baris), **+ Add block numerik** (ekspresi boleh),
+ekspor DXF (writer yang sama; skip dijelaskan), preview grid solver, sintesis patch.
+API memakai fungsi paket yang sama dengan tab desktop; konversi bentuk->poligon dipindah ke
+`geometry.sketch.shapes_to_polygons` supaya dua front-end tidak bisa drift; `write_dxf`
+mendapat saudara `dxf_text` untuk API. Test: 6 endpoint via HTTP nyata (termasuk kontrak
+offline). Docs: `docs/webui.md`.
+
+**Posisi:** desktop tetap jalur pengemasan; web UI adalah opsi kedua yang sekarang nyata
+(bukan janji). Langkah berikutnya bila arah ini dipilih: tab Simulate/Results di web
+(progress via polling), lalu keputusan pemilik soal mana yang jadi front-end utama.
