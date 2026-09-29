@@ -685,6 +685,12 @@ utama**; desktop tinggal opsi. Atas keputusan itu separuh kedua diport (`51a5e69
   direktori run sintetis - CI tidak butuh solver. Halaman tetap memegang kontrak offline
   (test: tak ada referensi eksternal).
 
+**Footgun yang ketemu saat menyalakan server (pelajaran):** di Windows, `SO_REUSEADDR` membuat instance kedua bisa mengikat port yang sama dan **membagi**
+koneksi dengan instance pertama - halaman lama tetap tersaji "secara acak".  Fix:
+`_Server.allow_reuse_address = False` + pesan jelas saat bind gagal; server lama yang
+jadi yatim setelah sesi ditutup harus dimatikan dengan kill proses (tree), bukan
+hanya menutup sesi.
+
 **Catatan pembagian:** desktop tetap dirawat (test-nya jalan; jalur pengemasan), tapi fitur
 baru diarahkan ke web. Yotta: kalau mau, deploy web ini di mesinmu untuk smoke run nyata
 (openEMS ada di sana) - instruksi sama: `python -m openantenna.webui`, lalu Generate + Run

@@ -1056,9 +1056,20 @@ class _Handler(BaseHTTPRequestHandler):
         pass  # a local tool page does not need per-request console noise
 
 
+class _Server(ThreadingHTTPServer):
+    """A server that refuses to share its port.
+
+    On Windows, SO_REUSEADDR lets a second process bind the same port and then split
+    incoming connections with the first - a silent double-bind that cost an evening of
+    "why is the old page still being served?".  Refusing loudly beats splitting quietly.
+    """
+
+    allow_reuse_address = False
+
+
 def make_server(host: str = "127.0.0.1", port: int = 8077) -> ThreadingHTTPServer:
     """Bind and return the server (tests use port 0 for an ephemeral one)."""
-    return ThreadingHTTPServer((host, int(port)), _Handler)
+    return _Server((host, int(port)), _Handler)
 
 
 def main(argv=None) -> int:
@@ -1071,7 +1082,12 @@ def main(argv=None) -> int:
     parser.add_argument("--host", default="127.0.0.1", help="bind address (keep it on localhost)")
     parser.add_argument("--port", type=int, default=8077)
     args = parser.parse_args(argv)
-    server = make_server(args.host, args.port)
+    try:
+        server = make_server(args.host, args.port)
+    except OSError as exc:
+        print("cannot bind %s:%d - %s" % (args.host, args.port, exc))
+        print("another instance may already be running; stop it, or pass --port.")
+        return 1
     host, port = server.server_address[:2]
     print("OpenAntenna local web UI (offline, stdlib only) -> 127.0.0.1:%d" % port)
     print("Ctrl+C to stop.")
