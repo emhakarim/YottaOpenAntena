@@ -160,6 +160,8 @@ def _project_from(payload):
     feed_inset_text = str(payload.get("feed_inset_mm") or "").strip()
     feed_line_text = str(payload.get("feed_line_width_mm") or "").strip()
     feed_inset_m = float(feed_inset_text) * 1e-3 if feed_inset_text else None
+    if feed_inset_m is not None and feed_inset_m <= 0.0:
+        feed_inset_m = None  # a zero override means "let the synthesis decide"
     feed_line_width_m = float(feed_line_text) * 1e-3 if feed_line_text else None
     if feed_inset_m is not None:
         if feed_inset_m < 0.0:
@@ -790,7 +792,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div class="actions">
             <button onclick="fillPortSynth()">Use synthesised values</button>
           </div>
-          <div class="sub">Empty = the generator synthesises (inset). With "patch + port aid" on, drag the port marker (tool "port"): horizontal = inset depth, vertical = lateral offset - or type values; both flow into Generate/Run (the lateral offset is bounded so the feed stays on the patch).</div>
+          <div class="sub">Empty = the generator synthesises (inset). With "patch + port aid" on, drag the port marker (tool "port"): horizontal = inset depth, vertical = lateral offset - or type values; both flow into Generate/Run (the lateral offset is bounded so the feed stays on the patch). Probe mode has no inset/line - those boxes stay empty on purpose; 0 (typed or dragged to the edge) means "use the synthesised value".</div>
         </section>
       </div>
     </main>
@@ -1132,7 +1134,9 @@ function onCanvasMove(ev) {
   if (drawing.kind === "rect" || drawing.kind === "circle") { drawing.current = p; }
   else if (drawing.kind === "portdrag") {
     const limit = portAid ? portAid.l : Number.POSITIVE_INFINITY;
-    $("pfInset").value = Math.min(Math.max(p.x, 0), limit).toFixed(2);
+    const insetVal = Math.min(Math.max(p.x, 0), limit);
+    // dragging fully to the edge means "let the synthesis decide" (the box treats empty/0 alike)
+    $("pfInset").value = insetVal < 0.05 ? "" : insetVal.toFixed(2);
     if (portAid) {
       const entered = $("pfLine").value.trim();
       const lw = entered === "" ? (portAid.lw || 0) : (parseFloat(entered) || 0);
@@ -1200,14 +1204,28 @@ function onCanvasKey(ev) {
 }
 
 async function fillPortSynth() {
-  const result = await post("/api/patch", { frequency_ghz: $("f0").value, epsilon_r: $("er").value, height_mm: $("hh").value, feed: $("pfFeed").value });
-  if (!result.ok) { setStatus(result.body.error, true); return; }
-  $("pfInset").value = result.body.inset_mm.toFixed(3);
-  $("pfLine").value = result.body.feed_line_width_mm.toFixed(3);
-  portAid = { w: result.body.width_mm, l: result.body.length_mm, lw: result.body.feed_line_width_mm };
+  await refreshPortAid();
+  if (!portAid) { return; }
+  $("pfInset").value = portAid.inset0 > 0 ? portAid.inset0.toFixed(3) : "";
+  $("pfLine").value = portAid.lw > 0 ? portAid.lw.toFixed(3) : "";
   $("cvAid").checked = true;
   drawCanvas();
-  setStatus("port values from synthesis: inset " + result.body.inset_mm.toFixed(3) + " mm, line " + result.body.feed_line_width_mm.toFixed(3) + " mm");
+  setStatus("port values from synthesis: inset " + portAid.inset0.toFixed(3) + " mm, line " + portAid.lw.toFixed(3) + " mm (" + $("pfFeed").value + " mode)");
+}
+
+async function refreshPortAid() {
+  const result = await post("/api/patch", { frequency_ghz: $("f0").value, epsilon_r: $("er").value, height_mm: $("hh").value, feed: $("pfFeed").value });
+  if (!result.ok) { setStatus(result.body.error, true); return null; }
+  portAid = {
+    w: result.body.width_mm,
+    l: result.body.length_mm,
+    lw: result.body.feed_line_width_mm,
+    inset0: result.body.inset_mm
+  };
+  // probe feeds have no inset/line - leave those boxes empty so Generate stays valid
+  if (!$("pfInset").value.trim() && result.body.inset_mm > 0) { $("pfInset").value = result.body.inset_mm.toFixed(3); }
+  if (!$("pfLine").value.trim() && result.body.feed_line_width_mm > 0) { $("pfLine").value = result.body.feed_line_width_mm.toFixed(3); }
+  return portAid;
 }
 
 function initCanvas() {
@@ -1217,15 +1235,19 @@ function initCanvas() {
   window.addEventListener("mouseup", onCanvasUp);
   cv.addEventListener("dblclick", onCanvasDbl);
   cv.addEventListener("keydown", onCanvasKey);
-  $("pfFeed").addEventListener("change", () => { $("simFeed").value = $("pfFeed").value; drawCanvas(); });
+  $("pfFeed").addEventListener("change", async () => {
+    $("simFeed").value = $("pfFeed").value;
+    if ($("cvAid").checked) { await refreshPortAid(); }
+    drawCanvas();
+  });
+  $("simFeed").addEventListener("change", async () => {
+    $("pfFeed").value = $("simFeed").value;
+    if ($("cvAid").checked) { await refreshPortAid(); }
+    drawCanvas();
+  });
   $("cvAid").addEventListener("change", async (ev) => {
     if (ev.target.checked && !portAid) {
-      const result = await post("/api/patch", { frequency_ghz: $("f0").value, epsilon_r: $("er").value, height_mm: $("hh").value, feed: $("pfFeed").value });
-      if (result.ok) {
-        portAid = { w: result.body.width_mm, l: result.body.length_mm, lw: result.body.feed_line_width_mm };
-        if (!$("pfInset").value.trim()) { $("pfInset").value = result.body.inset_mm.toFixed(3); }
-        if (!$("pfLine").value.trim()) { $("pfLine").value = result.body.feed_line_width_mm.toFixed(3); }
-      }
+      await refreshPortAid();
     }
     drawCanvas();
   });
