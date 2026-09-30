@@ -748,3 +748,65 @@ terasa satu produk.
 
 Jangan lupa: satu run pada satu waktu di server web; hasil run tetap "model output, bukan
 pengukuran" sampai gerbang quotable terpenuhi.
+
+---
+
+## 6z - Yotta, 2026-09-30 (sore): eksekusi tugas 6y - smoke web penuh + red-team API; dua temuan nyata
+
+Semua tiga tugas dikerjakan. Bukti mentah: `.cluster\yotta-open-antena\tmp\webui_smoke\`
+(53 berkas: body respons per endpoint, log server, screenshot) dan run di `web_smoke\run{1,2,3}`.
+Smoke dijalankan lewat endpoint yang sama dengan halaman (server `scripts/start_webui.py`,
+port 8077, venv openEMS mesin ini).
+
+**1. Smoke run penuh.**
+
+- **Generate + include-on**: dek run1 memuat poligon sketsa (`SKETCH_POLYGONS = [[[0.0, 0.02,
+  0.02, 0.0], [0.0, 0.0, 0.01, 0.01]]]`, blok 20x10 mm) + `_sketch_layer.AddPolygon(...)` -
+  jalur Modeling->dek jalan ujung ke ujung.
+- **Progress/polling**: umpan progres hidup - baris `[progress]` di log server, `progress.json`
+  per run, dan `run_status` JSON (contoh verbatim: `step 2,589/5,000  51.8%  ...  18.5 MCells/s`).
+  Catatan: snap pertama baru muncul setelah fase port selesai (~1 menit pertama `progress: null`).
+- **Cancel run (2x percobaan, keduanya run hidup nyata):** `cancelling` -> `cancelled` dalam
+  detik; **nol proses yatim** (`Get-CimInstance` untuk `sim.py`/`openEMS.exe`: bersih setelah
+  kedua cancel); run yang dibatalkan tidak menulis `s11.csv` - halaman memang menuliskan
+  "no results were written".
+- **Load results**: run3 (cap dibakar di dek) selesai `done` -> `s11.csv` + `run_summary.json`
+  -> `/api/results` mengembalikan kurva 51 titik + provenance + `converged: false` + caveat
+  cap (jujur untuk run stub).
+- **Screenshot**: `webui_home.png` (Edge headless, 1600x1000) di folder bukti.
+
+**2. Dua temuan nyata (mohon tindak lanjut).**
+
+- **[F1 - semantik] `max_timesteps`/`end_criteria` hanya mengikat saat `/api/generate`.**
+  `/api/run` menerima kunci yang sama tetapi memakainya hanya untuk denominator bar
+  (`_RUN["cap"]`, webui.py L229). Kalau nilai Run berbeda dari yang dibakar di dek, solver
+  mengikuti dek sementara bar melaporkan persentase salah - terlihat di sini: run "3.000
+  langkah" berjalan sampai 15.534 langkah dengan bar "431,5 %...", sampai dicancel. Lewat
+  halaman aman selama field tidak diubah di antara Generate dan Run; jebakan nyata untuk
+  pemakaian API. Saran: tolak kunci ini di `/api/run` bila beda dari dek, atau baca cap bar
+  dari manifest dek.
+- **[F2 - robustness] Body JSON valid yang bukan objek (array/angka/string/bool) => koneksi
+  diputus tanpa respons** ("curl: (52) Empty reply from server", kode 000) - bukan 400,
+  bukan 500; server tetap hidup untuk permintaan berikutnya. Jalur handler memanggil
+  `payload.get()` sebelum memeriksa tipe. Saran: `if not isinstance(payload, dict): 400
+  "the request body must be a JSON object"` (tes suite belum menutup kasus ini - semua tes
+  mengirim objek).
+- [minor] pesan error kadang berprefiks `ValueError:`; `energy_db: null` di progress probe
+  (tidak blocker).
+
+**3. Red-team API: sisanya bersih.** JSON tak valid, text/plain, objek bertipe salah, angka
+raksasa ("9"x400, `1e999`), `rundir` aneh (`C:\Windows\System32`), results di direktori tidak
+ada, cancel saat idle => **semua 400 berpesan** (bukan 500). Kontrak offline diuji ulang di
+live: tidak ada `src="http`/`href="http`; referensi hanya 127.0.0.1.
+
+**4. Rantai Route B/ledger (tugas 3): tuntas.** Langkah D ACCEPTED (shift 0,151 %; 2,4280 /
+-16,90 dB @300k vs 2,4316 / **-26,96 dB** @399.788;
+`runs_b2/overlap/followup/verdict_m050_sweep300000_vs_400000.json`) dan langkah E **ACCEPTED
+Route A tanpa caveat** - mesh15 (1.481.436 langkah) dan mesh20 (32.034 langkah) keduanya
+2,4280 GHz, **shift 0,000 %** (`runs/verdict_winE_mesh.json`) - pertanyaan mesh ditutup.
+Push `988d50a3` + `b4af0eba`; buku besar `docs/results-ledger.md`; suite **555 OK** di kedua
+pohon; sinkron ke head `ee754a80` selesai.
+
+**Catatan metode:** smoke lewat API (bukan klik browser) - satu bug klien di skrip saya sendiri
+(`curl -w ''` di PS 5.1 -> argumen kosong dibuang) sempat merusak loop polling pertama, sudah
+dikoreksi dan tidak mempengaruhi hasil; semua angka disalin dari berkas.
