@@ -713,6 +713,31 @@ def render_2d_block(plan) -> str:
     return "\n".join(lines)
 
 
+def _point_in_polygon(x: float, y: float, polygon) -> bool:
+    """Even-odd rule; ``polygon`` is a sequence of (x, y) metre pairs."""
+    inside = False
+    count = len(polygon)
+    for index in range(count):
+        x1, y1 = polygon[index][0], polygon[index][1]
+        x2, y2 = polygon[(index + 1) % count][0], polygon[(index + 1) % count][1]
+        if (y1 > y) != (y2 > y):
+            x_cross = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
+            if x < x_cross:
+                inside = not inside
+    return inside
+
+
+def _point_on_metal(point, width: float, length: float, polygons) -> bool:
+    """True when (x, y) lies on the parametric patch or on a drawn (sketch) polygon."""
+    x, y = point
+    if abs(x) <= width / 2.0 and abs(y) <= length / 2.0:
+        return True
+    for polygon in polygons or ():
+        if _point_in_polygon(x, y, polygon):
+            return True
+    return False
+
+
 class OpenEMSSolver(SolverAdapter):
     """Adapter that renders and (when possible) runs an openEMS model."""
 
@@ -1009,43 +1034,60 @@ class OpenEMSSolver(SolverAdapter):
             layout.positions_m = [(0.0, 0.0)]
             boundary_mode = "UNIT_CELL"
 
-        feed_x = float(project.patch.feed_x_offset_m or 0.0)
-        if project.patch.feed_mode == "corporate" and project.patch.feed_x_offset_m:
-            raise ValueError("feed_x_offset_m is not supported with a corporate feed yet")
-        if project.patch.feed_mode == "inset":
-            inset = project.patch.feed_inset_m or design.inset_depth_m
-            feed_y = length / 2.0 - inset
-        elif project.patch.feed_mode == "edge":
-            feed_y = length / 2.0
-        elif project.patch.feed_mode == "probe":
-            probe_inset = project.patch.feed_inset_m or 0.0
-            if probe_inset < 0.0 or probe_inset > length:
+        custom_feed = None
+        if project.custom_feed_x_m is not None or project.custom_feed_y_m is not None:
+            if project.custom_feed_x_m is None or project.custom_feed_y_m is None:
+                raise ValueError("custom_feed_x_m and custom_feed_y_m must be given together")
+            if project.patch.feed_mode == "corporate":
+                raise ValueError("a custom feed point is not supported with a corporate feed")
+            custom_feed = (float(project.custom_feed_x_m), float(project.custom_feed_y_m))
+            if not _point_on_metal(custom_feed, width, length, project.sketch_polygons):
                 raise ValueError(
-                    "feed_inset_mm (probe position from the reference edge) must be within "
-                    "[0, patch length %.3f mm]" % (length * 1e3)
+                    "custom feed point (%.3f, %.3f) mm is not on any metal - draw a shape "
+                    "there or move the port" % (custom_feed[0] * 1e3, custom_feed[1] * 1e3)
                 )
-            # no value -> the classic centre feed; a value places the probe at that distance
-            # from the reference edge along the patch length (same convention as the line arm)
-            feed_y = (length / 2.0 - probe_inset) if probe_inset else 0.0
-        elif project.patch.feed_mode != "corporate":
-            raise ValueError("unknown feed_mode %r" % project.patch.feed_mode)
-        if project.patch.feed_mode != "corporate" and feed_x:
-            resolved_line_width = (
-                design.feed_line_width_m
-                if project.patch.feed_line_width_m is None
-                else project.patch.feed_line_width_m
-            )
-            line_half = (
-                float(resolved_line_width) / 2.0
-                if (project.patch.feed_mode in ("inset", "edge") and resolved_line_width)
-                else 0.0
-            )
-            if abs(feed_x) + line_half >= width / 2.0:
-                raise ValueError(
-                    "feed_x_offset_mm pushes the feed past the patch edge: |%.3f| + %.3f mm "
-                    ">= W/2 = %.3f mm"
-                    % (abs(feed_x) * 1e3, line_half * 1e3, width / 2.0 * 1e3)
+        if custom_feed is not None:
+            # a fully specified probe-style port: the point drives FEED_X/FEED_Y and the
+            # rendered feed is probe-like (no line, no notch), whatever feed_mode says
+            feed_x, feed_y = custom_feed
+        else:
+            feed_x = float(project.patch.feed_x_offset_m or 0.0)
+            if project.patch.feed_mode == "corporate" and project.patch.feed_x_offset_m:
+                raise ValueError("feed_x_offset_m is not supported with a corporate feed yet")
+            if project.patch.feed_mode == "inset":
+                inset = project.patch.feed_inset_m or design.inset_depth_m
+                feed_y = length / 2.0 - inset
+            elif project.patch.feed_mode == "edge":
+                feed_y = length / 2.0
+            elif project.patch.feed_mode == "probe":
+                probe_inset = project.patch.feed_inset_m or 0.0
+                if probe_inset < 0.0 or probe_inset > length:
+                    raise ValueError(
+                        "feed_inset_mm (probe position from the reference edge) must be within "
+                        "[0, patch length %.3f mm]" % (length * 1e3)
+                    )
+                # no value -> the classic centre feed; a value places the probe at that
+                # distance from the reference edge (same convention as the line arm)
+                feed_y = (length / 2.0 - probe_inset) if probe_inset else 0.0
+            elif project.patch.feed_mode != "corporate":
+                raise ValueError("unknown feed_mode %r" % project.patch.feed_mode)
+            if project.patch.feed_mode != "corporate" and feed_x:
+                resolved_line_width = (
+                    design.feed_line_width_m
+                    if project.patch.feed_line_width_m is None
+                    else project.patch.feed_line_width_m
                 )
+                line_half = (
+                    float(resolved_line_width) / 2.0
+                    if (project.patch.feed_mode in ("inset", "edge") and resolved_line_width)
+                    else 0.0
+                )
+                if abs(feed_x) + line_half >= width / 2.0:
+                    raise ValueError(
+                        "feed_x_offset_mm pushes the feed past the patch edge: |%.3f| + %.3f mm "
+                        ">= W/2 = %.3f mm"
+                        % (abs(feed_x) * 1e3, line_half * 1e3, width / 2.0 * 1e3)
+                    )
 
         # ---- corporate feed tree (Phase 2 #5b) ------------------------------------------
         # A 1-by-n row only: a 2-D splitter tree needs a two-axis plan, which is the #5b
@@ -1155,6 +1197,16 @@ class OpenEMSSolver(SolverAdapter):
             if project.patch.feed_line_width_m is None
             else project.patch.feed_line_width_m
         )
+        # Values as the template should see them: a custom feed point renders as a
+        # probe-style port (no line/notch) regardless of the patch feed_mode.
+        if custom_feed is not None:
+            template_feed_inset = 0.0
+            template_feed_line_width = 0.0
+            template_feed_mode = "probe"
+        else:
+            template_feed_inset = project.patch.feed_inset_m or design.inset_depth_m
+            template_feed_line_width = resolved_line_width
+            template_feed_mode = project.patch.feed_mode
         if self.element_ports and resolved_line_width:
             raise ValueError(
                 "element_ports=True cannot be combined with a printed feed line yet: "
@@ -1206,9 +1258,9 @@ class OpenEMSSolver(SolverAdapter):
             CONDUCTOR_MODEL=conductor_model,
             FEED_X=fmt(feed_x),
             FEED_Y=fmt(feed_y),
-            FEED_INSET=fmt(project.patch.feed_inset_m or design.inset_depth_m),
-            FEED_LINE_WIDTH=fmt(resolved_line_width),
-            FEED_MODE=project.patch.feed_mode,
+            FEED_INSET=fmt(template_feed_inset),
+            FEED_LINE_WIDTH=fmt(template_feed_line_width),
+            FEED_MODE=template_feed_mode,
             CORPORATE_FEED_RECTS=corporate_rects,
             CORPORATE_FEED_LEVELS=corporate_levels,
             CORPORATE_FEED_LEAF_Y=fmt(corporate_leaf_y),

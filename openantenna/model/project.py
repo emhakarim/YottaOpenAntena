@@ -261,6 +261,11 @@ class Project:
     #: Closed metal polygons drawn in the GUI sketch, in metres (docs/sketch-to-deck.md).
     #: Optional and additive: the parametric patch remains the driven element.
     sketch_polygons: Tuple[Tuple[Tuple[float, float], ...], ...] = ()
+    #: Optional custom excitation point [m] on the z = 0 metal plane ("draw a shape, put the
+    #: port on it").  Both coordinates or neither; the render validates that the point sits
+    #: on metal (the parametric patch or a sketched polygon).
+    custom_feed_x_m: Optional[float] = None
+    custom_feed_y_m: Optional[float] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
@@ -280,6 +285,15 @@ class Project:
                 validate_polygon(polygon, where="sketch polygon %d" % index)
                 for index, polygon in enumerate(self.sketch_polygons, start=1)
             )
+
+        if (self.custom_feed_x_m is None) != (self.custom_feed_y_m is None):
+            raise ValueError("custom_feed_x_m and custom_feed_y_m must be given together")
+        for _name in ("custom_feed_x_m", "custom_feed_y_m"):
+            _value = getattr(self, _name)
+            if _value is not None and (
+                isinstance(_value, bool) or not isinstance(_value, (int, float))
+            ):
+                raise ValueError("%s must be a number when given" % _name)
 
     # ------------------------------------------------------------ helpers
     @property
@@ -406,6 +420,8 @@ class Project:
             sweep=FrequencySweep.from_dict(data["sweep"]),
             notes=data.get("notes", ""),
             sketch_polygons=tuple(data.get("sketch_polygons", ())),
+            custom_feed_x_m=data.get("custom_feed_x_m"),
+            custom_feed_y_m=data.get("custom_feed_y_m"),
         )
 
     def to_json(self, indent: int = 2) -> str:

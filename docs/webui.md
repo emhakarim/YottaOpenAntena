@@ -111,6 +111,11 @@ include switch, so nothing below adds a new write path):
   In probe mode the inset box places the probe along the patch length (empty = the classic
   centre feed) and the line box stays empty; a zero inset (typed, or the marker dragged to
   the edge) falls back to the centre/synthesis.
+* **Custom feed point**: tick the checkbox in the panel to place the excitation at
+  **absolute canvas coordinates** - drag the green marker onto metal you drew (or type x/y
+  mm). The render refuses points that are not on metal (the patch rectangle or a sketch
+  polygon) and treats the feed as a probe-style port (no line/notch). Physics of custom
+  feeds is wired but not yet solver-validated.
 * **Materials**: the built-in dielectric library is injected into the page at serve
   time; picking one shows eps_r / tan_delta / source note and sets the Simulate
   material. Custom (user-defined) materials are a later slice.

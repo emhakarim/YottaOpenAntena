@@ -468,6 +468,34 @@ class TestCoplanarInsetFeed(unittest.TestCase):
         with self.assertRaises(ValueError):
             OpenEMSSolver().render_script(project)
 
+    def test_a_custom_feed_point_on_the_patch_drives_the_port(self):
+        project = make_project()
+        project.custom_feed_x_m = 5.0e-3
+        project.custom_feed_y_m = 3.0e-3
+        script = OpenEMSSolver().render_script(project)
+        token_x = script.split("FEED_X = ", 1)[1].split("\n", 1)[0].strip().rstrip(",")
+        token_y = script.split("FEED_Y = ", 1)[1].split("\n", 1)[0].strip().rstrip(",")
+        self.assertAlmostEqual(float(token_x), 5.0e-3, places=9)
+        self.assertAlmostEqual(float(token_y), 3.0e-3, places=9)
+
+    def test_a_custom_feed_point_on_drawn_metal_is_allowed(self):
+        project = make_project()
+        project.sketch_polygons = (
+            ((0.030, 0.000), (0.040, 0.000), (0.040, 0.010), (0.030, 0.010)),
+        )
+        project.custom_feed_x_m = 0.035
+        project.custom_feed_y_m = 0.005
+        script = OpenEMSSolver().render_script(project)
+        token_x = script.split("FEED_X = ", 1)[1].split("\n", 1)[0].strip().rstrip(",")
+        self.assertAlmostEqual(float(token_x), 0.035, places=9)
+
+    def test_a_custom_feed_point_in_free_space_is_rejected(self):
+        project = make_project()
+        project.custom_feed_x_m = 0.050
+        project.custom_feed_y_m = 0.050
+        with self.assertRaisesRegex(ValueError, "not on any metal"):
+            OpenEMSSolver().render_script(project)
+
     def test_the_line_feed_also_refines_the_mesh_across_the_line(self):
         """Drawing a 5 mm line on a 7 mm mesh would measure the mesh, not the feed."""
         project = make_project()

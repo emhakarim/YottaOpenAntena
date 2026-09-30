@@ -924,3 +924,9 @@ Verdict otomatis via `fx_validate_chain.ps1` -> `runs_b2/verdict_fx_offset.json`
 diabaikan diam-diam): nilainya = jarak probe dari tepi referensi sepanjang panjang patch (kosong =
 tengah, konvensi lama). Marker drag sudah berlaku dua mode tanpa perubahan UI. +3 tes render
 (nilai FEED_Y benar; default tengah; di luar patch ditolak). Push T.
+
+**Update 6 (~21:2x): port CUSTOM di titik gambar.** `Project.custom_feed_x_m/y_m` + guard
+"harus di atas metal" (patch atau poligon sketsa; even-odd) + render sebagai port probe (tanpa
+jalur/notch) apa pun feed_mode-nya; Web: checkbox "custom feed point" + x/y mm + marker hijau yang
+bisa di-drag ke metal yang digambar. +5 tes (3 render, 2 webui). Push U. Fisika umpan custom belum
+divalidasi run (follow-up: pasangan probe custom).

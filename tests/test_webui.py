@@ -351,6 +351,35 @@ class TestWebUI(unittest.TestCase):
             project = json.loads((rundir / "project.json").read_text(encoding="utf-8"))
             self.assertIsNone(project["patch"]["feed_inset_m"])
 
+    def test_generate_accepts_a_custom_feed_point_on_drawn_metal(self):
+        with tempfile.TemporaryDirectory() as folder:
+            rundir = Path(folder) / "custom_feed"
+            status, body = _post(
+                self.base,
+                "/api/generate",
+                {"rundir": str(rundir), "frequency_ghz": 2.45, "material": "PTFE",
+                 "height_mm": 1.6, "feed": "probe",
+                 "custom_feed_x_mm": 35.0, "custom_feed_y_mm": 5.0,
+                 "shapes": [{"kind": "block", "points": [[30, 0], [40, 0], [40, 10], [30, 10]],
+                            "thickness": "1.6"}]},
+            )
+            self.assertEqual(status, 200, body)
+            project = json.loads((rundir / "project.json").read_text(encoding="utf-8"))
+            self.assertAlmostEqual(project["custom_feed_x_m"], 0.035, places=9)
+            self.assertAlmostEqual(project["custom_feed_y_m"], 0.005, places=9)
+
+    def test_a_custom_feed_point_without_metal_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            status, body = _post(
+                self.base,
+                "/api/generate",
+                {"rundir": str(Path(folder) / "nowhere"), "frequency_ghz": 2.45,
+                 "material": "PTFE", "height_mm": 1.6,
+                 "custom_feed_x_mm": 50.0, "custom_feed_y_mm": 50.0, "shapes": []},
+            )
+        self.assertEqual(status, 400)
+        self.assertIn("not on any metal", body["error"])
+
     def test_the_deck_cap_is_read_from_the_manifest(self):
         from openantenna import webui as webui_module
 

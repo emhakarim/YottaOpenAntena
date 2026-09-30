@@ -157,6 +157,10 @@ def _project_from(payload):
     points = int(payload.get("sweep_points", 201) or 201)
     feed_x_text = str(payload.get("feed_x_offset_mm") or "").strip()
     feed_x_offset_m = float(feed_x_text) * 1e-3 if feed_x_text else None
+    custom_x_text = str(payload.get("custom_feed_x_mm") or "").strip()
+    custom_y_text = str(payload.get("custom_feed_y_mm") or "").strip()
+    custom_feed_x_m = float(custom_x_text) * 1e-3 if custom_x_text else None
+    custom_feed_y_m = float(custom_y_text) * 1e-3 if custom_y_text else None
     feed_inset_text = str(payload.get("feed_inset_mm") or "").strip()
     feed_line_text = str(payload.get("feed_line_width_mm") or "").strip()
     feed_inset_m = float(feed_inset_text) * 1e-3 if feed_inset_text else None
@@ -188,6 +192,8 @@ def _project_from(payload):
         ),
         array=ArrayConfig(nx=1, ny=1),
         sweep=FrequencySweep.fractional(frequency_hz, 0.15, points=points),
+        custom_feed_x_m=custom_feed_x_m,
+        custom_feed_y_m=custom_feed_y_m,
     )
     shapes = payload.get("shapes") or []
     polygons, _notes = shapes_to_polygons(shapes)
@@ -791,8 +797,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
           </div>
           <div class="actions">
             <button onclick="fillPortSynth()">Use synthesised values</button>
+            <label class="sub" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="pfCustom" onchange="drawCanvas()"> custom feed point (drag it onto drawn metal)</label>
+            <label class="sub" for="pfCx">x</label><input id="pfCx" class="num" style="max-width:84px" value="" oninput="drawCanvas()">
+            <label class="sub" for="pfCy">y</label><input id="pfCy" class="num" style="max-width:84px" value="" oninput="drawCanvas()">
           </div>
-          <div class="sub">Empty = the generator synthesises (inset). With "patch + port aid" on, drag the port marker (tool "port"): horizontal = inset depth, vertical = lateral offset - or type values; both flow into Generate/Run (the lateral offset is bounded so the feed stays on the patch). In probe mode the inset box = probe distance from the reference edge (empty = centre), no line; 0 means the synthesised/centre value.</div>
+          <div class="sub">Empty = the generator synthesises (inset). With "patch + port aid" on, drag the port marker (tool "port"): horizontal = inset depth, vertical = lateral offset - or type values; both flow into Generate/Run (the lateral offset is bounded so the feed stays on the patch). In probe mode the inset box = probe distance from the reference edge (empty = centre), no line; 0 means the synthesised/centre value. Tick "custom feed point" to place the excitation anywhere ON metal you drew (absolute mm; the marker turns green and drags to that point).</div>
         </section>
       </div>
     </main>
@@ -1133,17 +1142,23 @@ function onCanvasMove(ev) {
   const p = eventMm(ev);
   if (drawing.kind === "rect" || drawing.kind === "circle") { drawing.current = p; }
   else if (drawing.kind === "portdrag") {
-    const limit = portAid ? portAid.l : Number.POSITIVE_INFINITY;
-    const insetVal = Math.min(Math.max(p.x, 0), limit);
-    // dragging fully to the edge means "let the synthesis decide" (the box treats empty/0 alike)
-    $("pfInset").value = insetVal < 0.05 ? "" : insetVal.toFixed(2);
-    if (portAid) {
-      const entered = $("pfLine").value.trim();
-      const lw = entered === "" ? (portAid.lw || 0) : (parseFloat(entered) || 0);
-      // keep the drag limit inside what the generator will accept: w/2 - lineWidth/2, minus a margin
-      const bound = Math.max(portAid.w / 2.0 - lw / 2.0 - 0.5, 0.5);
-      const lateral = Math.min(Math.max(p.y - portAid.w / 2.0, -bound), bound);
-      $("pfX").value = lateral.toFixed(2);
+    if ($("pfCustom").checked) {
+      // absolute canvas coordinates - the user parks the marker on drawn metal
+      $("pfCx").value = p.x.toFixed(2);
+      $("pfCy").value = p.y.toFixed(2);
+    } else {
+      const limit = portAid ? portAid.l : Number.POSITIVE_INFINITY;
+      const insetVal = Math.min(Math.max(p.x, 0), limit);
+      // dragging fully to the edge means "let the synthesis decide" (the box treats empty/0 alike)
+      $("pfInset").value = insetVal < 0.05 ? "" : insetVal.toFixed(2);
+      if (portAid) {
+        const entered = $("pfLine").value.trim();
+        const lw = entered === "" ? (portAid.lw || 0) : (parseFloat(entered) || 0);
+        // keep the drag limit inside what the generator will accept: w/2 - lineWidth/2, minus a margin
+        const bound = Math.max(portAid.w / 2.0 - lw / 2.0 - 0.5, 0.5);
+        const lateral = Math.min(Math.max(p.y - portAid.w / 2.0, -bound), bound);
+        $("pfX").value = lateral.toFixed(2);
+      }
     }
   } else { drawing.hover = p; }
   drawCanvas();
@@ -1419,7 +1434,21 @@ function drawCanvas() {
     ctx.restore();
   }
 
-  if (!state.shapes.length && !state.grid && !drawing && !($("cvAid").checked && portAid)) {
+  if ($("pfCustom").checked) {
+    const cx = parseFloat($("pfCx").value);
+    const cy = parseFloat($("pfCy").value);
+    if (isFinite(cx) && isFinite(cy)) {
+      ctx.save();
+      ctx.fillStyle = "#5ce1a2";
+      ctx.beginPath(); ctx.arc(X(cx), Y(cy), 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#eef0f4";
+      ctx.font = "12px Consolas, monospace";
+      ctx.fillText("custom feed @ " + cx.toFixed(2) + ", " + cy.toFixed(2) + " mm", X(cx) + 9, Y(cy) - 9);
+      ctx.restore();
+    }
+  }
+
+  if (!state.shapes.length && !state.grid && !drawing && !($("cvAid").checked && portAid) && !$("pfCustom").checked) {
     ctx.fillStyle = "#98a0ac";
     ctx.font = "13px Segoe UI";
     ctx.fillText("No shapes yet - pick a tool above and draw, or add a block on the left.", 24, 34);
@@ -1482,6 +1511,8 @@ function simPayload() {
     max_timesteps: $("simCap").value, end_criteria: $("simEnd").value,
     feed_inset_mm: $("pfInset").value, feed_line_width_mm: $("pfLine").value,
     feed_x_offset_mm: $("pfX").value,
+    custom_feed_x_mm: $("pfCustom").checked ? $("pfCx").value : "",
+    custom_feed_y_mm: $("pfCustom").checked ? $("pfCy").value : "",
     rundir: $("simDir").value,
     shapes: $("simInclude").checked ? state.shapes : [],
   };
