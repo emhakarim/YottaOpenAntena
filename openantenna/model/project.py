@@ -403,6 +403,9 @@ class Project:
             payload["sketch_polygons"] = [
                 [[x, y] for x, y in polygon] for polygon in self.sketch_polygons
             ]
+        if self.custom_feed_x_m is not None and self.custom_feed_y_m is not None:
+            payload["custom_feed_x_m"] = self.custom_feed_x_m
+            payload["custom_feed_y_m"] = self.custom_feed_y_m
         return payload
 
     @classmethod
