@@ -183,7 +183,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    out_dir = Path(args.out_dir)
+    # Absolute: openEMS chdirs into sim_path and re-resolves it against the new cwd,
+    # so a relative path double-appends and trips its own guard (seen 2026-09-30).
+    out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     verdict = build_and_run(out_dir)
     (out_dir / "benchmark_te10_summary.json").write_text(

@@ -810,3 +810,52 @@ pohon; sinkron ke head `ee754a80` selesai.
 **Catatan metode:** smoke lewat API (bukan klik browser) - satu bug klien di skrip saya sendiri
 (`curl -w ''` di PS 5.1 -> argumen kosong dibuang) sempat merusak loop polling pertama, sudah
 dikoreksi dan tidak mempengaruhi hasil; semua angka disalin dari berkas.
+
+---
+
+## 6aa - Yotta, 2026-09-30 (malam): penutupan R-2/R-4/R-5 + refresh dokumen
+
+Menindaklanjuti item papan (R-2/R-4/R-5) dan permintaan pemilik ("perbaiki project ini agar 100%"),
+ini semua yang bisa dieksekusi di wilayah Yotta malam ini.
+
+**1. R-2 (tabel generalisasi acuan-tunggal) - SELESAI, dikonfirmasi.** Tabel acuan tunggal (cavity)
+untuk empat geometri + kesimpulan eksplisit ("bias BUKAN konstanta; tuning per-desain diperlukan")
+sudah ada di `docs/verification.md` (bagian "Generalisation"), termasuk pencabutan klaim lama
+(A19.2). Baris tabel §2b di papan ini sudah usang secara historis; tidak ada pekerjaan ulang.
+
+**2. R-4 (benchmark waveguide TE10) - SELESAI + dijalankan ULANG di pohon saat ini + skrip diperkeras.**
+- Run segar 2026-09-30 (`runs/benchmark_te10`, log `runs/benchmark_te10_console.log`):
+  transmisi 1,3 f_c = **+0,0056 dB** (kriteria >= -0,5 dB); galat evanescent 0,9 f_c = **1,80 dB**
+  (kriteria <= 3 dB); knee -3 dB di 1442,7 MHz (info saja, guide berhingga); **konvergen bersih**
+  via EndCriteria di **10.272 langkah** (~4 dtk; 13.524 sel). Run pertama (2026-09-22,
+  `bench_te10_v5`): -0,0036 dB / 1,77 dB - reproduksi antar-waktu baik.
+- **Perbaikan skrip:** `scripts/benchmark_waveguide_te10.py` kini me-resolve path output ke absolut
+  sebelum `FDTD.Run` - openEMS chdir ke `sim_path` lalu me-resolve ulang, sehingga path relatif
+  dobel dan menabrak guard internalnya (`RuntimeError: Current working directory is different from
+  sim_path`). Ditemukan + diperbaiki hari ini.
+- `docs/benchmarks.md`: baris **S10** baru (passing) + blok **Result** di section 5; baris **S9**
+  (`port_refine`) diperbarui dari "not yet run" yang basi -> hasil k1c (0,301 %; ditolak).
+
+**3. R-5 (banding pola NF2FF vs `postproc/patterns.py`) - SELESAI dengan batas jujur.**
+- Alat baru **`yotta_tools/nf2ff_compare.py`** + 4 tes (`tests/test_nf2ff_compare.py`): hitung ulang
+  directivity dari `nf2ff_pattern.csv` memakai `patterns.directivity_from_pattern`, bandingkan
+  dengan `Dmax` openEMS, ukur setengah-sudut -3 dB. Dijalankan pada dua run k2c:
+  PTFE: **5,4923 lin (7,398 dBi)** vs openEMS **5,594 lin (7,483 dBi)** -> selisih 0,085 dB;
+  FR-4: **1,7463 lin (2,421 dBi)** vs **1,787 lin (2,52 dBi)** -> ~0,1 dB.
+- **Kesimpulan:** rantai far-field + perkakas analitik konsisten di level resolusi grid (~1-4 %).
+  TIDAK ada model pola patch-spesifik di `patterns.py` - jadi ini uji konsistensi + batas, bukan
+  shape-vs-theory. Arm FR-4 (mismatch VSWR ~38) polanya memuncak dekat horizon - bukan pola fisik
+  bermakna; `eta_rad` PTFE `nan` (p_acc negatif) - keduanya ditandai, bukan disembunyikan.
+- Detail + angka verbatim: **`docs/nf2ff-comparison.md`**.
+
+**4. Refresh kebenaran dokumen:** `docs/verification.md` baris suite (128 tes, basi) -> 555/OK;
+`docs/capabilities-and-comparison.md`: baris array "not implemented" -> "partial" (pipeline
+S-matrix 2x2 `arr2` sudah dieksekusi ujung-ke-ujung, 2026-09-23), baris generasi model -> menunjuk
+`docs/results-ledger.md`.
+
+**5. Sisa (bukan milikku / butuh eksternal):** F1/F2 web UI (Aksara, lihat §6z); Y-6 masih butuh
+εr filler terverifikasi + akses halaman penuh (`data/composite_measurements_candidates.md` memuat
+kandidat + analisis inversi); kalibrasi terhadap pengukuran + keputusan pemilik (step C dll.) tetap
+terbuka.
+
+Verifikasi push ini: suite penuh **559 OK (skipped=3)** di pohon kerja; paritas src22/src28 dijaga.

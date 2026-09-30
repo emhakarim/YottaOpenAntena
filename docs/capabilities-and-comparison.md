@@ -24,7 +24,7 @@ literature. Capability claims are labelled:
 | Inset-feed depth estimate | implemented | crude closed form, documented as approximate |
 | Array layout (NÃ—M, spacing in lambda0, aperture size) | implemented | `geometry/array.py`, tests |
 | Array factor + principal-plane cuts + steering | implemented | pattern tests incl. 30Â° steering peak |
-| openEMS model generation (substrate, ground, patch/array, lumped port, PML, sweep, S11 output) | executed | 4 real runs, 101/101 finite S11 points |
+| openEMS model generation (substrate, ground, patch/array, lumped port, PML, sweep, S11 output) | executed | many real runs since; quotable results + reference design in `docs/results-ledger.md` |
 | Solver availability probe that refuses to fabricate results | implemented | `SolverUnavailableError` test |
 | S11 metrics: return loss, VSWR, impedance, âˆ’10 dB bandwidth, Touchstone I/O | implemented | `postproc/sparams.py`, tests |
 | Far-field helpers: element pattern, pattern multiplication, directivity integral, efficiency budget | implemented | `postproc/patterns.py`, tests |
@@ -33,7 +33,7 @@ literature. Capability claims are labelled:
 | CLI (10 subcommands) | implemented | CLI tests |
 | **Electromagnetic accuracy** | partially calibrated | construction A/B cut the offset from 4.31 % to 2.26 % against an independent reference (see docs/verification.md) |
 | **Dielectric loss in the solver model** | implemented, not validated | `--loss-model kappa` (equivalent conductivity, exact at the sweep centre) |
-| Array simulation, mutual coupling, unit-cell/periodic mode | **not implemented** | geometry + array factor only |
+| Array simulation, mutual coupling, unit-cell/periodic mode | **partial** | geometry + array factor; 2x2 S-matrix pipeline executed end-to-end (arr2, 2026-09-23); coupling analysis & unit-cell mode open |
 | GUI | preview | PySide6 shell, four tabs, offscreen smoke test |
 
 ## 2. What this tool is, in one sentence
@@ -124,7 +124,7 @@ you add a high-permittivity phase, and that phase brings loss and dispersion.
    number as a model output under test.
 2. Loss is absent from the solver model, so no efficiency or gain result from
    this tool is meaningful yet.
-3. Arrays are geometry + array factor only; coupling is not computed.
+3. Arrays: geometry + array factor; the 2x2 coupling S-matrix pipeline has run end-to-end (arr2) but its coupling values are not yet analyzed; unit-cell mode is un-simulated.
 4. The composite rules are quasi-static estimates; the toolkit prints their
    limits rather than pretending they are measurements.
 5. Our own accuracy against a *measured* antenna has never been assessed.
