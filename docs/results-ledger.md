@@ -91,3 +91,31 @@ mesh20 at 32,034 steps), so the pair is Route A "stability" (`runs/verdict_winE_
 meshes put the resonance at **2.4280 GHz - shift 0.000 %**, so the ~1.5 % mesh gap seen on the base
 geometry does NOT reproduce on the tuned winner. Quoting note: 101-point grid (7.34 MHz step,
 sub-grid drift not resolved); depths differ between meshes (-11.2 / -6.79 dB).
+
+## Reference design (m050) - the campaign deliverable, consolidated
+
+The optimization plan's deliverable was "a matched reference design at 2.45 GHz quoted with an
+accepted truncation verdict + an accepted mesh verdict + full provenance". That is the row set below;
+this section is the one place to read the design's parameters.
+
+**Geometry** (as built; `runs/batch_winE_mesh15|20/project.json`, `runs_b2/overlap/followup/m050/line`):
+- Patch 49.1427 x 41.3789 mm with a coplanar **line** feed (50-ohm line width 5.1005 mm), inset
+  **14.1578 mm** = the synthesised 14.6578 mm minus the swept 0.50 mm overlap winner.
+- PTFE substrate 1.60 mm; ground margin 0.25 lambda0; loss model kappa; sweep 2.083-2.817 GHz.
+
+**Quotable numbers (with their accepted verdicts):**
+1. **Resonance, Route B pair** (caps 300000/399788): 2.4280 GHz / -16.90 dB / VSWR 1.333 at 300k;
+   2.4316 GHz / **-26.96 dB** / VSWR 1.094 at 399,788; shift **0.151 %** -
+   `runs_b2/overlap/followup/verdict_m050_sweep300000_vs_400000.json`. Caveat: the end criteria was
+   never reached at either cap.
+2. **Mesh stability, Route A pair** (both converged): mesh15 at 1,481,436 steps and mesh20 at 32,034
+   steps both report **2.4280 GHz**, shift **0.000 %** - `runs/verdict_winE_mesh.json`, no tool caveat
+   (grid note: 101 points, 7.34 MHz step).
+
+**Honest notes when quoting:**
+- At the confirmation cap the depth (-26.96 dB) is comparable to, and slightly shallower than, the
+  base-geometry line feed (-28.94 dB at 399,788); the tuned point's gains are the accepted mesh
+  verdict and the swept-neighbourhood evidence, not a deeper match at 400k.
+- f_res at the quote cap sits just inside the [2.43, 2.47] GHz window (lower edge). If closer
+  centring at 2.45 GHz is wanted, plan step C (patch-length nudge, 1-2 points plus full
+  re-verification) is the next campaign slot - not scheduled.

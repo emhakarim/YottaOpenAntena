@@ -69,3 +69,8 @@ truncation verdict.
 
 A **matched reference design** at 2.45 GHz quoted with: accepted truncation verdict + accepted mesh
 verdict + full provenance (geometry, cap levels, verdict file paths) in the results ledger.
+
+**Delivered 2026-09-30 (m050):** the consolidated reference design - geometry, the accepted
+truncation pair (shift 0.151 %) and the accepted mesh pair (shift 0.000 %), with honest caveats -
+lives in `docs/results-ledger.md`, section "Reference design (m050)". Optional follow-ups (not
+scheduled): step C patch-length nudge for closer centring; a finer sweep around m050.
