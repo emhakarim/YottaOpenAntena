@@ -155,6 +155,15 @@ def _project_from(payload):
     width_m = float(payload.get("width_mm") or 0.0) * 1e-3
     length_m = float(payload.get("length_mm") or 0.0) * 1e-3
     points = int(payload.get("sweep_points", 201) or 201)
+    feed_inset_text = str(payload.get("feed_inset_mm") or "").strip()
+    feed_line_text = str(payload.get("feed_line_width_mm") or "").strip()
+    feed_inset_m = float(feed_inset_text) * 1e-3 if feed_inset_text else None
+    feed_line_width_m = float(feed_line_text) * 1e-3 if feed_line_text else None
+    if feed_inset_m is not None:
+        if feed_inset_m < 0.0:
+            raise ValueError("feed_inset_mm must be >= 0")
+        if length_m and feed_inset_m > length_m:
+            raise ValueError("feed_inset_mm must not exceed the patch length")
     try:
         get_material(material_name)
     except KeyError:
@@ -169,6 +178,8 @@ def _project_from(payload):
             width_m=width_m or None,
             length_m=length_m or None,
             feed_mode=str(payload.get("feed") or "inset"),
+            feed_inset_m=feed_inset_m,
+            feed_line_width_m=feed_line_width_m,
         ),
         array=ArrayConfig(nx=1, ny=1),
         sweep=FrequencySweep.fractional(frequency_hz, 0.15, points=points),
@@ -223,10 +234,26 @@ def set_run_runner(runner) -> None:
     _RUN_RUNNER = runner
 
 
+def _deck_cap(rundir: Path):
+    """The timestep cap actually baked into the deck - the progress bar's true denominator.
+
+    ``max_timesteps`` on ``/api/run`` only reaches the deck when the deck is
+    regenerated; reading the manifest keeps the bar honest even when a caller passes a
+    different cap at run time (review finding F1, 2026-09-30).
+    """
+    try:
+        manifest = json.loads((Path(rundir) / "run_manifest.json").read_text(encoding="utf-8"))
+        cap = manifest.get("max_timesteps")
+        return int(cap) if cap else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+
 def _real_runner(rundir: Path, solver_kwargs: dict, on_progress, cancel_event) -> dict:
     """The production runner: the same adapter call the desktop worker makes."""
     solver = OpenEMSSolver(**solver_kwargs)
-    _RUN["cap"] = getattr(solver, "max_timesteps", None)
+    deck_cap = _deck_cap(rundir)
+    _RUN["cap"] = deck_cap if deck_cap is not None else getattr(solver, "max_timesteps", None)
     run = solver.run(rundir, on_progress=on_progress, cancel_event=cancel_event)
     if run.status == "cancelled":
         raise _RunCancelled()
@@ -568,6 +595,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
   }
   button.primary:hover { filter: brightness(1.09); box-shadow: 0 12px 28px rgba(90,110,245,.42); }
   button.mini { padding: 2px 9px; font-size: 12px; border-radius: 8px; }
+  .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 9px 14px; margin: 0 0 10px; }
+  .tools label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+  .tools input[type="radio"], .tools input[type="checkbox"] { width: auto; }
 
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 6px; font-size: 12.5px; border-bottom: 1px solid rgba(38,42,49,.8); }
@@ -705,6 +735,16 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div class="sub">Corners and thickness accept parameter expressions; corners are evaluated when the block is added.</div>
         </section>
         <section>
+          <h2>Material definitions</h2>
+          <div class="fields">
+            <div><label for="matSel">built-in material</label><select id="matSel" onchange="syncMaterial()"></select></div>
+            <div><label for="matEr">epsilon r</label><input id="matEr" class="num" readonly></div>
+            <div><label for="matTd">tan delta</label><input id="matTd" class="num" readonly></div>
+          </div>
+          <div class="sub" id="matNote" style="margin-top:4px"></div>
+          <div class="sub">Choosing here sets the material for Simulate. Custom eps_r / tan delta values (beyond the library) are the next slice.</div>
+        </section>
+        <section>
           <h2>Shapes</h2>
           <table><thead><tr><th>shape</th><th>vertices</th><th>bounds (mm)</th><th>thickness</th><th></th></tr></thead><tbody id="shapesBody"></tbody></table>
           <div class="actions"><button onclick="clearShapes()">Clear all</button></div>
@@ -713,14 +753,37 @@ INDEX_HTML = r"""<!DOCTYPE html>
       </div>
       <div>
         <section>
-          <h2>Canvas</h2>
-          <div id="canvasWrap"><canvas id="cv" width="940" height="420"></canvas></div>
+          <h2>Canvas - draw like CST</h2>
+          <div class="tools">
+            <label><input type="radio" name="tool" value="select" checked onchange="setTool()"> select</label>
+            <label><input type="radio" name="tool" value="rect" onchange="setTool()"> rectangle</label>
+            <label><input type="radio" name="tool" value="polygon" onchange="setTool()"> polygon</label>
+            <label><input type="radio" name="tool" value="trace" onchange="setTool()"> trace</label>
+            <label><input type="radio" name="tool" value="circle" onchange="setTool()"> circle</label>
+            <label><input type="radio" name="tool" value="port" onchange="setTool()"> port (drag)</label>
+            <label><input type="checkbox" id="cvSnap" checked> snap 1 mm</label>
+            <label><input type="checkbox" id="cvAid"> patch + port aid</label>
+            <button class="mini" onclick="undoShape()">undo</button>
+          </div>
+          <div id="canvasWrap"><canvas id="cv" width="940" height="420" tabindex="0"></canvas></div>
           <div class="actions">
             <button onclick="showGrid()">Show solver grid</button>
             <button onclick="drawCanvas()">Outlines only</button>
             <button onclick="exportDxf()">Export DXF</button>
           </div>
-          <div id="status" class="hint">ready. Add a block or draw, then preview on the solver grid.</div>
+          <div id="status" class="hint">pick a tool and draw: drag for rectangle/circle, click vertices for polygon/trace (double-click or Enter finishes, Esc cancels).</div>
+        </section>
+        <section>
+          <h2>Port &amp; feed (define where the port sits)</h2>
+          <div class="fields three">
+            <div><label for="pfFeed">feed mode</label><select id="pfFeed"><option>probe</option><option>inset</option><option>edge</option></select></div>
+            <div><label for="pfInset">inset depth (mm)</label><input id="pfInset" class="num" value="" oninput="drawCanvas()"></div>
+            <div><label for="pfLine">line width (mm)</label><input id="pfLine" class="num" value=""></div>
+          </div>
+          <div class="actions">
+            <button onclick="fillPortSynth()">Use synthesised values</button>
+          </div>
+          <div class="sub">Empty = the generator synthesises (inset). With "patch + port aid" on, drag the port marker (tool "port") along the patch centreline, or type a value - it flows into Generate/Run. Arbitrary off-centre ports need generator work (next slice).</div>
         </section>
       </div>
     </main>
@@ -978,6 +1041,184 @@ function renderShapes() {
 
 function clearShapes() { state.shapes = []; state.grid = null; renderShapes(); drawCanvas(); setStatus(""); }
 
+// ---------------- modeling: drawing tools, port aid, materials ----------------
+const MATERIALS = __MATERIALS__;
+let canvasTf = null;   // last canvas transform (px -> mm) recorded by drawCanvas
+let drawing = null;    // in-progress stroke
+let portAid = null;    // {w, l} of the synthesised patch when the aid is on
+
+function activeTool() {
+  const el = document.querySelector('input[name="tool"]:checked');
+  return el ? el.value : "select";
+}
+
+function setTool() {
+  const tool = activeTool();
+  $("cv").className = tool === "select" ? "cur-select" : "";
+  drawing = null;
+  const hints = {
+    select: "select: no drawing - pick rectangle / polygon / trace / circle, or drag the port marker with the port tool.",
+    rect: "rectangle: drag from one corner to the other.",
+    polygon: "polygon: click vertices; double-click or Enter closes the shape.",
+    trace: "trace: click points; double-click or Enter finishes (open line - DXF only, not a deck region).",
+    circle: "circle: drag from the centre to the rim.",
+    port: "port: drag along the patch centreline to set the inset depth (turn the aid on to see the patch)."
+  };
+  setStatus(hints[tool] || "");
+  drawCanvas();
+}
+
+function snapMm(v) { return $("cvSnap").checked ? Math.round(v) : Math.round(v * 100) / 100; }
+
+function eventMm(ev) {
+  if (!canvasTf) { return { x: 0, y: 0 }; }
+  const rect = $("cv").getBoundingClientRect();
+  const px = (ev.clientX - rect.left) * ($("cv").width / rect.width);
+  const py = (ev.clientY - rect.top) * ($("cv").height / rect.height);
+  return { x: snapMm(canvasTf.invX(px)), y: snapMm(canvasTf.invY(py)) };
+}
+
+function pushShape(shape, note) {
+  state.shapes.push(shape);
+  state.grid = null;
+  renderShapes();
+  drawCanvas();
+  setStatus(note);
+}
+
+function undoShape() {
+  if (!state.shapes.length) { setStatus("nothing to undo"); return; }
+  const removed = state.shapes.pop();
+  state.grid = null;
+  renderShapes();
+  drawCanvas();
+  setStatus("removed " + removed.kind);
+}
+
+function onCanvasDown(ev) {
+  const tool = activeTool();
+  if (tool === "select") { return; }
+  const p = eventMm(ev);
+  if (tool === "rect") { drawing = { kind: "rect", start: p, current: p }; }
+  else if (tool === "circle") { drawing = { kind: "circle", start: p, current: p }; }
+  else if (tool === "port") { drawing = { kind: "portdrag" }; }
+  else {
+    if (!drawing || drawing.kind !== tool) { drawing = { kind: tool, pts: [] }; }
+    drawing.pts.push([p.x, p.y]);
+  }
+  drawCanvas();
+}
+
+function onCanvasMove(ev) {
+  if (!drawing) { return; }
+  const p = eventMm(ev);
+  if (drawing.kind === "rect" || drawing.kind === "circle") { drawing.current = p; }
+  else if (drawing.kind === "portdrag") {
+    const limit = portAid ? portAid.l : Number.POSITIVE_INFINITY;
+    $("pfInset").value = Math.min(Math.max(p.x, 0), limit).toFixed(2);
+  } else { drawing.hover = p; }
+  drawCanvas();
+}
+
+function onCanvasUp() {
+  if (!drawing) { return; }
+  if (drawing.kind === "rect") {
+    const x0 = Math.min(drawing.start.x, drawing.current.x), x1 = Math.max(drawing.start.x, drawing.current.x);
+    const y0 = Math.min(drawing.start.y, drawing.current.y), y1 = Math.max(drawing.start.y, drawing.current.y);
+    if (x1 - x0 > 1e-9 && y1 - y0 > 1e-9) {
+      const thickness = ($("bth").value.trim() || "1.6");
+      pushShape({ kind: "block", points: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], thickness: thickness },
+                "rectangle " + (x1 - x0).toFixed(1) + " x " + (y1 - y0).toFixed(1) + " mm (thickness " + thickness + ")");
+    } else { setStatus("rectangle too small - ignored", true); }
+  } else if (drawing.kind === "circle") {
+    const r = Math.hypot(drawing.current.x - drawing.start.x, drawing.current.y - drawing.start.y);
+    if (r > 1e-9) {
+      pushShape({ kind: "circle", points: [[drawing.start.x, drawing.start.y], [drawing.start.x + r, drawing.start.y]] },
+                "circle: radius " + r.toFixed(2) + " mm");
+    } else { setStatus("circle too small - ignored", true); }
+  }
+  drawing = null;
+  drawCanvas();
+}
+
+function finishPoly() {
+  if (!drawing || (drawing.kind !== "polygon" && drawing.kind !== "trace")) { return false; }
+  const pts = drawing.pts.slice();
+  if (drawing.kind === "polygon" && pts.length >= 3) {
+    pushShape({ kind: "polygon", points: pts, closed: true }, "polygon with " + pts.length + " vertices");
+  } else if (drawing.kind === "trace" && pts.length >= 2) {
+    pushShape({ kind: "trace", points: pts, closed: false }, "trace with " + pts.length + " points (DXF only)");
+  } else {
+    setStatus("need 3 vertices for a polygon (or 2 for a trace)", true);
+    return false;
+  }
+  drawing = null;
+  drawCanvas();
+  return true;
+}
+
+function onCanvasDbl() { finishPoly(); }
+
+function onCanvasKey(ev) {
+  if (ev.key === "Escape") { drawing = null; drawCanvas(); setStatus("cancelled"); }
+  if (ev.key === "Enter") { finishPoly(); }
+}
+
+async function fillPortSynth() {
+  const result = await post("/api/patch", { frequency_ghz: $("f0").value, epsilon_r: $("er").value, height_mm: $("hh").value, feed: $("pfFeed").value });
+  if (!result.ok) { setStatus(result.body.error, true); return; }
+  $("pfInset").value = result.body.inset_mm.toFixed(3);
+  $("pfLine").value = result.body.feed_line_width_mm.toFixed(3);
+  portAid = { w: result.body.width_mm, l: result.body.length_mm };
+  $("cvAid").checked = true;
+  drawCanvas();
+  setStatus("port values from synthesis: inset " + result.body.inset_mm.toFixed(3) + " mm, line " + result.body.feed_line_width_mm.toFixed(3) + " mm");
+}
+
+function initCanvas() {
+  const cv = $("cv");
+  cv.addEventListener("mousedown", onCanvasDown);
+  cv.addEventListener("mousemove", onCanvasMove);
+  window.addEventListener("mouseup", onCanvasUp);
+  cv.addEventListener("dblclick", onCanvasDbl);
+  cv.addEventListener("keydown", onCanvasKey);
+  $("pfFeed").addEventListener("change", () => { $("simFeed").value = $("pfFeed").value; drawCanvas(); });
+  $("cvAid").addEventListener("change", async (ev) => {
+    if (ev.target.checked && !portAid) {
+      const result = await post("/api/patch", { frequency_ghz: $("f0").value, epsilon_r: $("er").value, height_mm: $("hh").value, feed: $("pfFeed").value });
+      if (result.ok) {
+        portAid = { w: result.body.width_mm, l: result.body.length_mm };
+        if (!$("pfInset").value.trim()) { $("pfInset").value = result.body.inset_mm.toFixed(3); }
+        if (!$("pfLine").value.trim()) { $("pfLine").value = result.body.feed_line_width_mm.toFixed(3); }
+      }
+    }
+    drawCanvas();
+  });
+  setTool();
+}
+
+function initMaterials() {
+  const sel = $("matSel");
+  sel.innerHTML = "";
+  Object.keys(MATERIALS).sort().forEach((name) => {
+    const option = document.createElement("option");
+    option.textContent = name;
+    sel.appendChild(option);
+  });
+  const preferred = $("simMat").value || "PTFE";
+  if (MATERIALS[preferred]) { sel.value = preferred; }
+  syncMaterial();
+}
+
+function syncMaterial() {
+  const name = $("matSel").value;
+  const material = MATERIALS[name] || {};
+  $("matEr").value = material.epsilon_r !== undefined ? material.epsilon_r : "";
+  $("matTd").value = material.tan_delta !== undefined ? material.tan_delta : "";
+  $("matNote").textContent = material.note || "";
+  $("simMat").value = name;
+}
+
 // ---------------- modeling: canvas ----------------
 function viewBounds() {
   if (state.grid) {
@@ -985,9 +1226,15 @@ function viewBounds() {
              x1: state.grid.x_min_mm + state.grid.cols * state.grid.cell_mm,
              y1: state.grid.y_min_mm + state.grid.rows * state.grid.cell_mm };
   }
-  if (!state.shapes.length) return { x0: 0, y0: 0, x1: 50, y1: 50 };
   const xs = [], ys = [];
   state.shapes.forEach((s) => s.points.forEach((p) => { xs.push(p[0]); ys.push(p[1]); }));
+  if (drawing) {
+    (drawing.pts || []).forEach((p) => { xs.push(p[0]); ys.push(p[1]); });
+    if (drawing.start) { xs.push(drawing.start.x, drawing.current.x); ys.push(drawing.start.y, drawing.current.y); }
+    if (drawing.hover) { xs.push(drawing.hover.x); ys.push(drawing.hover.y); }
+  }
+  if (portAid && $("cvAid").checked) { xs.push(0, portAid.l); ys.push(0, portAid.w); }
+  if (!xs.length) return { x0: 0, y0: 0, x1: 50, y1: 50 };
   return { x0: Math.min.apply(null, xs), y0: Math.min.apply(null, ys), x1: Math.max.apply(null, xs), y1: Math.max.apply(null, ys) };
 }
 
@@ -1010,6 +1257,7 @@ function drawCanvas() {
   const oy = height - (height - spanY * scale) / 2 + b.y0 * scale;
   const X = (x) => ox + x * scale;
   const Y = (y) => oy - y * scale;
+  canvasTf = { invX: (px) => b.x0 + (px - ox) / scale, invY: (py) => (oy - py) / scale };
 
   if (state.grid) {
     ctx.fillStyle = "rgba(90, 209, 154, 0.28)";
@@ -1049,10 +1297,46 @@ function drawCanvas() {
     ctx.shadowBlur = 0;
   });
 
-  if (!state.shapes.length && !state.grid) {
+  if (drawing) {
+    ctx.save();
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = "rgba(110,161,255,.95)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    if (drawing.kind === "rect") {
+      ctx.rect(X(drawing.start.x), Y(drawing.start.y), (drawing.current.x - drawing.start.x) * scale, (drawing.current.y - drawing.start.y) * scale);
+    } else if (drawing.kind === "circle") {
+      ctx.arc(X(drawing.start.x), Y(drawing.start.y), Math.hypot(drawing.current.x - drawing.start.x, drawing.current.y - drawing.start.y) * scale, 0, Math.PI * 2);
+    } else if (drawing.pts) {
+      drawing.pts.forEach((p, i) => { if (i === 0) { ctx.moveTo(X(p[0]), Y(p[1])); } else { ctx.lineTo(X(p[0]), Y(p[1])); } });
+      if (drawing.hover) { ctx.lineTo(X(drawing.hover.x), Y(drawing.hover.y)); }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  if ($("cvAid").checked && portAid) {
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = "rgba(255,209,102,.85)";
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(X(0), Y(portAid.w), portAid.l * scale, portAid.w * scale);
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(X(0), Y(portAid.w / 2)); ctx.lineTo(X(portAid.l), Y(portAid.w / 2)); ctx.stroke();
+    const ins = parseFloat($("pfInset").value);
+    const pos = isFinite(ins) ? Math.min(Math.max(ins, 0), portAid.l) : portAid.l / 2;
+    ctx.fillStyle = "#ffd166";
+    ctx.beginPath(); ctx.arc(X(pos), Y(portAid.w / 2), 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#eef0f4";
+    ctx.font = "12px Consolas, monospace";
+    ctx.fillText((isFinite(ins) ? "port @ " + ins.toFixed(2) + " mm" : "port (centre)") + "  [patch " + portAid.l.toFixed(1) + " x " + portAid.w.toFixed(1) + " mm]", X(pos) + 9, Y(portAid.w / 2) - 8);
+    ctx.restore();
+  }
+
+  if (!state.shapes.length && !state.grid && !drawing && !($("cvAid").checked && portAid)) {
     ctx.fillStyle = "#98a0ac";
     ctx.font = "13px Segoe UI";
-    ctx.fillText("No shapes yet - add a block on the left.", 24, 34);
+    ctx.fillText("No shapes yet - pick a tool above and draw, or add a block on the left.", 24, 34);
   }
   ctx.fillStyle = "#98a0ac";
   ctx.font = "12px Consolas, monospace";
@@ -1110,6 +1394,7 @@ function simPayload() {
     mesh_cells: $("simMesh").value, substrate_cells: $("simSub").value, loss_model: $("simLoss").value,
     port_refine: $("simRefine").checked, edge_snapping: $("simSnap").checked, nf2ff: $("simNf2ff").checked,
     max_timesteps: $("simCap").value, end_criteria: $("simEnd").value,
+    feed_inset_mm: $("pfInset").value, feed_line_width_mm: $("pfLine").value,
     rundir: $("simDir").value,
     shapes: $("simInclude").checked ? state.shapes : [],
   };
@@ -1295,6 +1580,8 @@ function drawS11(curve, resonanceGhz) {
 // ---------------- boot ----------------
 renderParams();
 renderShapes();
+initMaterials();
+initCanvas();
 drawCanvas();
 drawS11([], null);
 checkEngine();
@@ -1303,6 +1590,18 @@ if (["modeling", "simulate", "results"].indexOf(initialView) >= 0) { showView(in
 </script>
 </body>
 </html>"""
+
+
+def _materials_payload() -> str:
+    """Compact JSON of the built-in dielectric library for the page (offline, no endpoint)."""
+    from .materials.library import BUILTIN_MATERIALS
+
+    data = {
+        name: {"epsilon_r": m.epsilon_r, "tan_delta": m.tan_delta, "note": m.source_note}
+        for name, m in BUILTIN_MATERIALS.items()
+        if m.kind == "dielectric"
+    }
+    return json.dumps(data)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -1318,7 +1617,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - http.server naming
         if self.path in ("/", "/index.html"):
-            self._send(200, "text/html; charset=utf-8", INDEX_HTML.encode("utf-8"))
+            html = INDEX_HTML.replace("__MATERIALS__", _materials_payload())
+            self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
             return
         self._send(404, "text/plain; charset=utf-8", b"not found")
 
@@ -1333,6 +1633,9 @@ class _Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw.decode("utf-8") or "{}")
         except ValueError:
             self._send(400, "application/json", b'{"error": "the request body is not JSON"}')
+            return
+        if not isinstance(payload, dict):
+            self._send(400, "application/json", b'{"error": "the request body must be a JSON object"}')
             return
         try:
             result, error = handler(payload)

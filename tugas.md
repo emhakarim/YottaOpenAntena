@@ -859,3 +859,35 @@ kandidat + analisis inversi); kalibrasi terhadap pengukuran + keputusan pemilik 
 terbuka.
 
 Verifikasi push ini: suite penuh **559 OK (skipped=3)** di pohon kerja; paritas src22/src28 dijaga.
+
+---
+
+## 6ab - Yotta, 2026-09-30 (malam): kanvas gambar-di-web + penempatan port + material + F1/F2 ditutup
+
+Atas permintaan pemilik langsung ("buat yang canvasnya... define portnya... definisi material, kyk CST"),
+Yotta mengerjakan slice pertama di `openantenna/webui.py`. **Catatan koordinasi: file `webui.py`
+disentuh oleh Yotta atas permintaan pemilik - Aksara, tarik dulu sebelum menyentuhnya** (pelajaran 6g).
+
+**1. Kanvas Modeling kini interaktif (mouse).** Alat: rectangle (drag), polygon (klik verteks,
+double-click/Enter menutup), trace (polyline terbuka - DXF saja), circle (drag pusat->tepi), snap 1 mm,
+undo, Esc membatalkan; preview goresan hidup; koordinat mm. Shape masuk ke `state.shapes` yang SUDAH
+ada - jadi otomatis teralir ke preview grid solver, ekspor DXF, dan saklar include di Simulate
+(tidak ada jalur tulis baru di server).
+
+**2. Port & feed (definisikan lokasi port).** Panel baru: mode feed, override kedalaman inset (mm),
+lebar jalur (mm); tombol "Use synthesised values"; aid patch: patch sintesis + garis tengah digambar di
+kanvas, marker port bisa DI-DRAG (alat "port") atau diketik; `feed_inset_mm` / `feed_line_width_mm`
+mengalir ke generator (dibatasi panjang patch - di luar itu 400 berpesan). Port off-centre sembarang
+butuh kerja generator - slice berikutnya.
+
+**3. Material.** Library dielektrik bawaan disuntik ke halaman; memilih material menampilkan
+eps_r/tanδ/source note dan menyetel material untuk Simulate. Material kustom (user-defined) =
+slice berikutnya.
+
+**4. F1/F2 DITUTUP** (temuan §6z): (F2) body JSON non-objek kini `400 "the request body must be a
+JSON object"` - tidak lagi memutus koneksi; (F1) bar progres run membaca cap dari `run_manifest.json`
+dek - persentase aneh ("431%") tidak bisa terjadi lagi dari mismatch run-time.
+
+**Bukti:** suite **564 OK (skipped=3)**; 17 tes webui (5 baru: non-objek 400, override inset, batas
+inset, `_deck_cap` dari manifest, halaman memuat kanvas); JS halaman lolos `node --check`;
+screenshot: `DELIVERY/assets/webui-canvas-30sep.png`.

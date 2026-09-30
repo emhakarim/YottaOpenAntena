@@ -260,6 +260,77 @@ class TestWebUI(unittest.TestCase):
         finally:
             webui_module.set_run_runner(None)
 
+    # --- canvas slice + review findings F1/F2 (2026-09-30) -----------------
+
+    def test_a_non_object_json_body_is_a_clean_400(self):
+        request = urllib.request.Request(
+            self.base + "/api/generate",
+            data=b"[1,2,3]",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                status, body = response.status, json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            status, body = exc.code, json.loads(exc.read().decode("utf-8"))
+        self.assertEqual(status, 400)
+        self.assertIn("JSON object", body["error"])
+
+    def test_generate_accepts_a_feed_inset_override(self):
+        with tempfile.TemporaryDirectory() as folder:
+            rundir = Path(folder) / "web_override"
+            status, body = _post(
+                self.base,
+                "/api/generate",
+                {
+                    "rundir": str(rundir),
+                    "frequency_ghz": 2.45,
+                    "material": "PTFE",
+                    "height_mm": 1.6,
+                    "feed": "inset",
+                    "length_mm": 41.379,
+                    "sweep_points": 51,
+                    "feed_inset_mm": 5.0,
+                    "feed_line_width_mm": 5.1,
+                    "shapes": [],
+                },
+            )
+            self.assertEqual(status, 200, body)
+            project = json.loads((rundir / "project.json").read_text(encoding="utf-8"))
+            self.assertAlmostEqual(project["patch"]["feed_inset_m"], 0.005, places=9)
+            self.assertAlmostEqual(project["patch"]["feed_line_width_m"], 0.0051, places=9)
+
+    def test_feed_inset_override_beyond_the_patch_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            status, body = _post(
+                self.base,
+                "/api/generate",
+                {"rundir": str(Path(folder) / "over"), "length_mm": 41.0,
+                 "feed_inset_mm": 99.0, "shapes": []},
+            )
+        self.assertEqual(status, 400)
+        self.assertIn("must not exceed", body["error"])
+
+    def test_the_deck_cap_is_read_from_the_manifest(self):
+        from openantenna import webui as webui_module
+
+        with tempfile.TemporaryDirectory() as folder:
+            run = Path(folder)
+            (run / "run_manifest.json").write_text(
+                json.dumps({"max_timesteps": 12345}), encoding="utf-8"
+            )
+            self.assertEqual(webui_module._deck_cap(run), 12345)
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertIsNone(webui_module._deck_cap(Path(folder)))
+
+    def test_the_page_now_carries_the_drawing_canvas(self):
+        with urllib.request.urlopen(self.base + "/", timeout=10) as response:
+            html = response.read().decode("utf-8")
+        self.assertNotIn("__MATERIALS__", html)
+        for needle in ("onCanvasDown", "pfInset", "matSel", "MATERIALS = {", "Port &amp; feed"):
+            self.assertIn(needle, html)
+
 
 if __name__ == "__main__":
     unittest.main()
