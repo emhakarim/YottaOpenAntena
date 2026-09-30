@@ -769,8 +769,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
           </div>
           <div id="canvasWrap"><canvas id="cv" width="940" height="420" tabindex="0"></canvas></div>
           <div class="actions">
+            <button onclick="fitView()">Fit view</button>
             <button onclick="showGrid()">Show solver grid</button>
-            <button onclick="drawCanvas()">Outlines only</button>
+            <button onclick="state.grid = null; drawCanvas()">Outlines only</button>
             <button onclick="exportDxf()">Export DXF</button>
           </div>
           <div id="status" class="hint">pick a tool and draw: drag for rectangle/circle, click vertices for polygon/trace (double-click or Enter finishes, Esc cancels).</div>
@@ -1047,6 +1048,7 @@ function clearShapes() { state.shapes = []; state.grid = null; renderShapes(); d
 const MATERIALS = __MATERIALS__;
 let canvasTf = null;   // last canvas transform (px -> mm) recorded by drawCanvas
 let viewLocked = null; // frozen view bounds while a stroke is in progress
+let viewFrame = null;  // stable view: grows to nice spans, never auto-shrinks (Fit resets it)
 let drawing = null;    // in-progress stroke
 let portAid = null;    // {w, l} of the synthesised patch when the aid is on
 
@@ -1216,6 +1218,10 @@ function initCanvas() {
     drawCanvas();
   });
   setTool();
+  window.__oaState = () => ({
+    tf: canvasTf ? { ox: canvasTf.ox, oy: canvasTf.oy, scale: canvasTf.scale, w: $("cv").width, h: $("cv").height } : null,
+    view: viewBounds(), locked: viewLocked, shapes: state.shapes, drawing: drawing ? drawing.kind : null
+  });
 }
 
 function initMaterials() {
@@ -1241,6 +1247,12 @@ function syncMaterial() {
 }
 
 // ---------------- modeling: canvas ----------------
+function niceSpan(value) {
+  const steps = [10, 20, 30, 50, 75, 100, 150, 200, 300, 500, 750, 1000, 2000, 5000];
+  for (let i = 0; i < steps.length; i++) { if (value <= steps[i]) { return steps[i]; } }
+  return steps[steps.length - 1];
+}
+
 function viewBounds() {
   if (viewLocked) { return viewLocked; }
   if (state.grid) {
@@ -1250,15 +1262,27 @@ function viewBounds() {
   }
   const xs = [], ys = [];
   state.shapes.forEach((s) => s.points.forEach((p) => { xs.push(p[0]); ys.push(p[1]); }));
-  if (drawing) {
-    (drawing.pts || []).forEach((p) => { xs.push(p[0]); ys.push(p[1]); });
-    if (drawing.start) { xs.push(drawing.start.x, drawing.current.x); ys.push(drawing.start.y, drawing.current.y); }
-    if (drawing.hover) { xs.push(drawing.hover.x); ys.push(drawing.hover.y); }
-  }
   if (portAid && $("cvAid").checked) { xs.push(0, portAid.l); ys.push(0, portAid.w); }
-  if (!xs.length) return { x0: 0, y0: 0, x1: 50, y1: 50 };
-  return { x0: Math.min.apply(null, xs), y0: Math.min.apply(null, ys), x1: Math.max.apply(null, xs), y1: Math.max.apply(null, ys) };
+  if (!xs.length) {
+    if (!viewFrame) { viewFrame = { x0: 0, y0: 0, x1: 50, y1: 50 }; }
+    return viewFrame;
+  }
+  const pad = 5;
+  const need = {
+    x0: Math.min.apply(null, xs) - pad, y0: Math.min.apply(null, ys) - pad,
+    x1: Math.max.apply(null, xs) + pad, y1: Math.max.apply(null, ys) + pad
+  };
+  if (viewFrame && viewFrame.x0 <= need.x0 && viewFrame.y0 <= need.y0 &&
+      viewFrame.x1 >= need.x1 && viewFrame.y1 >= need.y1) {
+    return viewFrame;
+  }
+  const cx = (need.x0 + need.x1) / 2, cy = (need.y0 + need.y1) / 2;
+  const span = niceSpan(Math.max(need.x1 - need.x0, need.y1 - need.y0, 10));
+  viewFrame = { x0: cx - span / 2, y0: cy - span / 2, x1: cx + span / 2, y1: cy + span / 2 };
+  return viewFrame;
 }
+
+function fitView() { viewFrame = null; drawCanvas(); setStatus("view fitted to the shapes"); }
 
 function drawCanvas() {
   const canvas = $("cv");
@@ -1279,7 +1303,7 @@ function drawCanvas() {
   const oy = height - (height - spanY * scale) / 2 + b.y0 * scale;
   const X = (x) => ox + x * scale;
   const Y = (y) => oy - y * scale;
-  canvasTf = { invX: (px) => (px - ox) / scale, invY: (py) => (oy - py) / scale };
+  canvasTf = { invX: (px) => (px - ox) / scale, invY: (py) => (oy - py) / scale, ox: ox, oy: oy, scale: scale };
 
   if (state.grid) {
     ctx.fillStyle = "rgba(90, 209, 154, 0.28)";

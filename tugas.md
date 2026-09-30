@@ -897,3 +897,10 @@ inverse transform membuang offset palsu `b.x0` (goresan ke-2+ bergeser saat view
 view DIKUNCI selama goresan berjalan - tidak men-scale ulang di tengah drag; (3) polygon/trace
 kini mengakumulasi verteks lintas klik (mouseup tidak lagi membatalkan); (4) pembacaan posisi
 kursor (mm) di toolbar + kanvas aspect-locked. Perbaikan ter-push bersama commit dokumen ini.
+
+**Update 2 (~19:10):** akar "zoom mendadak" ditemukan lewat uji itu: auto fit-to-shape membuat
+kanvas men-zoom drastis setelah shape kecil pertama. Diganti **view-frame stabil** (membesar ke span
+bulat hanya saat perlu; tidak pernah mengecil otomatis; tombol **Fit view**). Diverifikasi OTOMATIS
+lewat tes E2E baru (Playwright mengemudikan Edge headless: drag mouse nyata -> cek koordinat mm shape,
+stabilitas view, akumulasi polygon) - **8/8 LULUS**; skrip `tmp/uitest_canvas.py` (cluster);
+screenshot bukti di `DELIVERY/assets/webui-canvas-e2e-30sep.png`.

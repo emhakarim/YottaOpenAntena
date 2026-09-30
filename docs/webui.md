@@ -128,3 +128,10 @@ Fixed same day after the owner's first hands-on test (draw mapping):
   in-progress stroke);
 * a live cursor readout (`cursor x, y mm`) in the toolbar shows the mapping, and the
   canvas is aspect-locked (`height:auto`) so millimetres are uniform on both axes.
+* The view is now a **stable frame**: it grows (snapped to round spans) only when a shape no
+  longer fits, and it never auto-shrinks - this replaces the old zoom-to-fit that zoomed in
+  dramatically right after the first small shape (the owner's "sudden zoom" report on
+  2026-09-30). A **Fit view** button re-fits on demand.
+* An end-to-end mouse check (Playwright driving Edge headless; cluster script
+  `tmp/uitest_canvas.py`) drags real strokes and asserts the mm mapping, view stability and
+  polygon accumulation - 8/8 checks pass (2026-09-30). Rerun it after canvas changes.
