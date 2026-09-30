@@ -1134,8 +1134,10 @@ function onCanvasMove(ev) {
     const limit = portAid ? portAid.l : Number.POSITIVE_INFINITY;
     $("pfInset").value = Math.min(Math.max(p.x, 0), limit).toFixed(2);
     if (portAid) {
-      const lineHalf = (parseFloat($("pfLine").value) || 0) / 2.0;
-      const bound = Math.max(portAid.w / 2.0 - Math.max(lineHalf, 1.0), 0.5);
+      const entered = $("pfLine").value.trim();
+      const lw = entered === "" ? (portAid.lw || 0) : (parseFloat(entered) || 0);
+      // keep the drag limit inside what the generator will accept: w/2 - lineWidth/2, minus a margin
+      const bound = Math.max(portAid.w / 2.0 - lw / 2.0 - 0.5, 0.5);
       const lateral = Math.min(Math.max(p.y - portAid.w / 2.0, -bound), bound);
       $("pfX").value = lateral.toFixed(2);
     }
@@ -1202,7 +1204,7 @@ async function fillPortSynth() {
   if (!result.ok) { setStatus(result.body.error, true); return; }
   $("pfInset").value = result.body.inset_mm.toFixed(3);
   $("pfLine").value = result.body.feed_line_width_mm.toFixed(3);
-  portAid = { w: result.body.width_mm, l: result.body.length_mm };
+  portAid = { w: result.body.width_mm, l: result.body.length_mm, lw: result.body.feed_line_width_mm };
   $("cvAid").checked = true;
   drawCanvas();
   setStatus("port values from synthesis: inset " + result.body.inset_mm.toFixed(3) + " mm, line " + result.body.feed_line_width_mm.toFixed(3) + " mm");
@@ -1220,7 +1222,7 @@ function initCanvas() {
     if (ev.target.checked && !portAid) {
       const result = await post("/api/patch", { frequency_ghz: $("f0").value, epsilon_r: $("er").value, height_mm: $("hh").value, feed: $("pfFeed").value });
       if (result.ok) {
-        portAid = { w: result.body.width_mm, l: result.body.length_mm };
+        portAid = { w: result.body.width_mm, l: result.body.length_mm, lw: result.body.feed_line_width_mm };
         if (!$("pfInset").value.trim()) { $("pfInset").value = result.body.inset_mm.toFixed(3); }
         if (!$("pfLine").value.trim()) { $("pfLine").value = result.body.feed_line_width_mm.toFixed(3); }
       }
@@ -1231,7 +1233,7 @@ function initCanvas() {
   window.__oaState = () => ({
     tf: canvasTf ? { ox: canvasTf.ox, oy: canvasTf.oy, scale: canvasTf.scale, w: $("cv").width, h: $("cv").height } : null,
     view: viewBounds(), locked: viewLocked, shapes: state.shapes, drawing: drawing ? drawing.kind : null,
-    port: portAid ? { w: portAid.w, l: portAid.l } : null
+    port: portAid ? { w: portAid.w, l: portAid.l, lw: portAid.lw } : null
   });
 }
 

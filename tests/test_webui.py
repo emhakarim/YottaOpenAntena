@@ -325,6 +325,19 @@ class TestWebUI(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("inside the patch width", body["error"])
 
+    def test_a_lateral_offset_just_inside_the_line_budget_is_accepted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            rundir = Path(folder) / "inset_ok"
+            status, body = _post(
+                self.base,
+                "/api/generate",
+                {"rundir": str(rundir), "frequency_ghz": 2.45, "material": "PTFE",
+                 "height_mm": 1.6, "feed": "inset", "feed_x_offset_mm": 21.5, "shapes": []},
+            )
+            self.assertEqual(status, 200, body)
+            project = json.loads((rundir / "project.json").read_text(encoding="utf-8"))
+            self.assertAlmostEqual(project["patch"]["feed_x_offset_m"], 0.0215, places=9)
+
     def test_the_deck_cap_is_read_from_the_manifest(self):
         from openantenna import webui as webui_module
 
