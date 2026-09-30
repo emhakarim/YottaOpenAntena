@@ -5,12 +5,14 @@ evidence that decides it. The rules it applies are in `docs/convergence-policy.m
 runs converged; Route B = cap-limited pair with a caveat; Route B mesh variant = same cap, declared
 setting). A number is quotable only while its verdict file says so.
 
-**Status (2026-09-29): the first quotable results exist.** The B2 coplanar line feed and the probe
-feed passed their cap-limit (Route B) truncation pairs: the resonance does not move between the 300k
-and the ~400k run (`runs_b2/verdict_trunc_line.json`, `runs_b2/verdict_trunc_probe.json`). Everything
-else in the register is still rejected - most of it because the answer DOES move with run length
-(> 0.2 %), which is exactly what the pair test exists to reveal. Accepted rows must be quoted together
-with the caveat the tool prints (the two caps, and the fact that the end criteria was never reached).
+**Status (2026-09-30): three quotable results - line, probe, and the tuned m050 - plus an accepted
+mesh pair on the winner.** The B2 line and probe passed their Route B truncation pairs
+(`runs_b2/verdict_trunc_line.json`, `runs_b2/verdict_trunc_probe.json`); the overlap campaign's m050
+passed its Route B pair (`runs_b2/overlap/followup/verdict_m050_sweep300000_vs_400000.json`) and its
+mesh pair came back Route A with no caveat (`runs/verdict_winE_mesh.json`). Everything else in the
+register is rejected - most of it because the answer DOES move with run length (> 0.2 %), which is
+exactly what the pair test exists to reveal. Route B rows must be quoted together with the caveat the
+tool prints (the two caps, and the fact that the end criteria was never reached).
 
 ## Register
 
@@ -31,6 +33,7 @@ with the caveat the tool prints (the two caps, and the fact that the end criteri
 | mesh 15 vs 20 (same cap) | 2.4573 (cap-limited) vs 2.4206 (converged) GHz | mesh pair, cap 300k | 1.5047 % | `runs/verdict_mesh_pair.json` | rejected - mixed stop conditions (mesh20 confirmed CONVERGED at 32,148 steps after the 2026-09-29 parser fix; a clean mesh pair needs equal stop conditions on both arms; pre-fix copy kept as `runs/verdict_mesh_pair_pre-fix.json`) |
 | mesh15 vs k1c 400k | 2.4573 vs 2.4427 | Route B | 0.599 % | `runs/verdict_mesh15_vs_400k.json` | rejected |
 | **m050 winner truncation pair (step D)** | 2.4280 GHz; -16.90 dB @300k vs 2.4316 GHz; **-26.96 dB @399,788** | Route B, caps 300000/399788 | **0.151 %** | `runs_b2/overlap/followup/verdict_m050_sweep300000_vs_400000.json` | **ACCEPTED - quotable with caveat** (tuned overlap -0.5 mm; depth still deepening at 300k) |
+| **m050 winner mesh pair (step E)** | 2.4280 GHz in both meshes; -11.2 / -6.79 dB | Route A "stability", both converged (1,481,436 / 32,034 steps) | **0.000 %** | `runs/verdict_winE_mesh.json` | **ACCEPTED - quotable, no tool caveat** (101-point grid: sub-grid drift not resolved) |
 
 ## Three facts that travel with the register
 
@@ -46,11 +49,11 @@ with the caveat the tool prints (the two caps, and the fact that the end criteri
   (`runs_b2/verdict_trunc_line.json`, shift 0.000 %; caveat: caps 300000/399788, end criteria never
   reached). b2 probe: 2.3067 GHz, -4.52 dB at cap 400k (0.159 %; same caveat). The line is the best
   match the project has produced and is now quotable **with the caveat**, not as a converged result.
-- **The mesh question is open and matters (~1.5 %).** mesh20 stopped cleanly at 32,148 steps having
-  met the -40 dB energy criterion and lands at 2.4206 GHz; the cap-limited mesh15 (default mesh)
-  sits at 2.4573 GHz. The parser fix landed 2026-09-29 and confirms the mesh20 arm as converged;
-  the campaign's step E re-runs this check on the winner. The mesh verdict row stays rejected until
-  a pair with equal stop conditions exists.
+- **The mesh question is closed (2026-09-30) - the ~1.5 % gap was geometry-specific.** On the winner
+  geometry both meshes converge to the SAME resonance: mesh15 at 1,481,436 steps and mesh20 at
+  32,034 steps both report 2.4280 GHz (shift 0.000 %; `runs/verdict_winE_mesh.json`, Route A, no
+  caveat). The base-geometry gap (2.4573 vs 2.4206 GHz) does not reproduce on the tuned design.
+  The old mesh-variant register row stays rejected as history; the winner pair is the row to cite.
 
 ## How a row changes state
 
@@ -60,7 +63,7 @@ with the caveat the tool prints (the two caps, and the fact that the end criteri
 3. Accepted rows must be quoted together with the caveat the tool prints. Raw numbers without an
    accepted verdict stay out of any report.
 
-## Campaign log: steps A + D - overlap sweep and winner confirmation (2026-09-29)
+## Campaign log: steps A + D + E - overlap sweep, winner confirmation, mesh close-out (2026-09-29/30)
 
 Run on the line feed, cap 300000 @ 1e-4, band 2.4-2.5 GHz, two workers; per-point runs, logs and the
 summary live under `runs_b2/overlap/` (`sweep_summary.json`, `winner.txt`). Every point is
@@ -81,5 +84,10 @@ Winner = m050 (deepest |S11| with f_res inside the 2.40-2.50 GHz window). Step D
 300000/399788): 2.4280 GHz / -16.90 dB / VSWR 1.333 at 300k vs 2.4316 GHz / **-26.96 dB** /
 VSWR 1.094 at 399,788 - the third quotable result, under the usual Route B caveat that the end
 criteria was never reached (`runs_b2/overlap/followup/verdict_m050_sweep300000_vs_400000.json`).
-Step E re-tests the mesh question on this winner with equal stop conditions: both arms cap-limited
-at 300k with the end criteria set out of reach (1e-8), so the mesh comparison itself is valid.
+
+**Step E (2026-09-30 00:54) - mesh pair on the winner: ACCEPTED, no caveat.** Equal stop conditions
+by construction: both arms reached the 1e-4 end criteria (mesh15 at 1,481,436 steps, -40.10 dB;
+mesh20 at 32,034 steps), so the pair is Route A "stability" (`runs/verdict_winE_mesh.json`). Both
+meshes put the resonance at **2.4280 GHz - shift 0.000 %**, so the ~1.5 % mesh gap seen on the base
+geometry does NOT reproduce on the tuned winner. Quoting note: 101-point grid (7.34 MHz step,
+sub-grid drift not resolved); depths differ between meshes (-11.2 / -6.79 dB).
