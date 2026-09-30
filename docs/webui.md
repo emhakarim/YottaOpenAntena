@@ -117,3 +117,14 @@ Review findings fixed with this slice:
 * **F1**: the run progress bar reads its cap from the deck's ``run_manifest.json``,
   so a run-time ``max_timesteps`` can no longer make the bar report nonsense
   percentages (baked-cap semantics unchanged; documented in the Simulate tab).
+
+Fixed same day after the owner's first hands-on test (draw mapping):
+
+* the view no longer rescales mid-stroke (it locks while a stroke is in progress), so the
+  shape edge stays under the cursor;
+* the inverse transform dropped a stray `x0` offset (strokes after the first one were
+  shifted by the current view's left edge);
+* polygon / trace now accumulate vertices across clicks (a mouseup used to clear the
+  in-progress stroke);
+* a live cursor readout (`cursor x, y mm`) in the toolbar shows the mapping, and the
+  canvas is aspect-locked (`height:auto`) so millimetres are uniform on both axes.

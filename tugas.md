@@ -891,3 +891,9 @@ dek - persentase aneh ("431%") tidak bisa terjadi lagi dari mismatch run-time.
 **Bukti:** suite **564 OK (skipped=3)**; 17 tes webui (5 baru: non-objek 400, override inset, batas
 inset, `_deck_cap` dari manifest, halaman memuat kanvas); JS halaman lolos `node --check`;
 screenshot: `DELIVERY/assets/webui-canvas-30sep.png`.
+
+**Update (~18:55):** uji tangan pertama pemilik menemukan offset kursor-vs-garis. Diperbaiki: (1)
+inverse transform membuang offset palsu `b.x0` (goresan ke-2+ bergeser saat view bounds ≠ 0); (2)
+view DIKUNCI selama goresan berjalan - tidak men-scale ulang di tengah drag; (3) polygon/trace
+kini mengakumulasi verteks lintas klik (mouseup tidak lagi membatalkan); (4) pembacaan posisi
+kursor (mm) di toolbar + kanvas aspect-locked. Perbaikan ter-push bersama commit dokumen ini.

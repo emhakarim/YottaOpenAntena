@@ -598,6 +598,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
   .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 9px 14px; margin: 0 0 10px; }
   .tools label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; cursor: pointer; }
   .tools input[type="radio"], .tools input[type="checkbox"] { width: auto; }
+  #canvasWrap #cv { height: auto; }  /* keep the 940x420 aspect ratio: uniform mm scale */
 
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 6px; font-size: 12.5px; border-bottom: 1px solid rgba(38,42,49,.8); }
@@ -764,6 +765,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
             <label><input type="checkbox" id="cvSnap" checked> snap 1 mm</label>
             <label><input type="checkbox" id="cvAid"> patch + port aid</label>
             <button class="mini" onclick="undoShape()">undo</button>
+            <span class="sub" id="cvPos" style="font-family:Consolas,monospace">cursor -, - mm</span>
           </div>
           <div id="canvasWrap"><canvas id="cv" width="940" height="420" tabindex="0"></canvas></div>
           <div class="actions">
@@ -1044,6 +1046,7 @@ function clearShapes() { state.shapes = []; state.grid = null; renderShapes(); d
 // ---------------- modeling: drawing tools, port aid, materials ----------------
 const MATERIALS = __MATERIALS__;
 let canvasTf = null;   // last canvas transform (px -> mm) recorded by drawCanvas
+let viewLocked = null; // frozen view bounds while a stroke is in progress
 let drawing = null;    // in-progress stroke
 let portAid = null;    // {w, l} of the synthesised patch when the aid is on
 
@@ -1056,6 +1059,7 @@ function setTool() {
   const tool = activeTool();
   $("cv").className = tool === "select" ? "cur-select" : "";
   drawing = null;
+  viewLocked = null;
   const hints = {
     select: "select: no drawing - pick rectangle / polygon / trace / circle, or drag the port marker with the port tool.",
     rect: "rectangle: drag from one corner to the other.",
@@ -1098,6 +1102,7 @@ function undoShape() {
 function onCanvasDown(ev) {
   const tool = activeTool();
   if (tool === "select") { return; }
+  if (!drawing) { viewLocked = viewBounds(); }
   const p = eventMm(ev);
   if (tool === "rect") { drawing = { kind: "rect", start: p, current: p }; }
   else if (tool === "circle") { drawing = { kind: "circle", start: p, current: p }; }
@@ -1110,6 +1115,12 @@ function onCanvasDown(ev) {
 }
 
 function onCanvasMove(ev) {
+  if (canvasTf && $("cvPos")) {
+    const rect = $("cv").getBoundingClientRect();
+    const px = (ev.clientX - rect.left) * ($("cv").width / rect.width);
+    const py = (ev.clientY - rect.top) * ($("cv").height / rect.height);
+    $("cvPos").textContent = "cursor " + canvasTf.invX(px).toFixed(1) + ", " + canvasTf.invY(py).toFixed(1) + " mm";
+  }
   if (!drawing) { return; }
   const p = eventMm(ev);
   if (drawing.kind === "rect" || drawing.kind === "circle") { drawing.current = p; }
@@ -1130,15 +1141,24 @@ function onCanvasUp() {
       pushShape({ kind: "block", points: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], thickness: thickness },
                 "rectangle " + (x1 - x0).toFixed(1) + " x " + (y1 - y0).toFixed(1) + " mm (thickness " + thickness + ")");
     } else { setStatus("rectangle too small - ignored", true); }
+    drawing = null;
+    viewLocked = null;
+    drawCanvas();
   } else if (drawing.kind === "circle") {
     const r = Math.hypot(drawing.current.x - drawing.start.x, drawing.current.y - drawing.start.y);
     if (r > 1e-9) {
       pushShape({ kind: "circle", points: [[drawing.start.x, drawing.start.y], [drawing.start.x + r, drawing.start.y]] },
                 "circle: radius " + r.toFixed(2) + " mm");
     } else { setStatus("circle too small - ignored", true); }
+    drawing = null;
+    viewLocked = null;
+    drawCanvas();
+  } else if (drawing.kind === "portdrag") {
+    drawing = null;
+    viewLocked = null;
+    drawCanvas();
   }
-  drawing = null;
-  drawCanvas();
+  // polygon / trace keep accumulating vertices until double-click, Enter or Esc
 }
 
 function finishPoly() {
@@ -1153,6 +1173,7 @@ function finishPoly() {
     return false;
   }
   drawing = null;
+  viewLocked = null;
   drawCanvas();
   return true;
 }
@@ -1160,7 +1181,7 @@ function finishPoly() {
 function onCanvasDbl() { finishPoly(); }
 
 function onCanvasKey(ev) {
-  if (ev.key === "Escape") { drawing = null; drawCanvas(); setStatus("cancelled"); }
+  if (ev.key === "Escape") { drawing = null; viewLocked = null; drawCanvas(); setStatus("cancelled"); }
   if (ev.key === "Enter") { finishPoly(); }
 }
 
@@ -1221,6 +1242,7 @@ function syncMaterial() {
 
 // ---------------- modeling: canvas ----------------
 function viewBounds() {
+  if (viewLocked) { return viewLocked; }
   if (state.grid) {
     return { x0: state.grid.x_min_mm, y0: state.grid.y_min_mm,
              x1: state.grid.x_min_mm + state.grid.cols * state.grid.cell_mm,
@@ -1257,7 +1279,7 @@ function drawCanvas() {
   const oy = height - (height - spanY * scale) / 2 + b.y0 * scale;
   const X = (x) => ox + x * scale;
   const Y = (y) => oy - y * scale;
-  canvasTf = { invX: (px) => b.x0 + (px - ox) / scale, invY: (py) => (oy - py) / scale };
+  canvasTf = { invX: (px) => (px - ox) / scale, invY: (py) => (oy - py) / scale };
 
   if (state.grid) {
     ctx.fillStyle = "rgba(90, 209, 154, 0.28)";
