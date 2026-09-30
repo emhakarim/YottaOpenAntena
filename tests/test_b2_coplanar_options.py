@@ -45,5 +45,28 @@ class TestInsetOverride(unittest.TestCase):
             b2.build_project("line", 1e-4, inset_delta_m=1.0)  # +1 m is absurd by design
 
 
+class TestFeedXOffset(unittest.TestCase):
+    """The 2-D feed knob: one value moves, and it must stay on the patch."""
+
+    def test_offset_moves_into_the_project(self) -> None:
+        project, _ = b2.build_project("line", 1e-4, feed_x_offset_m=5.0e-3)
+        self.assertEqual(project.patch.feed_x_offset_m, 5.0e-3)
+
+    def test_zero_offset_is_the_identity(self) -> None:
+        base, _ = b2.build_project("line", 1e-4)
+        same, _ = b2.build_project("line", 1e-4, feed_x_offset_m=0.0)
+        self.assertEqual(base.patch.feed_x_offset_m, same.patch.feed_x_offset_m)
+
+    def test_offset_changes_nothing_else(self) -> None:
+        base, _ = b2.build_project("line", 1e-4)
+        shifted, _ = b2.build_project("line", 1e-4, feed_x_offset_m=5.0e-3)
+        for field in ("width_m", "length_m", "feed_line_width_m", "feed_inset_m"):
+            self.assertEqual(getattr(shifted.patch, field), getattr(base.patch, field))
+
+    def test_offset_off_the_patch_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            b2.build_project("line", 1e-4, feed_x_offset_m=0.03)  # half width is ~24.6 mm
+
+
 if __name__ == "__main__":
     unittest.main()

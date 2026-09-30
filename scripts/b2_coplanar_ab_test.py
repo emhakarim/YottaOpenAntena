@@ -7,6 +7,7 @@ boundary, excitation and stop criteria held identical.
     python scripts/b2_coplanar_ab_test.py --run           # prepare, run, summarise
     python scripts/b2_coplanar_ab_test.py --run --end-criteria 1e-3
     python scripts/b2_coplanar_ab_test.py --arm line --inset-delta-mm -0.5 --run   # sweep point
+    python scripts/b2_coplanar_ab_test.py --arm line --feed-x-offset-mm 5 --run   # 2-D feed check
 
 The structural side is already verified by tests (the deck contains the notch, the line and
 a port at the line end, and the mesh is refined across the line).  What is **not** claimed
@@ -36,7 +37,12 @@ ARMS = {
 }
 
 
-def build_project(arm: str, end_criteria: float, inset_delta_m: float = 0.0):
+def build_project(
+    arm: str,
+    end_criteria: float,
+    inset_delta_m: float = 0.0,
+    feed_x_offset_m: float = 0.0,
+):
     from openantenna.geometry.patch import synthesize_patch
     from openantenna.model.project import (
         ArrayConfig,
@@ -63,6 +69,7 @@ def build_project(arm: str, end_criteria: float, inset_delta_m: float = 0.0):
             feed_mode="inset",
             feed_inset_m=inset_m,
             feed_line_width_m=width,
+            feed_x_offset_m=feed_x_offset_m or None,
         ),
         array=ArrayConfig(nx=1, ny=1, spacing_x_lambda0=0.5, spacing_y_lambda0=0.5),
         sweep=FrequencySweep.fractional(FREQUENCY_HZ, 0.15, points=201),
@@ -78,6 +85,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--inset-delta-mm", type=float, default=0.0,
                         help="shift the synthesised inset depth by this many millimetres "
                              "(overlap sweep; the only value this knob moves is the inset)")
+    parser.add_argument("--feed-x-offset-mm", type=float, default=0.0,
+                        help="lateral feed offset across the patch width (validation of the "
+                             "2-D feed; 0 = centreline, the historical model)")
     parser.add_argument("--end-criteria", type=float, default=1e-3)
     parser.add_argument("--max-ts", type=int, default=400000,
                         help="timestep cap carried into the deck (MAX_TS); Route B needs two caps")
@@ -91,10 +101,13 @@ def main(argv: list[str] | None = None) -> int:
 
     arms = list(ARMS) if args.arm == "both" else [args.arm]
     inset_delta_m = args.inset_delta_mm / 1e3
+    feed_x_offset_m = args.feed_x_offset_mm / 1e3
     prepared = {}
     for arm in arms:
         try:
-            project, design = build_project(arm, args.end_criteria, inset_delta_m)
+            project, design = build_project(
+                arm, args.end_criteria, inset_delta_m, feed_x_offset_m
+            )
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -105,8 +118,13 @@ def main(argv: list[str] | None = None) -> int:
         # deliberately has none, and a log that says otherwise is a lie.
         carried = project.patch.feed_line_width_m
         label = "(none - vertical probe)" if carried is None else f"{carried * 1e3:.3f} mm"
+        offset_note = (
+            ""
+            if not project.patch.feed_x_offset_m
+            else f", feed_x_offset={project.patch.feed_x_offset_m * 1e3:+.2f} mm"
+        )
         print(f"  {arm:5}: feed_line_width={label}, "
-              f"inset={project.patch.feed_inset_m * 1e3:.3f} mm -> {path}")
+              f"inset={project.patch.feed_inset_m * 1e3:.3f} mm{offset_note} -> {path}")
 
     if not args.run:
         print("\nwritten only.  On a machine with openEMS:")

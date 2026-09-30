@@ -913,3 +913,9 @@ drag marker 2 sumbu: horizontal=inset, vertikal=lintang). Non-corporate saja unt
 2 webui-test (override sampai project.json; offset di luar width -> 400). Fisika feed off-centre BELUM
 divalidasi solver (geometri-wired saja) - differential run = follow-up. **Aksara: tarik dulu sebelum
 menyentuh ketiga file itu.**
+
+**Update 4 (20:05): VALIDASI RUN feed off-centre DILUNCURKAN** (approval pemilik). Pasangan
+differential: `runs_b2/fx_off0/line` (offset 0) vs `runs_b2/fx_off5/line` (offset +5 mm), arm line,
+1e-4/cap 300k, harness `b2_coplanar_ab_test.py` dengan flag baru **`--feed-x-offset-mm`** (+4 tes).
+Protokol + ambang interpretasi (ditetapkan SEBELUM angka): `docs/experiment-feed-x-offset.md`.
+Verdict otomatis via `fx_validate_chain.ps1` -> `runs_b2/verdict_fx_offset.json`; hasil menyusul.
