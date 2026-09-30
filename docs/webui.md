@@ -100,12 +100,14 @@ include switch, so nothing below adds a new write path):
   trace (open polyline - DXF only), circle (drag centre -> rim), 1 mm snapping, undo,
   Esc cancels. Shapes feed the solver-grid preview, DXF export and deck include
   exactly like the numeric "+ Add block".
-* **Port placement**: the Port & feed panel sets the feed mode, an inset-depth override
-  (mm; empty = generator synthesis) and the line width. With "patch + port aid" on,
-  the synthesised patch and its centreline are drawn, and the port marker can be
-  dragged (tool "port") or typed; ``feed_inset_mm`` / ``feed_line_width_mm`` flow into
-  the generator (bounded by the patch length). Arbitrary off-centre ports need
-  generator work - next slice.
+* **Port placement (now 2-D)**: the Port & feed panel sets the feed mode, an inset-depth
+  override, the line width and a **lateral offset** across the width (mm; signed;
+  empty = centreline). With "patch + port aid" on, the marker can be dragged (tool
+  "port") - horizontal = inset, vertical = lateral - or typed; ``feed_inset_mm`` /
+  ``feed_line_width_mm`` / ``feed_x_offset_mm`` flow into the generator
+  (``PatchGeometry.feed_x_offset_m``: the solver moves the notch **and** the port together
+  and refuses offsets that push the line past the patch edge). Physics of off-centre
+  feeds is wired but not yet solver-validated - a small differential run is the follow-up.
 * **Materials**: the built-in dielectric library is injected into the page at serve
   time; picking one shows eps_r / tan_delta / source note and sets the Simulate
   material. Custom (user-defined) materials are a later slice.

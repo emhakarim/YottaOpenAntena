@@ -295,13 +295,13 @@ for index, (x0, y0) in enumerate(ELEMENTS, start=1):
         _y_top = y0 + L_PATCH / 2.0
         _y_notch = _y_top - FEED_INSET
         patch.AddBox(
-            [x0 - W_PATCH / 2.0, _y_bottom, 0.0], [x0 - _slot, _y_top, 0.0], priority=3
+            [x0 - W_PATCH / 2.0, _y_bottom, 0.0], [x0 + FEED_X - _slot, _y_top, 0.0], priority=3
         )
         patch.AddBox(
-            [x0 + _slot, _y_bottom, 0.0], [x0 + W_PATCH / 2.0, _y_top, 0.0], priority=3
+            [x0 + FEED_X + _slot, _y_bottom, 0.0], [x0 + W_PATCH / 2.0, _y_top, 0.0], priority=3
         )
         patch.AddBox(
-            [x0 - _slot, _y_bottom, 0.0], [x0 + _slot, _y_notch, 0.0], priority=3
+            [x0 + FEED_X - _slot, _y_bottom, 0.0], [x0 + FEED_X + _slot, _y_notch, 0.0], priority=3
         )
     else:
         patch.AddBox(
@@ -1009,18 +1009,35 @@ class OpenEMSSolver(SolverAdapter):
             layout.positions_m = [(0.0, 0.0)]
             boundary_mode = "UNIT_CELL"
 
+        feed_x = float(project.patch.feed_x_offset_m or 0.0)
+        if project.patch.feed_mode == "corporate" and project.patch.feed_x_offset_m:
+            raise ValueError("feed_x_offset_m is not supported with a corporate feed yet")
         if project.patch.feed_mode == "inset":
             inset = project.patch.feed_inset_m or design.inset_depth_m
             feed_y = length / 2.0 - inset
-            feed_x = 0.0
         elif project.patch.feed_mode == "edge":
-            feed_x = 0.0
             feed_y = length / 2.0
         elif project.patch.feed_mode == "probe":
-            feed_x = 0.0
             feed_y = 0.0
         elif project.patch.feed_mode != "corporate":
             raise ValueError("unknown feed_mode %r" % project.patch.feed_mode)
+        if project.patch.feed_mode != "corporate" and feed_x:
+            resolved_line_width = (
+                design.feed_line_width_m
+                if project.patch.feed_line_width_m is None
+                else project.patch.feed_line_width_m
+            )
+            line_half = (
+                float(resolved_line_width) / 2.0
+                if (project.patch.feed_mode in ("inset", "edge") and resolved_line_width)
+                else 0.0
+            )
+            if abs(feed_x) + line_half >= width / 2.0:
+                raise ValueError(
+                    "feed_x_offset_mm pushes the feed past the patch edge: |%.3f| + %.3f mm "
+                    ">= W/2 = %.3f mm"
+                    % (abs(feed_x) * 1e3, line_half * 1e3, width / 2.0 * 1e3)
+                )
 
         # ---- corporate feed tree (Phase 2 #5b) ------------------------------------------
         # A 1-by-n row only: a 2-D splitter tree needs a two-axis plan, which is the #5b

@@ -108,6 +108,10 @@ class PatchGeometry:
     #: "probe" in a project, and an A/B comparing probe against line silently runs the same
     #: model twice - which is exactly what happened once.
     feed_line_width_m: Optional[float] = None
+    #: Lateral feed offset [m] across the patch width (the model used to be centre-fed only).
+    #: Signed; None/0 = centreline.  Bounded so the feed stays on the patch; printed-line
+    #: feeds are additionally checked by the solver so the line stays inside the notch strip.
+    feed_x_offset_m: Optional[float] = None
     feed_edge_offset_m: Optional[float] = None
     slot_depth_m: Optional[float] = None
 
@@ -124,6 +128,16 @@ class PatchGeometry:
                 setattr(self, name, _positive(value, name))
         if self.feed_line_width_m is not None and self.feed_line_width_m < 0.0:
             raise ValueError("feed_line_width_m must be >= 0 (use 0.0 for a probe feed)")
+        if self.feed_x_offset_m is not None:
+            if isinstance(self.feed_x_offset_m, bool) or not isinstance(
+                self.feed_x_offset_m, (int, float)
+            ):
+                raise ValueError("feed_x_offset_m must be a number when given")
+            if self.width_m is not None and abs(self.feed_x_offset_m) >= self.width_m / 2.0:
+                raise ValueError(
+                    "feed_x_offset_m must keep the feed inside the patch width "
+                    "(|offset| < width/2 = %.4g m)" % (self.width_m / 2.0)
+                )
         if self.feed_mode not in FEED_MODES:
             raise ValueError(f"feed_mode must be one of {FEED_MODES}, got {self.feed_mode!r}")
 

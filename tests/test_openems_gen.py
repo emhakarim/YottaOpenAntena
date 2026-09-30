@@ -421,6 +421,27 @@ class TestCoplanarInsetFeed(unittest.TestCase):
         self.assertIn("vertical lumped port (probe)", script)
 
 
+    def test_a_lateral_feed_offset_moves_the_notch_and_the_port(self):
+        project = make_project()
+        project.patch.feed_line_width_m = 5.0e-3
+        project.patch.feed_inset_m = project.patch.feed_inset_m or 1.0e-2
+        project.patch.feed_x_offset_m = 2.5e-3
+        script = OpenEMSSolver().render_script(project)
+        self.assertIn("FEED_X = 0.0025", script)
+        # the notch strips travel with the feed, or the line would miss its slot
+        self.assertIn("x0 + FEED_X - _slot", script)
+        self.assertIn("x0 + FEED_X + _slot", script)
+
+    def test_a_lateral_feed_offset_that_leaves_the_patch_is_rejected(self):
+        project = make_project()
+        project.patch.width_m = 0.049
+        project.patch.length_m = project.patch.length_m or 0.041
+        project.patch.feed_line_width_m = 5.0e-3
+        project.patch.feed_inset_m = project.patch.feed_inset_m or 1.0e-2
+        project.patch.feed_x_offset_m = 0.049 / 2.0 + 1.0e-3
+        with self.assertRaises(ValueError):
+            OpenEMSSolver().render_script(project)
+
     def test_the_line_feed_also_refines_the_mesh_across_the_line(self):
         """Drawing a 5 mm line on a 7 mm mesh would measure the mesh, not the feed."""
         project = make_project()

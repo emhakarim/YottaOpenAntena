@@ -155,6 +155,8 @@ def _project_from(payload):
     width_m = float(payload.get("width_mm") or 0.0) * 1e-3
     length_m = float(payload.get("length_mm") or 0.0) * 1e-3
     points = int(payload.get("sweep_points", 201) or 201)
+    feed_x_text = str(payload.get("feed_x_offset_mm") or "").strip()
+    feed_x_offset_m = float(feed_x_text) * 1e-3 if feed_x_text else None
     feed_inset_text = str(payload.get("feed_inset_mm") or "").strip()
     feed_line_text = str(payload.get("feed_line_width_mm") or "").strip()
     feed_inset_m = float(feed_inset_text) * 1e-3 if feed_inset_text else None
@@ -180,6 +182,7 @@ def _project_from(payload):
             feed_mode=str(payload.get("feed") or "inset"),
             feed_inset_m=feed_inset_m,
             feed_line_width_m=feed_line_width_m,
+            feed_x_offset_m=feed_x_offset_m,
         ),
         array=ArrayConfig(nx=1, ny=1),
         sweep=FrequencySweep.fractional(frequency_hz, 0.15, points=points),
@@ -778,15 +781,16 @@ INDEX_HTML = r"""<!DOCTYPE html>
         </section>
         <section>
           <h2>Port &amp; feed (define where the port sits)</h2>
-          <div class="fields three">
+          <div class="fields">
             <div><label for="pfFeed">feed mode</label><select id="pfFeed"><option>probe</option><option>inset</option><option>edge</option></select></div>
             <div><label for="pfInset">inset depth (mm)</label><input id="pfInset" class="num" value="" oninput="drawCanvas()"></div>
             <div><label for="pfLine">line width (mm)</label><input id="pfLine" class="num" value=""></div>
+            <div><label for="pfX">lateral offset (mm)</label><input id="pfX" class="num" value="" oninput="drawCanvas()"></div>
           </div>
           <div class="actions">
             <button onclick="fillPortSynth()">Use synthesised values</button>
           </div>
-          <div class="sub">Empty = the generator synthesises (inset). With "patch + port aid" on, drag the port marker (tool "port") along the patch centreline, or type a value - it flows into Generate/Run. Arbitrary off-centre ports need generator work (next slice).</div>
+          <div class="sub">Empty = the generator synthesises (inset). With "patch + port aid" on, drag the port marker (tool "port"): horizontal = inset depth, vertical = lateral offset - or type values; both flow into Generate/Run (the lateral offset is bounded so the feed stays on the patch).</div>
         </section>
       </div>
     </main>
@@ -1129,6 +1133,12 @@ function onCanvasMove(ev) {
   else if (drawing.kind === "portdrag") {
     const limit = portAid ? portAid.l : Number.POSITIVE_INFINITY;
     $("pfInset").value = Math.min(Math.max(p.x, 0), limit).toFixed(2);
+    if (portAid) {
+      const lineHalf = (parseFloat($("pfLine").value) || 0) / 2.0;
+      const bound = Math.max(portAid.w / 2.0 - Math.max(lineHalf, 1.0), 0.5);
+      const lateral = Math.min(Math.max(p.y - portAid.w / 2.0, -bound), bound);
+      $("pfX").value = lateral.toFixed(2);
+    }
   } else { drawing.hover = p; }
   drawCanvas();
 }
@@ -1220,7 +1230,8 @@ function initCanvas() {
   setTool();
   window.__oaState = () => ({
     tf: canvasTf ? { ox: canvasTf.ox, oy: canvasTf.oy, scale: canvasTf.scale, w: $("cv").width, h: $("cv").height } : null,
-    view: viewBounds(), locked: viewLocked, shapes: state.shapes, drawing: drawing ? drawing.kind : null
+    view: viewBounds(), locked: viewLocked, shapes: state.shapes, drawing: drawing ? drawing.kind : null,
+    port: portAid ? { w: portAid.w, l: portAid.l } : null
   });
 }
 
@@ -1368,14 +1379,19 @@ function drawCanvas() {
     ctx.lineWidth = 1.4;
     ctx.strokeRect(X(0), Y(portAid.w), portAid.l * scale, portAid.w * scale);
     ctx.setLineDash([]);
+    ctx.strokeStyle = "rgba(255,209,102,.35)";
     ctx.beginPath(); ctx.moveTo(X(0), Y(portAid.w / 2)); ctx.lineTo(X(portAid.l), Y(portAid.w / 2)); ctx.stroke();
     const ins = parseFloat($("pfInset").value);
     const pos = isFinite(ins) ? Math.min(Math.max(ins, 0), portAid.l) : portAid.l / 2;
+    const lat = parseFloat($("pfX").value) || 0.0;
+    const py = portAid.w / 2.0 + lat;
+    ctx.strokeStyle = "rgba(255,209,102,.85)";
+    ctx.beginPath(); ctx.moveTo(X(0), Y(py)); ctx.lineTo(X(pos), Y(py)); ctx.stroke();
     ctx.fillStyle = "#ffd166";
-    ctx.beginPath(); ctx.arc(X(pos), Y(portAid.w / 2), 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(X(pos), Y(py), 5, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "#eef0f4";
     ctx.font = "12px Consolas, monospace";
-    ctx.fillText((isFinite(ins) ? "port @ " + ins.toFixed(2) + " mm" : "port (centre)") + "  [patch " + portAid.l.toFixed(1) + " x " + portAid.w.toFixed(1) + " mm]", X(pos) + 9, Y(portAid.w / 2) - 8);
+    ctx.fillText((isFinite(ins) ? "port @ " + ins.toFixed(2) : "port (centre)") + (lat ? " , lat " + lat.toFixed(2) : "") + " mm  [patch " + portAid.l.toFixed(1) + " x " + portAid.w.toFixed(1) + " mm]", X(pos) + 9, Y(py) - 8);
     ctx.restore();
   }
 
@@ -1441,6 +1457,7 @@ function simPayload() {
     port_refine: $("simRefine").checked, edge_snapping: $("simSnap").checked, nf2ff: $("simNf2ff").checked,
     max_timesteps: $("simCap").value, end_criteria: $("simEnd").value,
     feed_inset_mm: $("pfInset").value, feed_line_width_mm: $("pfLine").value,
+    feed_x_offset_mm: $("pfX").value,
     rundir: $("simDir").value,
     shapes: $("simInclude").checked ? state.shapes : [],
   };

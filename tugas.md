@@ -904,3 +904,12 @@ bulat hanya saat perlu; tidak pernah mengecil otomatis; tombol **Fit view**). Di
 lewat tes E2E baru (Playwright mengemudikan Edge headless: drag mouse nyata -> cek koordinat mm shape,
 stabilitas view, akumulasi polygon) - **8/8 LULUS**; skrip `tmp/uitest_canvas.py` (cluster);
 screenshot bukti di `DELIVERY/assets/webui-canvas-e2e-30sep.png`.
+
+**Update 3 (~19:4x): offset LINTANG port (feed 2D) - permintaan lanjutan pemilik.**
+File yang disentuh Yotta: `openantenna/model/project.py` (+`feed_x_offset_m`), `openantenna/solvers/openems.py`
+(notch + port bergeser bersama FEED_X; batas validasi), `openantenna/webui.py` (input "lateral offset" +
+drag marker 2 sumbu: horizontal=inset, vertikal=lintang). Non-corporate saja untuk sekarang; corporate
++ offset ditolak dengan pesan. Tes baru: 2 render-test (notch bergeser; offset keluar patch ditolak) +
+2 webui-test (override sampai project.json; offset di luar width -> 400). Fisika feed off-centre BELUM
+divalidasi solver (geometri-wired saja) - differential run = follow-up. **Aksara: tarik dulu sebelum
+menyentuh ketiga file itu.**

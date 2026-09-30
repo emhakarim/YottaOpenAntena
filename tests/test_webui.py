@@ -293,6 +293,7 @@ class TestWebUI(unittest.TestCase):
                     "sweep_points": 51,
                     "feed_inset_mm": 5.0,
                     "feed_line_width_mm": 5.1,
+                    "feed_x_offset_mm": 2.5,
                     "shapes": [],
                 },
             )
@@ -300,6 +301,7 @@ class TestWebUI(unittest.TestCase):
             project = json.loads((rundir / "project.json").read_text(encoding="utf-8"))
             self.assertAlmostEqual(project["patch"]["feed_inset_m"], 0.005, places=9)
             self.assertAlmostEqual(project["patch"]["feed_line_width_m"], 0.0051, places=9)
+            self.assertAlmostEqual(project["patch"]["feed_x_offset_m"], 0.0025, places=9)
 
     def test_feed_inset_override_beyond_the_patch_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -311,6 +313,17 @@ class TestWebUI(unittest.TestCase):
             )
         self.assertEqual(status, 400)
         self.assertIn("must not exceed", body["error"])
+
+    def test_a_lateral_offset_off_the_patch_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            status, body = _post(
+                self.base,
+                "/api/generate",
+                {"rundir": str(Path(folder) / "off"), "width_mm": 49.14, "length_mm": 41.38,
+                 "feed_x_offset_mm": 40.0, "shapes": []},
+            )
+        self.assertEqual(status, 400)
+        self.assertIn("inside the patch width", body["error"])
 
     def test_the_deck_cap_is_read_from_the_manifest(self):
         from openantenna import webui as webui_module
