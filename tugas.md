@@ -919,3 +919,8 @@ differential: `runs_b2/fx_off0/line` (offset 0) vs `runs_b2/fx_off5/line` (offse
 1e-4/cap 300k, harness `b2_coplanar_ab_test.py` dengan flag baru **`--feed-x-offset-mm`** (+4 tes).
 Protokol + ambang interpretasi (ditetapkan SEBELUM angka): `docs/experiment-feed-x-offset.md`.
 Verdict otomatis via `fx_validate_chain.ps1` -> `runs_b2/verdict_fx_offset.json`; hasil menyusul.
+
+**Update 5 (~20:45): posisi probe.** `feed_inset_m` kini dihormati untuk mode PROBE juga (dulu
+diabaikan diam-diam): nilainya = jarak probe dari tepi referensi sepanjang panjang patch (kosong =
+tengah, konvensi lama). Marker drag sudah berlaku dua mode tanpa perubahan UI. +3 tes render
+(nilai FEED_Y benar; default tengah; di luar patch ditolak). Push T.

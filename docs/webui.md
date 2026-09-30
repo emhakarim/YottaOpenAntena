@@ -108,8 +108,9 @@ include switch, so nothing below adds a new write path):
   (``PatchGeometry.feed_x_offset_m``: the solver moves the notch **and** the port together
   and refuses offsets that push the line past the patch edge). Physics of off-centre
   feeds is wired but not yet solver-validated - a small differential run is the follow-up.
-  In probe mode the inset/line boxes stay empty on purpose; a zero inset (typed, or the
-  marker dragged to the edge) falls back to the generator's synthesis.
+  In probe mode the inset box places the probe along the patch length (empty = the classic
+  centre feed) and the line box stays empty; a zero inset (typed, or the marker dragged to
+  the edge) falls back to the centre/synthesis.
 * **Materials**: the built-in dielectric library is injected into the page at serve
   time; picking one shows eps_r / tan_delta / source note and sets the Simulate
   material. Custom (user-defined) materials are a later slice.

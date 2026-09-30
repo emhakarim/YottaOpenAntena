@@ -442,6 +442,32 @@ class TestCoplanarInsetFeed(unittest.TestCase):
         with self.assertRaises(ValueError):
             OpenEMSSolver().render_script(project)
 
+    def test_a_probe_inset_moves_the_probe_along_the_patch(self):
+        project = make_project()
+        project.patch.feed_mode = "probe"
+        project.patch.length_m = 0.041378916081297096
+        project.patch.feed_inset_m = 1.0e-2
+        script = OpenEMSSolver().render_script(project)
+        token = script.split("FEED_Y = ", 1)[1].split("\n", 1)[0].strip().rstrip(",")
+        self.assertAlmostEqual(
+            float(token), 0.041378916081297096 / 2.0 - 1.0e-2, places=9
+        )
+
+    def test_a_probe_without_inset_stays_at_the_centre(self):
+        project = make_project()
+        project.patch.feed_mode = "probe"
+        script = OpenEMSSolver().render_script(project)
+        token = script.split("FEED_Y = ", 1)[1].split("\n", 1)[0].strip().rstrip(",")
+        self.assertAlmostEqual(float(token), 0.0, places=9)
+
+    def test_a_probe_inset_beyond_the_patch_is_rejected(self):
+        project = make_project()
+        project.patch.feed_mode = "probe"
+        project.patch.length_m = 0.041378916081297096
+        project.patch.feed_inset_m = 0.05
+        with self.assertRaises(ValueError):
+            OpenEMSSolver().render_script(project)
+
     def test_the_line_feed_also_refines_the_mesh_across_the_line(self):
         """Drawing a 5 mm line on a 7 mm mesh would measure the mesh, not the feed."""
         project = make_project()

@@ -792,7 +792,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div class="actions">
             <button onclick="fillPortSynth()">Use synthesised values</button>
           </div>
-          <div class="sub">Empty = the generator synthesises (inset). With "patch + port aid" on, drag the port marker (tool "port"): horizontal = inset depth, vertical = lateral offset - or type values; both flow into Generate/Run (the lateral offset is bounded so the feed stays on the patch). Probe mode has no inset/line - those boxes stay empty on purpose; 0 (typed or dragged to the edge) means "use the synthesised value".</div>
+          <div class="sub">Empty = the generator synthesises (inset). With "patch + port aid" on, drag the port marker (tool "port"): horizontal = inset depth, vertical = lateral offset - or type values; both flow into Generate/Run (the lateral offset is bounded so the feed stays on the patch). In probe mode the inset box = probe distance from the reference edge (empty = centre), no line; 0 means the synthesised/centre value.</div>
         </section>
       </div>
     </main>

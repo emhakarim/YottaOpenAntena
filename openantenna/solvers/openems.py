@@ -1018,7 +1018,15 @@ class OpenEMSSolver(SolverAdapter):
         elif project.patch.feed_mode == "edge":
             feed_y = length / 2.0
         elif project.patch.feed_mode == "probe":
-            feed_y = 0.0
+            probe_inset = project.patch.feed_inset_m or 0.0
+            if probe_inset < 0.0 or probe_inset > length:
+                raise ValueError(
+                    "feed_inset_mm (probe position from the reference edge) must be within "
+                    "[0, patch length %.3f mm]" % (length * 1e3)
+                )
+            # no value -> the classic centre feed; a value places the probe at that distance
+            # from the reference edge along the patch length (same convention as the line arm)
+            feed_y = (length / 2.0 - probe_inset) if probe_inset else 0.0
         elif project.patch.feed_mode != "corporate":
             raise ValueError("unknown feed_mode %r" % project.patch.feed_mode)
         if project.patch.feed_mode != "corporate" and feed_x:
