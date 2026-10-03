@@ -930,3 +930,37 @@ tengah, konvensi lama). Marker drag sudah berlaku dua mode tanpa perubahan UI. +
 jalur/notch) apa pun feed_mode-nya; Web: checkbox "custom feed point" + x/y mm + marker hijau yang
 bisa di-drag ke metal yang digambar. +5 tes (3 render, 2 webui). Push U. Fisika umpan custom belum
 divalidasi run (follow-up: pasangan probe custom).
+
+---
+
+## §6ac - Aksara, 2026-10-03 (pagi): sinkronisasi 14 commit + dukungan validasi custom-feed + pembagian tugas
+
+**Sinkronisasi.** 14 commit Yotta ditarik (smoke web penuh + F1/F2 ditutup; R-2/R-4/R-5
+selesai; kanvas interaktif + port 2-D + material + custom feed mendarat; langkah D/E
+ACCEPTED - pertanyaan mesh ditutup pada 2,4280 GHz yang sama).  Suite di pohon gabungan:
+**586 OK**.
+
+**Selesai di push ini** (`6675df4`):
+
+1. **Server web lokal di-restart memakai `scripts/start_webui.py`** - pemilik sekarang melihat
+   UI terbaru (kanvas interaktif, panel port, material, custom feed) di 127.0.0.1:8077;
+   chip engine `ready`.
+2. **Harness B2 dapat `--custom-feed-mm x,y`** (probe arm saja; eksklusif dengan offset
+   lateral; titik divalidasi di atas metal saat render) + **5 test** opsi baru.
+3. **`docs/experiment-custom-feed.md`**: pasangan diferensial P1 (probe klasik vs custom di
+   (0,0)) dengan ambang interpretasi **ditetapkan sebelum angka** - lolos berarti jalur
+   custom mereproduksi probe acuan; ini juga cek determinisme terhadap kutipan historis
+   (~2,3067 GHz).
+4. **Drift `docs/webui.md`** dirapikan (tabel "v0" sudah basi; baris "belum ada cancel"
+   yang kontradiktif dihapus).
+
+### Pembagian tugas saat ini (permintaan pemilik)
+
+| Wilayah | Pemilik | Item konkret berikutnya |
+|---|---|---|
+| Run solver + verdict + `yotta_tools/` | **Yotta** | (1) **jalankan pasangan P1 custom-feed** (perintah siap di `docs/experiment-custom-feed.md`) + verdict `two_setting_verdict`; (2) laporkan verdict fx-offset begitu rantai `fx_validate_chain.ps1` selesai (sudah diluncurkan 30/09); (3) lanjutkan laan: ledger/verifikasi seperti biasa |
+| Paket `openantenna/` + web UI (bersama, koordinasi tarik-dulu) | **Aksara** | (1) evaluasi/implementasi offset lintang untuk feed corporate (sekarang ditolak dengan pesan) atau dokumentasikan sebagai batas; (2) polish web: light mode + crosshair grafik (opsional, sesuai selera pemilik); (3) jaga `docs/webui.md` tetap sinkron dengan fitur baru |
+| Keputusan | **Pemilik** | kalibrasi terhadap pengukuran (step C) + arah produk berikutnya |
+
+**Fisika yang masih terbuka (dicatat, bukan disembunyikan):** offset lintang (run terkirim,
+menunggu verdict), custom feed (pasangan P1 siap dijalankan), corporate + offset (belum ada).
