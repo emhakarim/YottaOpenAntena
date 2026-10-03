@@ -68,5 +68,39 @@ class TestFeedXOffset(unittest.TestCase):
             b2.build_project("line", 1e-4, feed_x_offset_m=0.03)  # half width is ~24.6 mm
 
 
+class TestCustomFeedOption(unittest.TestCase):
+    """The custom excitation point: probe-only, one variable, and it must sit on metal."""
+
+    def test_custom_point_moves_into_the_project(self) -> None:
+        project, _ = b2.build_project("probe", 1e-4, custom_feed_m=(0.0, 0.0))
+        self.assertEqual(project.custom_feed_x_m, 0.0)
+        self.assertEqual(project.custom_feed_y_m, 0.0)
+        self.assertEqual(project.name, "b2_probe_custom")
+
+    def test_custom_requires_the_probe_arm(self) -> None:
+        with self.assertRaisesRegex(ValueError, "probe"):
+            b2.build_project("line", 1e-4, custom_feed_m=(0.0, 0.0))
+
+    def test_custom_and_lateral_offset_are_mutually_exclusive(self) -> None:
+        with self.assertRaisesRegex(ValueError, "pick one"):
+            b2.build_project(
+                "probe", 1e-4, feed_x_offset_m=1.0e-3, custom_feed_m=(0.0, 0.0)
+            )
+
+    def test_custom_off_the_metal_is_refused_at_render(self) -> None:
+        from openantenna.solvers.openems import OpenEMSSolver
+
+        project, _ = b2.build_project("probe", 1e-4, custom_feed_m=(0.05, 0.0))
+        with self.assertRaisesRegex(ValueError, "not on any metal"):
+            OpenEMSSolver().render_script(project)
+
+    def test_custom_on_the_patch_renders_and_compiles(self) -> None:
+        from openantenna.solvers.openems import OpenEMSSolver
+
+        project, _ = b2.build_project("probe", 1e-4, custom_feed_m=(0.0, 0.0))
+        script = OpenEMSSolver().render_script(project)
+        compile(script, "sim.py", "exec")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -23,10 +23,12 @@ python -m openantenna.webui          # -> 127.0.0.1:8077   (--host/--port to ove
 
 | Covered | Not yet |
 |---|---|
-| Parameter table (name = expression, live resolve, errors per row) | Freehand drawing tools (the desktop tab has them) |
-| **+ Add block** by numbers, corners as expressions | Solver tabs (Generate/Run, progress, results) - next step, progress via polling |
-| DXF export (the same writer; closed shapes only, skips are listed) | Batch queue / sweep / optimise surfaces |
-| Solver-grid preview (the same rasteriser as the desktop grid view) | Packaged distribution story |
+| Parameter table (name = expression, live resolve, errors per row) | Batch queue / sweep / optimise surfaces |
+| **+ Add block** by numbers, corners as expressions | Custom (user-defined) materials |
+| Interactive drawing canvas (rectangle / polygon / trace / circle, snapping, undo, Fit view) | Packaged distribution story |
+| Port placement (2-D drag or typed), custom feed point, material library | Physics validation of off-centre / custom feeds (run pairs prepared: `docs/experiment-feed-x-offset.md`, `docs/experiment-custom-feed.md`) |
+| DXF export, solver-grid preview | |
+| Simulate (Generate / Run / Cancel, live progress) and Results (S11, provenance, far field) | |
 
 ## API (all `POST`, JSON in/out)
 
@@ -36,6 +38,12 @@ python -m openantenna.webui          # -> 127.0.0.1:8077   (--host/--port to ove
 | `/api/dxf` | `shapes`, `layer` | DXF text (closed shapes; skipped shapes are explained) |
 | `/api/grid` | `shapes`, `cell_mm` | cell counts, rows as `0/1` strings, stroke fraction, bounds |
 | `/api/patch` | `frequency_ghz`, `epsilon_r`, `height_mm`, `feed` | patch synthesis numbers + warnings |
+| `/api/generate` | design fields + `shapes` | writes deck + manifest into `rundir`; returns paths, warnings, sketch count |
+| `/api/run` | same fields + `rundir` | starts one run (refuses while another runs); cap comes from the deck |
+| `/api/run_cancel` | - | asks the running run to stop (kills the process tree) |
+| `/api/run_status` | - | state + `progress.json` snapshot + summary/error |
+| `/api/results` | `rundir` | S11 curve + metrics + provenance + far field |
+| `/api/solver` | - | engine availability (the header chip) |
 
 Errors are data with a 400 status and a human message - a broken polygon refuses, never a
 stack trace.
@@ -59,9 +67,8 @@ drive the same core functions.
   the Modeling shapes when the include switch is on, writes the deck plus manifest
   (`/api/generate`), then runs it through the same adapter call the desktop worker makes
   (`/api/run`, one run at a time).  Progress comes from the solver's own `progress.json`
-  plus the adapter's on-progress snapshots (`/api/run_status`).  There is deliberately no
-  cancel button yet - stopping the server process stops the run, and the desktop app never
-  had a cancel either.
+  plus the adapter's on-progress snapshots (`/api/run_status`); **Cancel run** stops the
+  solver process tree (see Cancellation below).
 * **Results** (`/api/results`) reads a run directory: the S11 curve and metrics, the
   provenance block from `run_manifest.json`, the -10 dB bands, and the far-field table when
   NF2FF ran.  Every number is model output; the provenance block names the mesh and loss

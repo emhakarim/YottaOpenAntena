@@ -8,6 +8,7 @@ boundary, excitation and stop criteria held identical.
     python scripts/b2_coplanar_ab_test.py --run --end-criteria 1e-3
     python scripts/b2_coplanar_ab_test.py --arm line --inset-delta-mm -0.5 --run   # sweep point
     python scripts/b2_coplanar_ab_test.py --arm line --feed-x-offset-mm 5 --run   # 2-D feed check
+    python scripts/b2_coplanar_ab_test.py --arm probe --custom-feed-mm 0,0 --run   # custom feed
 
 The structural side is already verified by tests (the deck contains the notch, the line and
 a port at the line end, and the mesh is refined across the line).  What is **not** claimed
@@ -42,6 +43,7 @@ def build_project(
     end_criteria: float,
     inset_delta_m: float = 0.0,
     feed_x_offset_m: float = 0.0,
+    custom_feed_m: tuple[float, float] | None = None,
 ):
     from openantenna.geometry.patch import synthesize_patch
     from openantenna.model.project import (
@@ -52,6 +54,15 @@ def build_project(
         SubstrateStackup,
     )
 
+    if custom_feed_m is not None and arm != "probe":
+        raise ValueError(
+            "a custom feed point always renders as a probe - use --arm probe, not %r" % arm
+        )
+    if custom_feed_m is not None and feed_x_offset_m:
+        raise ValueError(
+            "a custom feed point and a lateral offset move the same port - pick one"
+        )
+
     design = synthesize_patch(FREQUENCY_HZ, 2.1, HEIGHT_M, "inset")
     width = design.feed_line_width_m if ARMS[arm] == "synthesised" else ARMS[arm]
     inset_m = design.inset_depth_m + inset_delta_m
@@ -61,7 +72,7 @@ def build_project(
             "patch" % (inset_m * 1e3, design.length_m * 1e3)
         )
     return Project(
-        name=f"b2_{arm}",
+        name="b2_probe_custom" if custom_feed_m is not None else f"b2_{arm}",
         substrate=SubstrateStackup.single(MATERIAL, HEIGHT_M),
         patch=PatchGeometry(
             width_m=design.width_m,
@@ -73,6 +84,8 @@ def build_project(
         ),
         array=ArrayConfig(nx=1, ny=1, spacing_x_lambda0=0.5, spacing_y_lambda0=0.5),
         sweep=FrequencySweep.fractional(FREQUENCY_HZ, 0.15, points=201),
+        custom_feed_x_m=None if custom_feed_m is None else float(custom_feed_m[0]),
+        custom_feed_y_m=None if custom_feed_m is None else float(custom_feed_m[1]),
     ), design
 
 
@@ -88,6 +101,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--feed-x-offset-mm", type=float, default=0.0,
                         help="lateral feed offset across the patch width (validation of the "
                              "2-D feed; 0 = centreline, the historical model)")
+    parser.add_argument("--custom-feed-mm", default="",
+                        help="explicit excitation point 'x,y' in millimetres, ON metal "
+                             "(custom feed; renders probe-style) - use with --arm probe")
     parser.add_argument("--end-criteria", type=float, default=1e-3)
     parser.add_argument("--max-ts", type=int, default=400000,
                         help="timestep cap carried into the deck (MAX_TS); Route B needs two caps")
@@ -99,6 +115,24 @@ def main(argv: list[str] | None = None) -> int:
     status = solver.available()
     print(f"solver available: {status.available} - {status.detail}")
 
+    custom_feed_m = None
+    if args.custom_feed_mm.strip():
+        pieces = [piece.strip() for piece in args.custom_feed_mm.split(",")]
+        if len(pieces) != 2:
+            print("error: --custom-feed-mm takes 'x,y' in millimetres", file=sys.stderr)
+            return 2
+        try:
+            custom_feed_m = (float(pieces[0]) / 1e3, float(pieces[1]) / 1e3)
+        except ValueError:
+            print("error: --custom-feed-mm values must be numbers", file=sys.stderr)
+            return 2
+        if args.arm != "probe":
+            print(
+                "error: a custom feed point renders as a probe; use --arm probe",
+                file=sys.stderr,
+            )
+            return 2
+
     arms = list(ARMS) if args.arm == "both" else [args.arm]
     inset_delta_m = args.inset_delta_mm / 1e3
     feed_x_offset_m = args.feed_x_offset_mm / 1e3
@@ -106,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     for arm in arms:
         try:
             project, design = build_project(
-                arm, args.end_criteria, inset_delta_m, feed_x_offset_m
+                arm, args.end_criteria, inset_delta_m, feed_x_offset_m, custom_feed_m
             )
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
@@ -123,8 +157,13 @@ def main(argv: list[str] | None = None) -> int:
             if not project.patch.feed_x_offset_m
             else f", feed_x_offset={project.patch.feed_x_offset_m * 1e3:+.2f} mm"
         )
+        custom_note = (
+            ""
+            if custom_feed_m is None
+            else f", custom_feed=({custom_feed_m[0] * 1e3:+.2f}, {custom_feed_m[1] * 1e3:+.2f}) mm"
+        )
         print(f"  {arm:5}: feed_line_width={label}, "
-              f"inset={project.patch.feed_inset_m * 1e3:.3f} mm{offset_note} -> {path}")
+              f"inset={project.patch.feed_inset_m * 1e3:.3f} mm{offset_note}{custom_note} -> {path}")
 
     if not args.run:
         print("\nwritten only.  On a machine with openEMS:")
